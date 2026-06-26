@@ -1,6 +1,7 @@
 use minerpulse_core::{
-    preview_scan_ranges, save_snapshot, scan_network, EntitlementGate, ErrorResponse, MinerPulseError,
-    MpulseFile, RateLimiter, ScanRequest, ScanResult, SubscriptionTier, TcpCgminerClient,
+    list_scan_subnets as discover_subnets, save_snapshot, scan_network, EntitlementGate,
+    ErrorResponse, MinerPulseError, MpulseFile, RateLimiter, ScanRequest, ScanResult, ScanSubnet,
+    SubscriptionTier, TcpCgminerClient,
 };
 use minerpulse_core::drivers::registry::fetch_with_detect;
 use serde::{Deserialize, Serialize};
@@ -114,8 +115,8 @@ fn save_snapshot_file(
 }
 
 #[tauri::command]
-fn get_scan_range_preview() -> String {
-    preview_scan_ranges()
+fn list_scan_subnets() -> Vec<ScanSubnet> {
+    discover_subnets()
 }
 
 #[tauri::command]
@@ -175,7 +176,7 @@ pub fn run() {
             read_miner,
             save_snapshot_file,
             get_app_version,
-            get_scan_range_preview,
+            list_scan_subnets,
             scan_miners,
         ])
         .run(tauri::generate_context!())

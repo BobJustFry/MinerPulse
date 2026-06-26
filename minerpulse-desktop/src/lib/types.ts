@@ -46,6 +46,14 @@ export interface MinerSnapshot {
   uptime_sec?: number | null;
 }
 
+export interface ScanSubnet {
+  id: string;
+  label: string;
+  start_ip: string;
+  end_ip: string;
+  source_ip?: string | null;
+}
+
 export interface DiscoveredMiner {
   ip: string;
   port: number;

@@ -9,6 +9,15 @@ use std::str::FromStr;
 const DEFAULT_PORT: u16 = 4028;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanSubnet {
+    pub id: String,
+    pub label: String,
+    pub start_ip: String,
+    pub end_ip: String,
+    pub source_ip: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanRequest {
     pub start_ip: Option<String>,
     pub end_ip: Option<String>,
@@ -31,10 +40,54 @@ pub struct ScanResult {
     pub range_label: String,
 }
 
+pub fn list_scan_subnets() -> Vec<ScanSubnet> {
+    let mut subnets = Vec::new();
+
+    if let Ok(interfaces) = local_ip_address::list_afinet_netifas() {
+        for (name, ip) in interfaces {
+            let IpAddr::V4(ip_v4) = ip else {
+                continue;
+            };
+            if ip_v4.is_loopback() || ip_v4.is_link_local() || ip_v4.is_unspecified() {
+                continue;
+            }
+            let octets = ip_v4.octets();
+            let id = format!("{}.{}.{}", octets[0], octets[1], octets[2]);
+            if subnets.iter().any(|s: &ScanSubnet| s.id == id) {
+                continue;
+            }
+            let start = Ipv4Addr::new(octets[0], octets[1], octets[2], 1);
+            let end = Ipv4Addr::new(octets[0], octets[1], octets[2], 254);
+            subnets.push(ScanSubnet {
+                id: id.clone(),
+                label: format!(
+                    "{} — {}.{}.{}.0/24 ({ip_v4})",
+                    name, octets[0], octets[1], octets[2]
+                ),
+                start_ip: start.to_string(),
+                end_ip: end.to_string(),
+                source_ip: Some(ip_v4.to_string()),
+            });
+        }
+    }
+
+    if subnets.is_empty() {
+        subnets.push(ScanSubnet {
+            id: "192.168.0".into(),
+            label: "192.168.0.0/24".into(),
+            start_ip: "192.168.0.1".into(),
+            end_ip: "192.168.0.254".into(),
+            source_ip: None,
+        });
+    }
+
+    subnets
+}
+
 pub fn preview_scan_ranges() -> String {
-    default_local_ranges()
+    list_scan_subnets()
         .iter()
-        .map(|(start, end)| format!("{start}-{end}"))
+        .map(|subnet| format!("{}-{}", subnet.start_ip, subnet.end_ip))
         .collect::<Vec<_>>()
         .join(", ")
 }
@@ -98,34 +151,14 @@ fn resolve_ranges(
 }
 
 fn default_local_ranges() -> Vec<(Ipv4Addr, Ipv4Addr)> {
-    let mut ranges = Vec::new();
-
-    if let Ok(interfaces) = local_ip_address::list_afinet_netifas() {
-        for (_, ip) in interfaces {
-            let IpAddr::V4(ip_v4) = ip else {
-                continue;
-            };
-            if ip_v4.is_loopback() || ip_v4.is_link_local() || ip_v4.is_unspecified() {
-                continue;
-            }
-            let octets = ip_v4.octets();
-            let start = Ipv4Addr::new(octets[0], octets[1], octets[2], 1);
-            let end = Ipv4Addr::new(octets[0], octets[1], octets[2], 254);
-            let pair = (start, end);
-            if !ranges.contains(&pair) {
-                ranges.push(pair);
-            }
-        }
-    }
-
-    if ranges.is_empty() {
-        ranges.push((
-            Ipv4Addr::new(192, 168, 0, 1),
-            Ipv4Addr::new(192, 168, 0, 254),
-        ));
-    }
-
-    ranges
+    list_scan_subnets()
+        .into_iter()
+        .filter_map(|subnet| {
+            let start = Ipv4Addr::from_str(&subnet.start_ip).ok()?;
+            let end = Ipv4Addr::from_str(&subnet.end_ip).ok()?;
+            Some((start, end))
+        })
+        .collect()
 }
 
 fn probe_miner(client: &TcpCgminerClient, ip: &str, port: u16) -> Option<DiscoveredMiner> {

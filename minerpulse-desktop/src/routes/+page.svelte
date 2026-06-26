@@ -1,15 +1,15 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
   import { save } from "@tauri-apps/plugin-dialog";
   import { check } from "@tauri-apps/plugin-updater";
   import { relaunch } from "@tauri-apps/plugin-process";
   import { onMount } from "svelte";
   import { locales, t, type Locale, type MessageKey } from "$lib/i18n";
+  import { openScanWindow } from "$lib/openScanWindow";
   import type {
-    DiscoveredMiner,
     Entitlements,
     MinerSnapshot,
-    ScanResult,
     SubscriptionTier,
     TabId,
     Theme,
@@ -27,10 +27,6 @@
   let statusText = $state("");
   let snapshot = $state<MinerSnapshot | null>(null);
   let appVersion = $state("1.0.0 (build 1)");
-  let discovered = $state<DiscoveredMiner[]>([]);
-  let showScanResults = $state(false);
-  let scanning = $state(false);
-  let scanRange = $state("");
   let entitlements = $state<Entitlements>({
     tier: "free",
     can_poll: false,
@@ -90,57 +86,12 @@
     entitlements = await invoke<Entitlements>("get_entitlements");
   }
 
-  async function scanNetwork() {
-    busy = true;
-    scanning = true;
-    showScanResults = true;
-    discovered = [];
+  async function openScan() {
     try {
-      scanRange = await invoke<string>("get_scan_range_preview");
-      statusText = msg("status.scanningRange", { range: scanRange });
-      const result = await invoke<ScanResult>("scan_miners", {
-        request: { port: Number(port) || 4028 },
-      });
-      discovered = result.miners;
-      localStorage.setItem("minerpulse.scan", JSON.stringify(discovered));
-      if (result.miners.length === 0) {
-        statusText = msg("status.scanEmpty", { range: result.range_label });
-      } else {
-        statusText = msg("status.scanDone", {
-          count: result.miners.length,
-          scanned: result.scanned,
-        });
-      }
+      await openScanWindow();
     } catch (err) {
-      showScanResults = false;
-      statusText = formatError(err);
-    } finally {
-      scanning = false;
-      busy = false;
+      statusText = String(err);
     }
-  }
-
-  function closeScanResults() {
-    showScanResults = false;
-  }
-
-  function selectDiscovered(miner: DiscoveredMiner) {
-    ip = miner.ip;
-    port = String(miner.port);
-    showScanResults = false;
-    statusText = `${miner.model} · ${miner.ip}`;
-  }
-
-  function vendorLabel(vendor: string) {
-    const map: Record<string, string> = {
-      avalon: "Avalon",
-      antminer: "Antminer",
-      whatsminer: "WhatsMiner",
-      innosilicon: "Innosilicon",
-      generic: "CGMiner",
-      unknown: "?",
-    };
-    return map[vendor] ?? vendor;
   }
 
   async function readMiner() {
@@ -232,35 +183,45 @@
     return false;
   }
 
-  onMount(async () => {
-    const saved = localStorage.getItem("minerpulse.ui");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        theme = parsed.theme ?? theme;
-        density = parsed.density ?? density;
-        locale = parsed.locale ?? locale;
-      } catch {
-        /* ignore */
+  onMount(() => {
+    let unlisten: (() => void) | undefined;
+
+    void (async () => {
+      const saved = localStorage.getItem("minerpulse.ui");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          theme = parsed.theme ?? theme;
+          density = parsed.density ?? density;
+          locale = parsed.locale ?? locale;
+        } catch {
+          /* ignore */
+        }
       }
-    }
-    applyUiPrefs();
-    await refreshEntitlements();
-    try {
-      const v = await invoke<{ display: string }>("get_app_version");
-      appVersion = v.display;
-    } catch {
-      /* ignore in web preview */
-    }
-    statusText = msg("status.ready");
-    const savedScan = localStorage.getItem("minerpulse.scan");
-    if (savedScan) {
+      applyUiPrefs();
+      await refreshEntitlements();
       try {
-        discovered = JSON.parse(savedScan);
+        const v = await invoke<{ display: string }>("get_app_version");
+        appVersion = v.display;
       } catch {
-        /* ignore */
+        /* ignore in web preview */
       }
-    }
+      statusText = msg("status.ready");
+
+      unlisten = await listen<{
+        ip: string;
+        port: number;
+        model: string;
+      }>("miner-selected", (event) => {
+        ip = event.payload.ip;
+        port = String(event.payload.port);
+        statusText = `${event.payload.model} · ${event.payload.ip}`;
+      });
+    })();
+
+    return () => {
+      unlisten?.();
+    };
   });
 </script>
 
@@ -274,8 +235,8 @@
     <div class="field ip-field">
       <label for="ip">{msg("toolbar.ip")}</label>
       <input id="ip" bind:value={ip} />
-      <button class="btn" disabled={busy} onclick={scanNetwork}>
-        {scanning ? msg("toolbar.scanning") : msg("toolbar.scan")}
+      <button class="btn" disabled={busy} onclick={openScan}>
+        {msg("toolbar.scan")}
       </button>
     </div>
     <div class="field">
@@ -330,45 +291,6 @@
       {tierLabel(entitlements.tier)}
     </button>
   </header>
-
-  {#if showScanResults}
-    <section class="scan-panel" aria-live="polite">
-      <div class="scan-panel-head">
-        <span class="scan-panel-title">{msg("scan.title")}</span>
-        {#if scanRange}
-          <span class="scan-panel-range">{scanRange}</span>
-        {/if}
-        <span class="spacer"></span>
-        <button type="button" class="btn ghost" onclick={closeScanResults}>
-          {msg("scan.close")}
-        </button>
-      </div>
-      {#if scanning}
-        <div class="scan-progress">{msg("status.scanningRange", { range: scanRange })}</div>
-      {:else if discovered.length === 0}
-        <div class="scan-empty">{msg("scan.noMiners")}</div>
-      {:else}
-        <div class="scan-results" role="listbox">
-          {#each discovered as miner (miner.ip)}
-            <button
-              type="button"
-              class="scan-item"
-              class:unsupported={!miner.supported}
-              onclick={() => selectDiscovered(miner)}
-            >
-              <span class="scan-item-ip">{miner.ip}</span>
-              <span class="scan-item-model">
-                {miner.model || vendorLabel(miner.vendor)}
-              </span>
-              {#if !miner.supported}
-                <span class="scan-item-badge">{msg("scan.preview")}</span>
-              {/if}
-            </button>
-          {/each}
-        </div>
-      {/if}
-    </section>
-  {/if}
 
   <nav class="tabs">
     {#each tabs as tab}
@@ -434,7 +356,7 @@
   </main>
 
   <footer class="statusbar">
-    <span class="status-dot" class:busy={scanning || busy}></span>
+    <span class="status-dot" class:busy={busy}></span>
     <span>{statusText || msg("status.ready")}</span>
     <span class="spacer"></span>
     <span>{appVersion}</span>

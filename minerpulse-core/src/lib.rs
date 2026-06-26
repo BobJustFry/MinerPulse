@@ -7,7 +7,10 @@ pub mod mpulse;
 pub mod rate_limit;
 pub mod tcp;
 
-pub use discovery::{preview_scan_ranges, scan_network, DiscoveredMiner, ScanRequest, ScanResult};
+pub use discovery::{
+    list_scan_subnets, preview_scan_ranges, scan_network, DiscoveredMiner, ScanRequest,
+    ScanResult, ScanSubnet,
+};
 pub use drivers::registry::{detect_driver, DriverRegistry};
 pub use entitlements::{EntitlementGate, SubscriptionTier};
 pub use error::{ErrorCode, ErrorResponse, MinerPulseError};

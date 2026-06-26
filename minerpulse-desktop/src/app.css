@@ -136,6 +136,81 @@ button {
   padding: calc(var(--space) * 1.5) calc(var(--space) * 2);
 }
 
+.scan-window {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 2);
+  min-height: 100vh;
+  padding: calc(var(--space) * 3);
+  background: var(--bg-base);
+}
+
+.scan-window-head h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.scan-window-head p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.scan-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: calc(var(--space) * 2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+}
+
+.scan-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.scan-field input,
+.scan-field select {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-base);
+  color: var(--text-primary);
+}
+
+.scan-field input.port {
+  width: 88px;
+}
+
+.scan-range-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.scan-results-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+.scan-status {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.scan-footnote {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .scan-panel-head {
   display: flex;
   align-items: center;
