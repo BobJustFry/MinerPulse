@@ -12,6 +12,29 @@ impl DriverRegistry {
     }
 }
 
+pub fn model_from_stats(stats_response: &str) -> String {
+    if AvalonDriver::detect(stats_response) {
+        if let Some(ver) = super::parse::get_parameter(stats_response, "Ver") {
+            return format!("Avalon-{ver}");
+        }
+        return "Avalon".to_string();
+    }
+
+    if let Some(kind) = super::parse::get_parameter(stats_response, "Type") {
+        if kind.contains("Antminer") {
+            return kind;
+        }
+    }
+
+    if let Some(id) = super::parse::get_parameter(stats_response, "ID") {
+        if id.contains("DT") {
+            return "Innosilicon".to_string();
+        }
+    }
+
+    String::new()
+}
+
 pub fn detect_driver(stats_response: &str) -> Option<Box<dyn MinerDriver>> {
     if AvalonDriver::detect(stats_response) {
         return Some(Box::new(AvalonDriver) as Box<dyn MinerDriver>);

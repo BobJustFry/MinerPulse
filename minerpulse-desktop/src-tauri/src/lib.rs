@@ -1,6 +1,6 @@
 use minerpulse_core::{
-    save_snapshot, EntitlementGate, ErrorResponse, MinerPulseError, MpulseFile, RateLimiter,
-    SubscriptionTier, TcpCgminerClient,
+    save_snapshot, scan_network, EntitlementGate, ErrorResponse, MinerPulseError, MpulseFile,
+    RateLimiter, ScanRequest, ScanResult, SubscriptionTier, TcpCgminerClient,
 };
 use minerpulse_core::drivers::registry::fetch_with_detect;
 use serde::{Deserialize, Serialize};
@@ -113,6 +113,17 @@ fn save_snapshot_file(
     Ok(path.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+async fn scan_miners(request: ScanRequest) -> Result<ScanResult, ErrorResponse> {
+    tauri::async_runtime::spawn_blocking(move || scan_network(request))
+        .await
+        .map_err(|_| ErrorResponse {
+            code: minerpulse_core::ErrorCode::IoError,
+            args: None,
+        })?
+        .map_err(|e| ErrorResponse::from(&e))
+}
+
 #[derive(Debug, Serialize)]
 struct AppVersionInfo {
     version: String,
@@ -159,6 +170,7 @@ pub fn run() {
             read_miner,
             save_snapshot_file,
             get_app_version,
+            scan_miners,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

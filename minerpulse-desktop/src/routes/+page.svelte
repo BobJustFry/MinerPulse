@@ -6,8 +6,10 @@
   import { onMount } from "svelte";
   import { locales, t, type Locale, type MessageKey } from "$lib/i18n";
   import type {
+    DiscoveredMiner,
     Entitlements,
     MinerSnapshot,
+    ScanResult,
     SubscriptionTier,
     TabId,
     Theme,
@@ -25,6 +27,8 @@
   let statusText = $state("");
   let snapshot = $state<MinerSnapshot | null>(null);
   let appVersion = $state("1.0.0 (build 1)");
+  let discovered = $state<DiscoveredMiner[]>([]);
+  let showScanResults = $state(false);
   let entitlements = $state<Entitlements>({
     tier: "free",
     can_poll: false,
@@ -82,6 +86,51 @@
 
   async function refreshEntitlements() {
     entitlements = await invoke<Entitlements>("get_entitlements");
+  }
+
+  async function scanNetwork() {
+    busy = true;
+    showScanResults = false;
+    statusText = msg("status.scanning");
+    try {
+      const result = await invoke<ScanResult>("scan_miners", {
+        request: { port: Number(port) || 4028 },
+      });
+      discovered = result.miners;
+      showScanResults = true;
+      localStorage.setItem("minerpulse.scan", JSON.stringify(discovered));
+      if (result.miners.length === 0) {
+        statusText = msg("status.scanEmpty", { range: result.range_label });
+      } else {
+        statusText = msg("status.scanDone", {
+          count: result.miners.length,
+          scanned: result.scanned,
+        });
+      }
+    } catch (err) {
+      statusText = formatError(err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  function selectDiscovered(miner: DiscoveredMiner) {
+    ip = miner.ip;
+    port = String(miner.port);
+    showScanResults = false;
+    statusText = `${miner.model} · ${miner.ip}`;
+  }
+
+  function vendorLabel(vendor: string) {
+    const map: Record<string, string> = {
+      avalon: "Avalon",
+      antminer: "Antminer",
+      whatsminer: "WhatsMiner",
+      innosilicon: "Innosilicon",
+      generic: "CGMiner",
+      unknown: "?",
+    };
+    return map[vendor] ?? vendor;
   }
 
   async function readMiner() {
@@ -194,6 +243,14 @@
       /* ignore in web preview */
     }
     statusText = msg("status.ready");
+    const savedScan = localStorage.getItem("minerpulse.scan");
+    if (savedScan) {
+      try {
+        discovered = JSON.parse(savedScan);
+      } catch {
+        /* ignore */
+      }
+    }
   });
 </script>
 
@@ -204,9 +261,36 @@
       <span>{msg("app.title")}</span>
     </div>
 
-    <div class="field">
+    <div class="field ip-field">
       <label for="ip">{msg("toolbar.ip")}</label>
       <input id="ip" bind:value={ip} />
+      <button class="btn" disabled={busy} onclick={scanNetwork}>
+        {msg("toolbar.scan")}
+      </button>
+      {#if showScanResults}
+        <div class="scan-results" role="listbox">
+          {#if discovered.length === 0}
+            <div class="scan-empty">{msg("status.scanEmpty", { range: "" })}</div>
+          {:else}
+            {#each discovered as miner (miner.ip)}
+              <button
+                type="button"
+                class="scan-item"
+                class:unsupported={!miner.supported}
+                onclick={() => selectDiscovered(miner)}
+              >
+                <span class="scan-item-ip">{miner.ip}</span>
+                <span class="scan-item-model">
+                  {miner.model || vendorLabel(miner.vendor)}
+                </span>
+                {#if !miner.supported}
+                  <span class="scan-item-badge">{msg("scan.preview")}</span>
+                {/if}
+              </button>
+            {/each}
+          {/if}
+        </div>
+      {/if}
     </div>
     <div class="field">
       <label for="port">{msg("toolbar.port")}</label>

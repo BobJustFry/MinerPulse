@@ -1,3 +1,4 @@
+pub mod discovery;
 pub mod drivers;
 pub mod entitlements;
 pub mod error;
@@ -6,6 +7,7 @@ pub mod mpulse;
 pub mod rate_limit;
 pub mod tcp;
 
+pub use discovery::{scan_network, DiscoveredMiner, ScanRequest, ScanResult};
 pub use drivers::registry::{detect_driver, DriverRegistry};
 pub use entitlements::{EntitlementGate, SubscriptionTier};
 pub use error::{ErrorCode, ErrorResponse, MinerPulseError};

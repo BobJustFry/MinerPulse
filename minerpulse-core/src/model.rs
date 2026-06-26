@@ -8,6 +8,7 @@ pub enum MinerVendor {
     Avalon,
     Antminer,
     Innosilicon,
+    Whatsminer,
     Generic,
 }
 

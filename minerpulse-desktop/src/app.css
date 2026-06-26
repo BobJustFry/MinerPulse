@@ -126,6 +126,74 @@ button {
   width: 56px;
 }
 
+.ip-field {
+  position: relative;
+}
+
+.scan-results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  min-width: 280px;
+  max-height: 240px;
+  overflow: auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.scan-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.scan-item:last-child {
+  border-bottom: none;
+}
+
+.scan-item:hover {
+  background: var(--accent-soft);
+}
+
+.scan-item.unsupported {
+  opacity: 0.85;
+}
+
+.scan-item-ip {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.scan-item-model {
+  flex: 1;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.scan-item-badge {
+  font-size: 10px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+
+.scan-empty {
+  padding: 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .btn {
   border: 1px solid var(--border);
   background: var(--bg-elevated);

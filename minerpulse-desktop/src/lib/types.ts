@@ -46,6 +46,20 @@ export interface MinerSnapshot {
   uptime_sec?: number | null;
 }
 
+export interface DiscoveredMiner {
+  ip: string;
+  port: number;
+  vendor: string;
+  model: string;
+  supported: boolean;
+}
+
+export interface ScanResult {
+  miners: DiscoveredMiner[];
+  scanned: number;
+  range_label: string;
+}
+
 export interface ErrorResponse {
   code: string;
   args?: { sec?: number };

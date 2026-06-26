@@ -22,6 +22,27 @@ impl Default for TcpCgminerClient {
 }
 
 impl TcpCgminerClient {
+    pub fn for_discovery() -> Self {
+        Self {
+            connect_timeout: Duration::from_millis(600),
+            io_timeout: Duration::from_millis(900),
+            try_count: 1,
+        }
+    }
+
+    pub fn send_command(
+        &self,
+        host: &str,
+        port: u16,
+        command: &str,
+    ) -> Result<String, MinerPulseError> {
+        self.send_receive(host, port, command, "", false)
+    }
+
+    pub fn send_payload(&self, host: &str, port: u16, payload: &str) -> Result<String, MinerPulseError> {
+        self.transact(host, port, payload)
+    }
+
     pub fn send_receive(
         &self,
         host: &str,
@@ -39,8 +60,12 @@ impl TcpCgminerClient {
             command.to_string()
         };
 
+        self.transact(host, port, &payload)
+    }
+
+    fn transact(&self, host: &str, port: u16, payload: &str) -> Result<String, MinerPulseError> {
         for _ in 0..self.try_count {
-            match self.try_once(host, port, &payload) {
+            match self.try_once(host, port, payload) {
                 Ok(response) => return Ok(response),
                 Err(MinerPulseError::Coded { code, .. })
                     if code == crate::error::ErrorCode::ConnTimeout =>
