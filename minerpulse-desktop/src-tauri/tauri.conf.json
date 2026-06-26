@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "MinerPulse 1.0.0 (build 2)",
+        "title": "MinerPulse 1.0.0 (build 3)",
         "width": 1180,
         "height": 760,
         "minWidth": 960,
@@ -25,7 +25,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc1RUJGRTQ1NUFGQjI0NjUKUldSbEpQdGFSZjdyZFZocnhrZlZSZks0QzladjJsYk5QSitrQjFxLzhXWVJ5Q1JYSllOUG54NDQK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERDRjAxMDM3OTM1OTJGMQpSV1R4a2pWNUF3SFBEUW5QblhyVDRzekMvdkV1TjRDUjA0dHFNQkVyTFlZVEFMZS9tZFQ0UWwybQo=",
       "endpoints": [
         "https://raw.githubusercontent.com/BobJustFry/MinerPulse/main/releases/update.json"
       ],
