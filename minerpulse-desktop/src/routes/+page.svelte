@@ -7,6 +7,8 @@
   import { onMount } from "svelte";
   import { locales, t, type Locale, type MessageKey } from "$lib/i18n";
   import { openScanWindow } from "$lib/openScanWindow";
+  import MinerDataPanel from "$lib/components/MinerDataPanel.svelte";
+  import MinerPoolsPanel from "$lib/components/MinerPoolsPanel.svelte";
   import type {
     Entitlements,
     MinerSnapshot,
@@ -338,43 +340,15 @@
   <main class="content">
     {#if activeTab === "data"}
       {#if snapshot}
-        <div class="card-grid">
-          <div class="metric-card">
-            <div class="metric-label">{msg("data.hashrate")}</div>
-            <div class="metric-value">
-              {snapshot.hashrate.avg5s_ghs.toFixed(2)} GH/s
-            </div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">{msg("data.tempIn")}</div>
-            <div class="metric-value">
-              {snapshot.thermal.inlet_c ?? "—"} °C
-            </div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">{msg("data.firmware")}</div>
-            <div class="metric-value">{snapshot.identity.firmware || "—"}</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">{msg("data.model")}</div>
-            <div class="metric-value">{snapshot.identity.model}</div>
-          </div>
-        </div>
+        <MinerDataPanel {snapshot} {locale} />
       {:else}
         <div class="locked-panel">{msg("status.noData")}</div>
       {/if}
     {:else if activeTab === "console"}
       <div class="console-box">{snapshot?.raw_log || msg("status.noData")}</div>
     {:else if activeTab === "pools"}
-      {#if snapshot?.pools?.length}
-        <div class="card-grid">
-          {#each snapshot.pools as pool}
-            <div class="metric-card">
-              <div class="metric-label">{pool.status}</div>
-              <div class="metric-value" style="font-size:14px">{pool.url}</div>
-            </div>
-          {/each}
-        </div>
+      {#if snapshot}
+        <MinerPoolsPanel {snapshot} {locale} />
       {:else}
         <div class="locked-panel">{msg("pools.empty")}</div>
       {/if}

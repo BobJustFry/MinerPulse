@@ -47,6 +47,15 @@ pub struct PowerStats {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct BoardStats {
+    pub label: String,
+    pub hashrate_ghs: Option<f64>,
+    pub temp_c: Option<f64>,
+    pub fan_rpm: Option<u32>,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PoolInfo {
     pub url: String,
     pub worker: String,
@@ -62,7 +71,15 @@ pub struct MinerSnapshot {
     pub thermal: ThermalStats,
     pub fans: FanStats,
     pub power: PowerStats,
+    #[serde(default)]
+    pub boards: Vec<BoardStats>,
     pub pools: Vec<PoolInfo>,
+    #[serde(default)]
+    pub shares_accepted: Option<u64>,
+    #[serde(default)]
+    pub shares_rejected: Option<u64>,
+    #[serde(default)]
+    pub hw_errors: Option<u64>,
     pub raw_log: String,
     pub status: String,
     pub uptime_sec: Option<u64>,
@@ -76,7 +93,11 @@ impl Default for MinerSnapshot {
             thermal: ThermalStats::default(),
             fans: FanStats::default(),
             power: PowerStats::default(),
+            boards: Vec::new(),
             pools: Vec::new(),
+            shares_accepted: None,
+            shares_rejected: None,
+            hw_errors: None,
             raw_log: String::new(),
             status: String::new(),
             uptime_sec: None,

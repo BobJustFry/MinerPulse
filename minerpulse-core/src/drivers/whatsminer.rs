@@ -1,8 +1,9 @@
+use super::json_util::{array_items, json_f64, json_str, json_u64};
 use super::MinerDriver;
 use crate::error::MinerPulseError;
 use crate::model::{
-    FanStats, HashrateStats, MinerIdentity, MinerSnapshot, MinerVendor, PoolInfo, PowerStats,
-    ThermalStats,
+    BoardStats, FanStats, HashrateStats, MinerIdentity, MinerSnapshot, MinerVendor, PoolInfo,
+    PowerStats, ThermalStats,
 };
 use crate::tcp::TcpCgminerClient;
 use serde_json::Value;
@@ -31,8 +32,11 @@ impl MinerDriver for WhatsminerDriver {
         let pools = client
             .send_payload(host, port, r#"{"cmd":"pools"}"#)
             .unwrap_or_default();
+        let devs = client
+            .send_payload(host, port, r#"{"cmd":"devs"}"#)
+            .unwrap_or_default();
 
-        Ok(parse_whatsminer_snapshot(&summary, &pools))
+        Ok(parse_whatsminer_snapshot(&summary, &pools, &devs))
     }
 }
 
@@ -70,22 +74,6 @@ pub fn classify_whatsminer(json: &str) -> Option<(MinerVendor, String)> {
     Some((MinerVendor::Whatsminer, model))
 }
 
-fn json_f64(obj: &Value, key: &str) -> Option<f64> {
-    obj.get(key).and_then(|v| {
-        v.as_f64()
-            .or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))
-            .or_else(|| v.as_i64().map(|n| n as f64))
-    })
-}
-
-fn json_u64(obj: &Value, key: &str) -> Option<u64> {
-    obj.get(key).and_then(|v| {
-        v.as_u64()
-            .or_else(|| v.as_i64().map(|n| n.max(0) as u64))
-            .or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))
-    })
-}
-
 fn mhs_to_ghs(mhs: f64) -> f64 {
     mhs / 1000.0
 }
@@ -101,25 +89,15 @@ fn parse_pools_json(raw: &str) -> Vec<PoolInfo> {
         Err(_) => return Vec::new(),
     };
 
-    value
-        .get("POOLS")
-        .and_then(|p| p.as_array())
+    array_items(&value, "POOLS")
         .map(|pools| {
             pools
                 .iter()
                 .filter_map(|pool| {
                     Some(PoolInfo {
-                        url: pool.get("URL")?.as_str()?.to_string(),
-                        worker: pool
-                            .get("User")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string(),
-                        status: pool
-                            .get("Status")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("Unknown")
-                            .to_string(),
+                        url: json_str(pool, "URL")?.to_string(),
+                        worker: json_str(pool, "User").unwrap_or("").to_string(),
+                        status: json_str(pool, "Status").unwrap_or("Unknown").to_string(),
                         accepted: json_u64(pool, "Accepted").unwrap_or(0),
                         rejected: json_u64(pool, "Rejected").unwrap_or(0),
                     })
@@ -129,7 +107,50 @@ fn parse_pools_json(raw: &str) -> Vec<PoolInfo> {
         .unwrap_or_default()
 }
 
-pub fn parse_whatsminer_snapshot(summary_raw: &str, pools_raw: &str) -> MinerSnapshot {
+fn parse_whatsminer_devs(raw: &str) -> Vec<BoardStats> {
+    let trimmed = raw.trim();
+    if !trimmed.starts_with('{') {
+        return Vec::new();
+    }
+
+    let value: Value = match serde_json::from_str(trimmed) {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+
+    let Some(devs) = array_items(&value, "DEVS") else {
+        return Vec::new();
+    };
+
+    devs
+        .iter()
+        .enumerate()
+        .map(|(index, dev)| {
+            let label = json_str(dev, "Name")
+                .or_else(|| json_str(dev, "ID"))
+                .unwrap_or("Board")
+                .to_string();
+
+            BoardStats {
+                label: if label == "Board" {
+                    format!("Board {}", index + 1)
+                } else {
+                    label
+                },
+                hashrate_ghs: json_f64(dev, "MHS 5s")
+                    .or_else(|| json_f64(dev, "MHS av"))
+                    .map(mhs_to_ghs)
+                    .or_else(|| json_f64(dev, "GHS 5s")),
+                temp_c: json_f64(dev, "Temperature")
+                    .or_else(|| json_f64(dev, "Chip Temp Avg")),
+                fan_rpm: json_u64(dev, "Fan Speed").map(|rpm| rpm as u32),
+                status: json_str(dev, "Status").unwrap_or("").to_string(),
+            }
+        })
+        .collect()
+}
+
+pub fn parse_whatsminer_snapshot(summary_raw: &str, pools_raw: &str, devs_raw: &str) -> MinerSnapshot {
     let value: Value = serde_json::from_str(summary_raw.trim()).unwrap_or(Value::Null);
     let summary = value
         .get("SUMMARY")
@@ -146,7 +167,11 @@ pub fn parse_whatsminer_snapshot(summary_raw: &str, pools_raw: &str) -> MinerSna
         .to_string();
 
     let firmware = summary
-        .and_then(|item| item.get("Firmware Version").and_then(|v| v.as_str()))
+        .and_then(|item| {
+            item.get("Firmware Version")
+                .or_else(|| item.get("Btminer Version"))
+                .and_then(|v| v.as_str())
+        })
         .unwrap_or("")
         .to_string();
 
@@ -155,6 +180,7 @@ pub fn parse_whatsminer_snapshot(summary_raw: &str, pools_raw: &str) -> MinerSna
         hashrate.avg5s_ghs = json_f64(item, "MHS 5s").map(mhs_to_ghs).unwrap_or(0.0);
         hashrate.avg_ghs = json_f64(item, "MHS av")
             .or_else(|| json_f64(item, "MHS 1m"))
+            .or_else(|| json_f64(item, "MHS 15m"))
             .map(mhs_to_ghs)
             .unwrap_or(0.0);
         hashrate.current_ghs = hashrate.avg5s_ghs;
@@ -163,6 +189,7 @@ pub fn parse_whatsminer_snapshot(summary_raw: &str, pools_raw: &str) -> MinerSna
     let mut thermal = ThermalStats::default();
     if let Some(item) = summary {
         thermal.inlet_c = json_f64(item, "Temperature")
+            .or_else(|| json_f64(item, "Env Temp"))
             .or_else(|| json_f64(item, "Chip Temp Avg"));
     }
 
@@ -174,6 +201,12 @@ pub fn parse_whatsminer_snapshot(summary_raw: &str, pools_raw: &str) -> MinerSna
         if let Some(fan_out) = json_u64(item, "Fan Speed Out") {
             fans.rpm.push(fan_out as u32);
         }
+        for index in 1..=4 {
+            let key = format!("Fan Speed{index}");
+            if let Some(rpm) = json_u64(item, &key) {
+                fans.rpm.push(rpm as u32);
+            }
+        }
         if fans.rpm.is_empty() {
             if let Some(fan) = json_u64(item, "Fan Speed") {
                 fans.rpm.push(fan as u32);
@@ -183,7 +216,10 @@ pub fn parse_whatsminer_snapshot(summary_raw: &str, pools_raw: &str) -> MinerSna
 
     let mut power = PowerStats::default();
     if let Some(item) = summary {
-        power.watts = json_f64(item, "Power");
+        power.watts = json_f64(item, "Power")
+            .or_else(|| json_f64(item, "Power Real"))
+            .or_else(|| json_f64(item, "Power Rate"));
+        power.voltage = json_f64(item, "Voltage");
     }
 
     let status = summary
@@ -195,10 +231,31 @@ pub fn parse_whatsminer_snapshot(summary_raw: &str, pools_raw: &str) -> MinerSna
         json_u64(item, "Uptime").or_else(|| json_u64(item, "Elapsed"))
     });
 
+    let shares_accepted = summary.and_then(|item| json_u64(item, "Accepted"));
+    let shares_rejected = summary.and_then(|item| json_u64(item, "Rejected"));
+    let hw_errors = summary.and_then(|item| json_u64(item, "Hardware Errors"));
+
+    let mut boards = parse_whatsminer_devs(devs_raw);
+    if boards.is_empty() {
+        boards = (0..hashrate.per_board_ghs.len())
+            .map(|index| BoardStats {
+                label: format!("Board {}", index + 1),
+                hashrate_ghs: hashrate.per_board_ghs.get(index).copied(),
+                temp_c: thermal.per_board_max_c.get(index).copied(),
+                fan_rpm: fans.rpm.get(index).copied(),
+                status: String::new(),
+            })
+            .collect();
+    }
+
     let mut raw_log = summary_raw.to_string();
     if !pools_raw.is_empty() {
-        raw_log.push_str("\n---\n");
+        raw_log.push_str("\n--- pools ---\n");
         raw_log.push_str(pools_raw);
+    }
+    if !devs_raw.is_empty() {
+        raw_log.push_str("\n--- devs ---\n");
+        raw_log.push_str(devs_raw);
     }
 
     MinerSnapshot {
@@ -212,7 +269,11 @@ pub fn parse_whatsminer_snapshot(summary_raw: &str, pools_raw: &str) -> MinerSna
         thermal,
         fans,
         power,
+        boards,
         pools: parse_pools_json(pools_raw),
+        shares_accepted,
+        shares_rejected,
+        hw_errors,
         raw_log,
         status,
         uptime_sec,
@@ -233,8 +294,9 @@ mod tests {
 
     #[test]
     fn converts_mhs_to_ghs() {
-        let sample = r#"{"SUMMARY":[{"Miner Type":"M50","MHS 5s":70668114.52,"MHS av":70000000.0}]}"#;
-        let snap = parse_whatsminer_snapshot(sample, "");
+        let sample = r#"{"SUMMARY":[{"Miner Type":"M50","MHS 5s":70668114.52,"MHS av":70000000.0,"Power":3500}]}"#;
+        let snap = parse_whatsminer_snapshot(sample, "", "");
         assert!((snap.hashrate.avg5s_ghs - 70668.11452).abs() < 0.01);
+        assert_eq!(snap.power.watts, Some(3500.0));
     }
 }

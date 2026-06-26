@@ -34,6 +34,13 @@ export interface MinerSnapshot {
   };
   fans: { rpm: number[] };
   power: { watts?: number | null; voltage?: number | null };
+  boards: Array<{
+    label: string;
+    hashrate_ghs?: number | null;
+    temp_c?: number | null;
+    fan_rpm?: number | null;
+    status: string;
+  }>;
   pools: Array<{
     url: string;
     worker: string;
@@ -41,6 +48,9 @@ export interface MinerSnapshot {
     accepted: number;
     rejected: number;
   }>;
+  shares_accepted?: number | null;
+  shares_rejected?: number | null;
+  hw_errors?: number | null;
   raw_log: string;
   status: string;
   uptime_sec?: number | null;
