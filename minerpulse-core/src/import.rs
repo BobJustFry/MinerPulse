@@ -1,4 +1,4 @@
-use crate::drivers::antminer::{parse_antminer_snapshot, AntminerDriver};
+use crate::drivers::antminer::{parse_antminer_snapshot, split_antminer_log, AntminerDriver};
 use crate::drivers::avalon::{parse_avalon_estats_log, parse_estats, AvalonDriver};
 use crate::drivers::whatsminer::{classify_whatsminer, parse_whatsminer_snapshot};
 use crate::drivers::MinerDriver;
@@ -35,6 +35,16 @@ pub fn import_file_content(content: &str, filename: Option<&str>) -> Result<Impo
     }
 
     if trimmed.starts_with('{') {
+        if trimmed.contains("--- pools ---") || trimmed.contains("--- summary ---") {
+            let (stats, summary, pools, devs) = split_antminer_log(trimmed);
+            if AntminerDriver::detect(&stats) {
+                return Ok(ImportResult {
+                    snapshot: parse_antminer_snapshot(&stats, &summary, &pools, &devs),
+                    source_label: label,
+                    miner_ip: None,
+                });
+            }
+        }
         return import_json(trimmed, &label);
     }
 

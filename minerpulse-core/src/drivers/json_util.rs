@@ -115,10 +115,10 @@ pub fn collect_fan_rpms(obj: &Value) -> Vec<u32> {
         }
     }
     for index in 1..=8 {
-        let key = format!("Fan{index}");
-        if let Some(rpm) = json_u64(obj, &key) {
-            if !fans.contains(&(rpm as u32)) {
+        for key in [format!("Fan{index}"), format!("fan{index}")] {
+            if let Some(rpm) = json_u64(obj, &key) {
                 fans.push(rpm as u32);
+                break;
             }
         }
     }
