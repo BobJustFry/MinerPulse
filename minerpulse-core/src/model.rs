@@ -53,6 +53,41 @@ pub struct BoardStats {
     pub temp_c: Option<f64>,
     pub fan_rpm: Option<u32>,
     pub status: String,
+    #[serde(default)]
+    pub chip_temp_min_c: Option<f64>,
+    #[serde(default)]
+    pub chip_temp_avg_c: Option<f64>,
+    #[serde(default)]
+    pub chip_temp_max_c: Option<f64>,
+    #[serde(default)]
+    pub effective_chips: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ChipStats {
+    pub index: u32,
+    pub temp_c: i32,
+    #[serde(default)]
+    pub freq_mhz: Option<u32>,
+    #[serde(default)]
+    pub voltage: Option<u32>,
+    #[serde(default)]
+    pub errors: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct BoardChipMap {
+    pub slot: u32,
+    pub label: String,
+    pub chips_per_domain: u32,
+    pub chips: Vec<ChipStats>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MinerFault {
+    pub code: String,
+    #[serde(default)]
+    pub occurred_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -80,6 +115,10 @@ pub struct MinerSnapshot {
     pub shares_rejected: Option<u64>,
     #[serde(default)]
     pub hw_errors: Option<u64>,
+    #[serde(default)]
+    pub board_chips: Vec<BoardChipMap>,
+    #[serde(default)]
+    pub faults: Vec<MinerFault>,
     pub raw_log: String,
     pub status: String,
     pub uptime_sec: Option<u64>,
@@ -98,6 +137,8 @@ impl Default for MinerSnapshot {
             shares_accepted: None,
             shares_rejected: None,
             hw_errors: None,
+            board_chips: Vec::new(),
+            faults: Vec::new(),
             raw_log: String::new(),
             status: String::new(),
             uptime_sec: None,

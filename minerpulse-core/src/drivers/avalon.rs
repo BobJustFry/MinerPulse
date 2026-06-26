@@ -206,6 +206,7 @@ pub fn parse_avalon_estats_log(raw: &str) -> MinerSnapshot {
                     None
                 },
                 status: String::new(),
+                ..Default::default()
             })
             .collect()
     };
@@ -231,6 +232,7 @@ pub fn parse_avalon_estats_log(raw: &str) -> MinerSnapshot {
         raw_log: raw.to_string(),
         status,
         uptime_sec,
+        ..Default::default()
     }
 }
 
@@ -351,6 +353,7 @@ pub fn parse_estats(raw: &str, pools_raw: &str) -> MinerSnapshot {
             temp_c: thermal.per_board_max_c.get(index).copied(),
             fan_rpm: fans.rpm.get(index).copied(),
             status: String::new(),
+            ..Default::default()
         })
         .collect();
 
@@ -379,6 +382,7 @@ pub fn parse_estats(raw: &str, pools_raw: &str) -> MinerSnapshot {
         raw_log,
         status,
         uptime_sec: get_parameter(&cleaned, "Elapsed").and_then(|s| parse_u64(&s)),
+        ..Default::default()
     }
 }
 

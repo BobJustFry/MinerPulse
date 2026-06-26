@@ -723,6 +723,183 @@ button {
   color: var(--text-muted);
 }
 
+.fault-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fault-link {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg-surface));
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.fault-link:hover {
+  border-color: var(--danger);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.fault-code {
+  font-weight: 700;
+  color: var(--danger);
+}
+
+.fault-name {
+  font-size: 12px;
+}
+
+.fault-time {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.chip-boards {
+  display: grid;
+  gap: 12px;
+}
+
+.chip-board-card {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  overflow: auto;
+}
+
+.chip-board-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.chip-board-label {
+  font-weight: 700;
+}
+
+.chip-board-meta {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.chip-grid {
+  display: grid;
+  gap: 3px;
+  width: max-content;
+  max-width: 100%;
+}
+
+.chip-row {
+  display: flex;
+  gap: 3px;
+}
+
+.chip-cell {
+  width: 42px;
+  height: 42px;
+  border-radius: 4px;
+  display: grid;
+  place-content: center;
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+  font-size: 10px;
+  line-height: 1.1;
+}
+
+.chip-cell-id {
+  opacity: 0.85;
+}
+
+.chip-cell-temp {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 17, 23, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.modal-card {
+  width: min(560px, 100%);
+  max-height: min(80vh, 720px);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 2px);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-sm);
+}
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 8px;
+}
+
+.modal-kicker {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.modal-title {
+  margin: 4px 0 0;
+  font-size: 20px;
+}
+
+.modal-close {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.modal-body {
+  padding: 8px 18px 18px;
+}
+
+.modal-section + .modal-section {
+  margin-top: 14px;
+}
+
+.modal-section-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.modal-section-value {
+  margin-top: 4px;
+  line-height: 1.45;
+}
+
+.modal-section-value.action {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+
 @media (max-width: 1100px) {
   .data-section,
   .data-section.span-2 {

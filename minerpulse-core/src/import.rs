@@ -59,7 +59,7 @@ pub fn import_file_content(content: &str, filename: Option<&str>) -> Result<Impo
 
     if classify_whatsminer(trimmed).is_some() {
         return Ok(ImportResult {
-            snapshot: parse_whatsminer_snapshot(trimmed, "", ""),
+            snapshot: parse_whatsminer_snapshot(trimmed, "", "", "", "", "", ""),
             source_label: label,
             miner_ip: None,
         });
@@ -113,7 +113,7 @@ fn import_json(trimmed: &str, label: &str) -> Result<ImportResult, MinerPulseErr
 
     if classify_whatsminer(trimmed).is_some() {
         return Ok(ImportResult {
-            snapshot: parse_whatsminer_snapshot(trimmed, "", ""),
+            snapshot: parse_whatsminer_snapshot(trimmed, "", "", "", "", "", ""),
             source_label: label.to_string(),
             miner_ip: None,
         });

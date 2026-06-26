@@ -40,7 +40,13 @@ export interface MinerSnapshot {
     temp_c?: number | null;
     fan_rpm?: number | null;
     status: string;
+    chip_temp_min_c?: number | null;
+    chip_temp_avg_c?: number | null;
+    chip_temp_max_c?: number | null;
+    effective_chips?: number | null;
   }>;
+  board_chips?: BoardChipMap[];
+  faults?: MinerFault[];
   pools: Array<{
     url: string;
     worker: string;
@@ -54,6 +60,24 @@ export interface MinerSnapshot {
   raw_log: string;
   status: string;
   uptime_sec?: number | null;
+}
+
+export interface BoardChipMap {
+  slot: number;
+  label: string;
+  chips_per_domain: number;
+  chips: Array<{
+    index: number;
+    temp_c: number;
+    freq_mhz?: number | null;
+    voltage?: number | null;
+    errors?: number | null;
+  }>;
+}
+
+export interface MinerFault {
+  code: string;
+  occurred_at?: string | null;
 }
 
 export interface ScanSubnet {

@@ -201,6 +201,7 @@ fn parse_antminer_devs(raw: &str) -> (Vec<BoardStats>, Option<u64>) {
             temp_c: json_f64(dev, "Temperature").or_else(|| json_temp_from_dev(dev)),
             fan_rpm: json_u64(dev, "Fan Speed").map(|rpm| rpm as u32),
             status: json_str(dev, "Status").unwrap_or("").to_string(),
+            ..Default::default()
         });
 
         if hw_errors.is_none() {
@@ -343,6 +344,7 @@ fn boards_from_vectors(
             temp_c: temps.get(index).copied(),
             fan_rpm: fans.get(index).copied(),
             status: String::new(),
+            ..Default::default()
         })
         .collect()
 }
@@ -407,6 +409,7 @@ fn parse_antminer_json(stats_raw: &str, pools_raw: &str) -> Option<MinerSnapshot
         raw_log,
         status,
         uptime_sec,
+        ..Default::default()
     })
 }
 
@@ -461,6 +464,7 @@ fn parse_antminer_pipe(stats_raw: &str, pools_raw: &str) -> MinerSnapshot {
         raw_log,
         status: get_parameter(stats_raw, "Status").unwrap_or_else(|| "Unknown".to_string()),
         uptime_sec: get_parameter(stats_raw, "Elapsed").and_then(|s| parse_u64(&s)),
+        ..Default::default()
     }
 }
 

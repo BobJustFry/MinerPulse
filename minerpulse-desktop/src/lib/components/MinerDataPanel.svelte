@@ -1,5 +1,8 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { t, type Locale, type MessageKey } from "$lib/i18n";
+  import MinerChipMatrix from "$lib/components/MinerChipMatrix.svelte";
+  import WhatsminerErrorModal from "$lib/components/WhatsminerErrorModal.svelte";
   import {
     formatEfficiency,
     formatHashrate,
@@ -10,12 +13,49 @@
     statusTone,
     vendorLabel,
   } from "$lib/formatMiner";
+  import {
+    loadWhatsminerErrorCatalog,
+    lookupWhatsminerError,
+    pickLocalizedText,
+    type WhatsminerErrorCatalog,
+  } from "$lib/whatsminerErrors";
   import type { MinerSnapshot } from "$lib/types";
 
   let { snapshot, locale }: { snapshot: MinerSnapshot; locale: Locale } = $props();
 
+  let errorCatalog = $state<WhatsminerErrorCatalog | null>(null);
+  let errorModalOpen = $state(false);
+  let selectedErrorCode = $state("");
+
+  onMount(() => {
+    if (snapshot.identity.vendor === "whatsminer" && (snapshot.faults?.length ?? 0) > 0) {
+      loadWhatsminerErrorCatalog()
+        .then((catalog) => {
+          errorCatalog = catalog;
+        })
+        .catch(() => {
+          errorCatalog = null;
+        });
+    }
+  });
+
   function msg(key: MessageKey, args?: Record<string, string | number>) {
     return t(locale, key, args);
+  }
+
+  function isWhatsminer() {
+    return snapshot.identity.vendor === "whatsminer";
+  }
+
+  function faultLabel(code: string): string {
+    if (!errorCatalog) return code;
+    const entry = lookupWhatsminerError(errorCatalog, code);
+    return entry ? pickLocalizedText(locale, entry.name, code) : code;
+  }
+
+  function openError(code: string) {
+    selectedErrorCode = code;
+    errorModalOpen = true;
   }
 
   function hasHashrateData() {
@@ -199,6 +239,28 @@
       </section>
     {/if}
 
+    {#if isWhatsminer() && (snapshot.faults?.length ?? 0) > 0}
+      <section class="data-section span-full">
+        <header class="data-section-head">{msg("data.group.errors")}</header>
+        <div class="fault-list">
+          {#each snapshot.faults ?? [] as fault (fault.code + (fault.occurred_at ?? ""))}
+            <button
+              type="button"
+              class="fault-link"
+              title={msg("errors.openHint")}
+              onclick={() => openError(fault.code)}
+            >
+              <span class="fault-code">{fault.code}</span>
+              <span class="fault-name">{faultLabel(fault.code)}</span>
+              {#if fault.occurred_at}
+                <span class="fault-time">{fault.occurred_at}</span>
+              {/if}
+            </button>
+          {/each}
+        </div>
+      </section>
+    {/if}
+
     {#if snapshot.boards.length > 0}
       <section class="data-section span-full">
         <header class="data-section-head">{msg("data.group.boards")}</header>
@@ -226,6 +288,24 @@
                     <strong>{formatNumber(board.temp_c, 1, " °C")}</strong>
                   </div>
                 {/if}
+                {#if board.chip_temp_min_c != null || board.chip_temp_avg_c != null || board.chip_temp_max_c != null}
+                  <div>
+                    <span>{msg("data.chipTempRange")}</span>
+                    <strong>
+                      {formatNumber(board.chip_temp_min_c, 0, "")}–{formatNumber(
+                        board.chip_temp_max_c,
+                        0,
+                        " °C",
+                      )}
+                    </strong>
+                  </div>
+                {/if}
+                {#if board.effective_chips != null}
+                  <div>
+                    <span>{msg("data.chips")}</span>
+                    <strong>{board.effective_chips}</strong>
+                  </div>
+                {/if}
                 {#if board.fan_rpm != null}
                   <div>
                     <span>{msg("data.fan")}</span>
@@ -237,6 +317,10 @@
           {/each}
         </div>
       </section>
+    {/if}
+
+    {#if isWhatsminer() && (snapshot.board_chips?.length ?? 0) > 0}
+      <MinerChipMatrix boards={snapshot.board_chips ?? []} {locale} />
     {/if}
 
     {#if snapshot.pools.length > 0}
@@ -262,3 +346,5 @@
     {/if}
   </div>
 </div>
+
+<WhatsminerErrorModal bind:open={errorModalOpen} bind:code={selectedErrorCode} {locale} />

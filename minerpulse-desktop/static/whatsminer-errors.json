@@ -1,0 +1,2096 @@
+{
+  "version": "2021-04-06",
+  "source": "MicroBT WhatsMiner Error Code Description + API docs",
+  "errors": [
+    {
+      "code": "110",
+      "category": "fan",
+      "name": {
+        "en": "Fan in detect speed error",
+        "ru": "Ошибка датчика скорости входного вентилятора",
+        "zh-CN": "进风风扇测速错误"
+      },
+      "description": {
+        "en": "Fan-in speed sensor reports abnormal RPM.",
+        "ru": "Датчик скорости входного вентилятора сообщает о неверных оборотах.",
+        "zh-CN": "进风风扇转速检测异常。"
+      },
+      "action": {
+        "en": "Check fan wiring, PSU output, or replace the fan.",
+        "ru": "Проверьте подключение вентилятора, БП или замените вентилятор.",
+        "zh-CN": "检查风扇接线与电源，必要时更换风扇。"
+      }
+    },
+    {
+      "code": "111",
+      "category": "fan",
+      "name": {
+        "en": "Fan out detect speed error",
+        "ru": "Ошибка датчика скорости выходного вентилятора",
+        "zh-CN": "出风风扇测速错误"
+      },
+      "description": {
+        "en": "Fan-out speed sensor reports abnormal RPM.",
+        "ru": "Датчик скорости выходного вентилятора сообщает о неверных оборотах.",
+        "zh-CN": "出风风扇转速检测异常。"
+      },
+      "action": {
+        "en": "Check fan wiring, PSU output, or replace the fan.",
+        "ru": "Проверьте подключение вентилятора, БП или замените вентилятор.",
+        "zh-CN": "检查风扇接线与电源，必要时更换风扇。"
+      }
+    },
+    {
+      "code": "130",
+      "category": "fan",
+      "name": {
+        "en": "Fan in speed error",
+        "ru": "Ошибка скорости входного вентилятора",
+        "zh-CN": "进风风扇转速错误"
+      },
+      "description": {
+        "en": "Fan-in RPM is outside the expected range.",
+        "ru": "Обороты входного вентилятора вне допустимого диапазона.",
+        "zh-CN": "进风风扇转速超出允许范围。"
+      },
+      "action": {
+        "en": "Check fan connection, PSU, or replace the fan.",
+        "ru": "Проверьте подключение вентилятора, БП или замените вентилятор.",
+        "zh-CN": "检查风扇连接与电源，必要时更换风扇。"
+      }
+    },
+    {
+      "code": "131",
+      "category": "fan",
+      "name": {
+        "en": "Fan out speed error",
+        "ru": "Ошибка скорости выходного вентилятора",
+        "zh-CN": "出风风扇转速错误"
+      },
+      "description": {
+        "en": "Fan-out RPM is outside the expected range.",
+        "ru": "Обороты выходного вентилятора вне допустимого диапазона.",
+        "zh-CN": "出风风扇转速超出允许范围。"
+      },
+      "action": {
+        "en": "Check fan connection, PSU, or replace the fan.",
+        "ru": "Проверьте подключение вентилятора, БП или замените вентилятор.",
+        "zh-CN": "检查风扇连接与电源，必要时更换风扇。"
+      }
+    },
+    {
+      "code": "140",
+      "category": "fan",
+      "name": {
+        "en": "Fan speed is too high",
+        "ru": "Слишком высокая скорость вентиляторов",
+        "zh-CN": "风扇转速过高"
+      },
+      "description": {
+        "en": "Fans are running faster than expected for current conditions.",
+        "ru": "Вентиляторы вращаются быстрее ожидаемого для текущих условий.",
+        "zh-CN": "风扇转速高于当前工况预期。"
+      },
+      "action": {
+        "en": "Check ambient temperature and ventilation.",
+        "ru": "Проверьте температуру окружающей среды и вентиляцию.",
+        "zh-CN": "检查环境温度和通风条件。"
+      }
+    },
+    {
+      "code": "200",
+      "category": "power",
+      "name": {
+        "en": "Power probing error, no power found",
+        "ru": "Ошибка опроса БП: питание не обнаружено",
+        "zh-CN": "电源探测错误，未发现供电"
+      },
+      "description": {
+        "en": "Miner cannot detect valid PSU output.",
+        "ru": "Майнер не обнаруживает корректный выход блока питания.",
+        "zh-CN": "矿机未检测到有效的电源输出。"
+      },
+      "action": {
+        "en": "Check PSU wiring, update firmware, or replace the PSU.",
+        "ru": "Проверьте подключение БП, обновите прошивку или замените блок питания.",
+        "zh-CN": "检查电源接线，更新固件或更换电源。"
+      }
+    },
+    {
+      "code": "201",
+      "category": "power",
+      "name": {
+        "en": "PSU and configuration mismatch",
+        "ru": "БП не соответствует конфигурации",
+        "zh-CN": "电源与配置文件不匹配"
+      },
+      "description": {
+        "en": "Installed PSU does not match miner configuration.",
+        "ru": "Установленный БП не соответствует конфигурации майнера.",
+        "zh-CN": "当前电源与矿机配置不匹配。"
+      },
+      "action": {
+        "en": "Install the correct PSU model for this miner.",
+        "ru": "Установите подходящий блок питания для этой модели.",
+        "zh-CN": "更换与该机型匹配的电源。"
+      }
+    },
+    {
+      "code": "203",
+      "category": "power",
+      "name": {
+        "en": "Power protecting",
+        "ru": "Защита блока питания",
+        "zh-CN": "电源保护"
+      },
+      "description": {
+        "en": "PSU entered protection mode.",
+        "ru": "Блок питания перешёл в режим защиты.",
+        "zh-CN": "电源进入保护状态。"
+      },
+      "action": {
+        "en": "Check ambient temperature and cooling.",
+        "ru": "Проверьте температуру окружающей среды и охлаждение.",
+        "zh-CN": "检查环境温度和散热。"
+      }
+    },
+    {
+      "code": "204",
+      "category": "power",
+      "name": {
+        "en": "Power current protecting",
+        "ru": "Защита по току БП",
+        "zh-CN": "电源电流保护"
+      },
+      "description": {
+        "en": "PSU current protection triggered.",
+        "ru": "Сработала защита блока питания по току.",
+        "zh-CN": "电源电流保护触发。"
+      },
+      "action": {
+        "en": "Check ambient temperature and load.",
+        "ru": "Проверьте температуру окружающей среды и нагрузку.",
+        "zh-CN": "检查环境温度和负载。"
+      }
+    },
+    {
+      "code": "205",
+      "category": "power",
+      "name": {
+        "en": "Power current error",
+        "ru": "Ошибка тока блока питания",
+        "zh-CN": "电源电流错误"
+      },
+      "description": {
+        "en": "PSU reports abnormal output current.",
+        "ru": "Блок питания сообщает об аномальном выходном токе.",
+        "zh-CN": "电源报告输出电流异常。"
+      },
+      "action": {
+        "en": "Inspect PSU and mains supply.",
+        "ru": "Проверьте блок питания и сеть.",
+        "zh-CN": "检查电源与电网供电。"
+      }
+    },
+    {
+      "code": "206",
+      "category": "power",
+      "name": {
+        "en": "Power input voltage is low",
+        "ru": "Низкое входное напряжение БП",
+        "zh-CN": "电源输入电压过低"
+      },
+      "description": {
+        "en": "Input voltage is below acceptable range.",
+        "ru": "Входное напряжение ниже допустимого диапазона.",
+        "zh-CN": "输入电压低于允许范围。"
+      },
+      "action": {
+        "en": "Improve mains supply and input voltage.",
+        "ru": "Улучшите качество электроснабжения и входное напряжение.",
+        "zh-CN": "改善供电条件并提高输入电压。"
+      }
+    },
+    {
+      "code": "207",
+      "category": "power",
+      "name": {
+        "en": "Power input current protecting",
+        "ru": "Защита входного тока БП",
+        "zh-CN": "电源输入电流保护"
+      },
+      "description": {
+        "en": "Input current protection triggered.",
+        "ru": "Сработала защита по входному току.",
+        "zh-CN": "输入电流保护触发。"
+      },
+      "action": {
+        "en": "Improve mains supply conditions.",
+        "ru": "Улучшите условия электроснабжения.",
+        "zh-CN": "改善电网供电条件。"
+      }
+    },
+    {
+      "code": "210",
+      "category": "power",
+      "name": {
+        "en": "Power error status",
+        "ru": "Ошибка состояния БП",
+        "zh-CN": "电源错误状态"
+      },
+      "description": {
+        "en": "PSU reports an internal fault code.",
+        "ru": "Блок питания сообщает внутренний код неисправности.",
+        "zh-CN": "电源报告内部故障状态。"
+      },
+      "action": {
+        "en": "Check PSU fault code and replace if needed.",
+        "ru": "Проверьте код ошибки БП и при необходимости замените его.",
+        "zh-CN": "查看电源故障码并按需更换电源。"
+      }
+    },
+    {
+      "code": "213",
+      "category": "power",
+      "name": {
+        "en": "PSU voltage/current mismatch",
+        "ru": "Несоответствие напряжения и тока БП",
+        "zh-CN": "电源输入电压电流不匹配"
+      },
+      "description": {
+        "en": "PSU input parameters do not match expected profile.",
+        "ru": "Входные параметры БП не соответствуют ожидаемому профилю.",
+        "zh-CN": "电源输入参数与预期不匹配。"
+      },
+      "action": {
+        "en": "Replace the PSU with a compatible unit.",
+        "ru": "Замените блок питания на совместимый.",
+        "zh-CN": "更换匹配的电源。"
+      }
+    },
+    {
+      "code": "233",
+      "category": "power",
+      "name": {
+        "en": "PSU output over-temperature protection",
+        "ru": "Защита БП от перегрева на выходе",
+        "zh-CN": "电源输出过温保护"
+      },
+      "description": {
+        "en": "PSU output stage overheated.",
+        "ru": "Выходная часть блока питания перегрелась.",
+        "zh-CN": "电源输出级过温保护。"
+      },
+      "action": {
+        "en": "Check ambient temperature and airflow.",
+        "ru": "Проверьте температуру окружающей среды и обдув.",
+        "zh-CN": "检查环境温度和散热。"
+      }
+    },
+    {
+      "code": "234",
+      "category": "power",
+      "name": {
+        "en": "PSU output over-temperature protection",
+        "ru": "Защита БП от перегрева на выходе",
+        "zh-CN": "电源输出过温保护"
+      },
+      "description": {
+        "en": "PSU output stage overheated.",
+        "ru": "Выходная часть блока питания перегрелась.",
+        "zh-CN": "电源输出级过温保护。"
+      },
+      "action": {
+        "en": "Check ambient temperature and airflow.",
+        "ru": "Проверьте температуру окружающей среды и обдув.",
+        "zh-CN": "检查环境温度和散热。"
+      }
+    },
+    {
+      "code": "235",
+      "category": "power",
+      "name": {
+        "en": "PSU output over-temperature protection",
+        "ru": "Защита БП от перегрева на выходе",
+        "zh-CN": "电源输出过温保护"
+      },
+      "description": {
+        "en": "PSU output stage overheated.",
+        "ru": "Выходная часть блока питания перегрелась.",
+        "zh-CN": "电源输出级过温保护。"
+      },
+      "action": {
+        "en": "Check ambient temperature and airflow.",
+        "ru": "Проверьте температуру окружающей среды и обдув.",
+        "zh-CN": "检查环境温度和散热。"
+      }
+    },
+    {
+      "code": "236",
+      "category": "power",
+      "name": {
+        "en": "PSU output overcurrent protection",
+        "ru": "Защита БП от перегруза по току",
+        "zh-CN": "电源输出过流保护"
+      },
+      "description": {
+        "en": "Output overcurrent protection triggered.",
+        "ru": "Сработала защита от перегрузки по выходному току.",
+        "zh-CN": "输出过流保护触发。"
+      },
+      "action": {
+        "en": "Check ambient temperature and copper bar screws.",
+        "ru": "Проверьте температуру окружающей среды и затяжку шин.",
+        "zh-CN": "检查环境温度并紧固铜排螺丝。"
+      }
+    },
+    {
+      "code": "237",
+      "category": "power",
+      "name": {
+        "en": "PSU output overcurrent protection",
+        "ru": "Защита БП от перегруза по току",
+        "zh-CN": "电源输出过流保护"
+      },
+      "description": {
+        "en": "Output overcurrent protection triggered.",
+        "ru": "Сработала защита от перегрузки по выходному току.",
+        "zh-CN": "输出过流保护触发。"
+      },
+      "action": {
+        "en": "Check ambient temperature and copper bar screws.",
+        "ru": "Проверьте температуру окружающей среды и затяжку шин.",
+        "zh-CN": "检查环境温度并紧固铜排螺丝。"
+      }
+    },
+    {
+      "code": "238",
+      "category": "power",
+      "name": {
+        "en": "PSU output overcurrent protection",
+        "ru": "Защита БП от перегруза по току",
+        "zh-CN": "电源输出过流保护"
+      },
+      "description": {
+        "en": "Output overcurrent protection triggered.",
+        "ru": "Сработала защита от перегрузки по выходному току.",
+        "zh-CN": "输出过流保护触发。"
+      },
+      "action": {
+        "en": "Check ambient temperature and copper bar screws.",
+        "ru": "Проверьте температуру окружающей среды и затяжку шин.",
+        "zh-CN": "检查环境温度并紧固铜排螺丝。"
+      }
+    },
+    {
+      "code": "241",
+      "category": "power",
+      "name": {
+        "en": "Power output current imbalance",
+        "ru": "Дисбаланс выходного тока БП",
+        "zh-CN": "电源输出电流不平衡"
+      },
+      "description": {
+        "en": "PSU output currents are unbalanced.",
+        "ru": "Выходные токи блока питания несбалансированы.",
+        "zh-CN": "电源输出电流不平衡。"
+      },
+      "action": {
+        "en": "Replace the PSU.",
+        "ru": "Замените блок питания.",
+        "zh-CN": "更换电源。"
+      }
+    },
+    {
+      "code": "243",
+      "category": "power",
+      "name": {
+        "en": "PSU input over-temperature protection",
+        "ru": "Защита БП от перегрева на входе",
+        "zh-CN": "电源输入过温保护"
+      },
+      "description": {
+        "en": "PSU input stage overheated.",
+        "ru": "Входная часть блока питания перегрелась.",
+        "zh-CN": "电源输入级过温保护。"
+      },
+      "action": {
+        "en": "Check ambient temperature.",
+        "ru": "Проверьте температуру окружающей среды.",
+        "zh-CN": "检查环境温度。"
+      }
+    },
+    {
+      "code": "244",
+      "category": "power",
+      "name": {
+        "en": "PSU input over-temperature protection",
+        "ru": "Защита БП от перегрева на входе",
+        "zh-CN": "电源输入过温保护"
+      },
+      "description": {
+        "en": "PSU input stage overheated.",
+        "ru": "Входная часть блока питания перегрелась.",
+        "zh-CN": "电源输入级过温保护。"
+      },
+      "action": {
+        "en": "Check ambient temperature.",
+        "ru": "Проверьте температуру окружающей среды.",
+        "zh-CN": "检查环境温度。"
+      }
+    },
+    {
+      "code": "245",
+      "category": "power",
+      "name": {
+        "en": "PSU input over-temperature protection",
+        "ru": "Защита БП от перегрева на входе",
+        "zh-CN": "电源输入过温保护"
+      },
+      "description": {
+        "en": "PSU input stage overheated.",
+        "ru": "Входная часть блока питания перегрелась.",
+        "zh-CN": "电源输入级过温保护。"
+      },
+      "action": {
+        "en": "Check ambient temperature.",
+        "ru": "Проверьте температуру окружающей среды.",
+        "zh-CN": "检查环境温度。"
+      }
+    },
+    {
+      "code": "246",
+      "category": "power",
+      "name": {
+        "en": "PSU input overcurrent protection",
+        "ru": "Защита БП от перегруза по входному току",
+        "zh-CN": "电源输入过流保护"
+      },
+      "description": {
+        "en": "Input overcurrent protection triggered.",
+        "ru": "Сработала защита по входному току.",
+        "zh-CN": "输入过流保护触发。"
+      },
+      "action": {
+        "en": "Check ambient temperature.",
+        "ru": "Проверьте температуру окружающей среды.",
+        "zh-CN": "检查环境温度。"
+      }
+    },
+    {
+      "code": "247",
+      "category": "power",
+      "name": {
+        "en": "PSU input overcurrent protection",
+        "ru": "Защита БП от перегруза по входному току",
+        "zh-CN": "电源输入过流保护"
+      },
+      "description": {
+        "en": "Input overcurrent protection triggered.",
+        "ru": "Сработала защита по входному току.",
+        "zh-CN": "输入过流保护触发。"
+      },
+      "action": {
+        "en": "Check ambient temperature.",
+        "ru": "Проверьте температуру окружающей среды.",
+        "zh-CN": "检查环境温度。"
+      }
+    },
+    {
+      "code": "248",
+      "category": "power",
+      "name": {
+        "en": "PSU input overvoltage protection",
+        "ru": "Защита БП от перенапряжения на входе",
+        "zh-CN": "电源输入过压保护"
+      },
+      "description": {
+        "en": "Input overvoltage protection triggered.",
+        "ru": "Сработала защита от перенапряжения на входе.",
+        "zh-CN": "输入过压保护触发。"
+      },
+      "action": {
+        "en": "Inspect mains input voltage.",
+        "ru": "Проверьте входное напряжение сети.",
+        "zh-CN": "检查电网输入电压。"
+      }
+    },
+    {
+      "code": "250",
+      "category": "power",
+      "name": {
+        "en": "PSU input undervoltage protection",
+        "ru": "Защита БП от пониженного входного напряжения",
+        "zh-CN": "电源输入欠压保护"
+      },
+      "description": {
+        "en": "Input undervoltage protection triggered.",
+        "ru": "Сработала защита от пониженного входного напряжения.",
+        "zh-CN": "输入欠压保护触发。"
+      },
+      "action": {
+        "en": "Inspect mains input voltage.",
+        "ru": "Проверьте входное напряжение сети.",
+        "zh-CN": "检查电网输入电压。"
+      }
+    },
+    {
+      "code": "251",
+      "category": "power",
+      "name": {
+        "en": "PSU input undervoltage protection",
+        "ru": "Защита БП от пониженного входного напряжения",
+        "zh-CN": "电源输入欠压保护"
+      },
+      "description": {
+        "en": "Input undervoltage protection triggered.",
+        "ru": "Сработала защита от пониженного входного напряжения.",
+        "zh-CN": "输入欠压保护触发。"
+      },
+      "action": {
+        "en": "Inspect mains input voltage.",
+        "ru": "Проверьте входное напряжение сети.",
+        "zh-CN": "检查电网输入电压。"
+      }
+    },
+    {
+      "code": "253",
+      "category": "power",
+      "name": {
+        "en": "Power fan error",
+        "ru": "Ошибка вентилятора БП",
+        "zh-CN": "电源风扇错误"
+      },
+      "description": {
+        "en": "PSU cooling fan fault detected.",
+        "ru": "Обнаружена неисправность вентилятора блока питания.",
+        "zh-CN": "检测到电源风扇故障。"
+      },
+      "action": {
+        "en": "Replace the PSU.",
+        "ru": "Замените блок питания.",
+        "zh-CN": "更换电源。"
+      }
+    },
+    {
+      "code": "254",
+      "category": "power",
+      "name": {
+        "en": "Power fan error",
+        "ru": "Ошибка вентилятора БП",
+        "zh-CN": "电源风扇错误"
+      },
+      "description": {
+        "en": "PSU cooling fan fault detected.",
+        "ru": "Обнаружена неисправность вентилятора блока питания.",
+        "zh-CN": "检测到电源风扇故障。"
+      },
+      "action": {
+        "en": "Replace the PSU.",
+        "ru": "Замените блок питания.",
+        "zh-CN": "更换电源。"
+      }
+    },
+    {
+      "code": "255",
+      "category": "power",
+      "name": {
+        "en": "Over power output protection",
+        "ru": "Защита от превышения выходной мощности",
+        "zh-CN": "输出过功率保护"
+      },
+      "description": {
+        "en": "PSU output power exceeded safe limit.",
+        "ru": "Выходная мощность блока питания превысила безопасный предел.",
+        "zh-CN": "输出过功率保护触发。"
+      },
+      "action": {
+        "en": "Check ambient temperature.",
+        "ru": "Проверьте температуру окружающей среды.",
+        "zh-CN": "检查环境温度。"
+      }
+    },
+    {
+      "code": "256",
+      "category": "power",
+      "name": {
+        "en": "Over power output protection",
+        "ru": "Защита от превышения выходной мощности",
+        "zh-CN": "输出过功率保护"
+      },
+      "description": {
+        "en": "PSU output power exceeded safe limit.",
+        "ru": "Выходная мощность блока питания превысила безопасный предел.",
+        "zh-CN": "输出过功率保护触发。"
+      },
+      "action": {
+        "en": "Check ambient temperature.",
+        "ru": "Проверьте температуру окружающей среды.",
+        "zh-CN": "检查环境温度。"
+      }
+    },
+    {
+      "code": "257",
+      "category": "power",
+      "name": {
+        "en": "Primary side overcurrent protection",
+        "ru": "Защита первичной стороны БП от перегруза",
+        "zh-CN": "电源初级过流保护"
+      },
+      "description": {
+        "en": "PSU primary-side overcurrent protection triggered.",
+        "ru": "Сработала защита первичной стороны БП от перегруза.",
+        "zh-CN": "电源初级过流保护触发。"
+      },
+      "action": {
+        "en": "Power off, wait, restart; replace PSU if repeated.",
+        "ru": "Выключите питание, подождите, перезапустите; при повторе замените БП.",
+        "zh-CN": "断电等待后重启，如反复出现请更换电源。"
+      }
+    },
+    {
+      "code": "263",
+      "category": "power",
+      "name": {
+        "en": "Power communication warning",
+        "ru": "Предупреждение связи с БП",
+        "zh-CN": "电源通信告警"
+      },
+      "description": {
+        "en": "Communication with PSU is unstable.",
+        "ru": "Связь с блоком питания нестабильна.",
+        "zh-CN": "与电源通信不稳定。"
+      },
+      "action": {
+        "en": "Check control board screws and PSU connection.",
+        "ru": "Проверьте затяжку винтов контроллера и подключение БП.",
+        "zh-CN": "检查控制板螺丝与电源连接。"
+      }
+    },
+    {
+      "code": "264",
+      "category": "power",
+      "name": {
+        "en": "Power communication error",
+        "ru": "Ошибка связи с БП",
+        "zh-CN": "电源通信错误"
+      },
+      "description": {
+        "en": "Communication with PSU failed.",
+        "ru": "Связь с блоком питания отсутствует.",
+        "zh-CN": "与电源通信失败。"
+      },
+      "action": {
+        "en": "Check control board screws and PSU connection.",
+        "ru": "Проверьте затяжку винтов контроллера и подключение БП.",
+        "zh-CN": "检查控制板螺丝与电源连接。"
+      }
+    },
+    {
+      "code": "267",
+      "category": "power",
+      "name": {
+        "en": "Power watchdog protection",
+        "ru": "Watchdog защита БП",
+        "zh-CN": "电源看门狗保护"
+      },
+      "description": {
+        "en": "PSU watchdog protection triggered.",
+        "ru": "Сработала watchdog-защита блока питания.",
+        "zh-CN": "电源看门狗保护触发。"
+      },
+      "action": {
+        "en": "Contact technical support.",
+        "ru": "Обратитесь к техническому специалисту.",
+        "zh-CN": "请联系技术人员。"
+      }
+    },
+    {
+      "code": "268",
+      "category": "power",
+      "name": {
+        "en": "Power output over-current protection",
+        "ru": "Защита БП от перегруза по выходному току",
+        "zh-CN": "电源输出过流保护"
+      },
+      "description": {
+        "en": "Output over-current protection triggered.",
+        "ru": "Сработала защита от перегрузки по выходному току.",
+        "zh-CN": "输出过流保护触发。"
+      },
+      "action": {
+        "en": "Check ambient temperature and copper bar screws.",
+        "ru": "Проверьте температуру окружающей среды и затяжку шин.",
+        "zh-CN": "检查环境温度并紧固铜排螺丝。"
+      }
+    },
+    {
+      "code": "269",
+      "category": "power",
+      "name": {
+        "en": "Power input over-current protection",
+        "ru": "Защита БП от перегруза по входному току",
+        "zh-CN": "电源输入过流保护"
+      },
+      "description": {
+        "en": "Input over-current protection triggered.",
+        "ru": "Сработала защита по входному току.",
+        "zh-CN": "输入过流保护触发。"
+      },
+      "action": {
+        "en": "Improve mains supply conditions.",
+        "ru": "Улучшите условия электроснабжения.",
+        "zh-CN": "改善电网供电条件。"
+      }
+    },
+    {
+      "code": "270",
+      "category": "power",
+      "name": {
+        "en": "Power input over-voltage protection",
+        "ru": "Защита БП от перенапряжения на входе",
+        "zh-CN": "电源输入过压保护"
+      },
+      "description": {
+        "en": "Input over-voltage protection triggered.",
+        "ru": "Сработала защита от перенапряжения на входе.",
+        "zh-CN": "输入过压保护触发。"
+      },
+      "action": {
+        "en": "Inspect mains input voltage.",
+        "ru": "Проверьте входное напряжение сети.",
+        "zh-CN": "检查电网输入电压。"
+      }
+    },
+    {
+      "code": "271",
+      "category": "power",
+      "name": {
+        "en": "Power input under-voltage protection",
+        "ru": "Защита БП от пониженного входного напряжения",
+        "zh-CN": "电源输入欠压保护"
+      },
+      "description": {
+        "en": "Input under-voltage protection triggered.",
+        "ru": "Сработала защита от пониженного входного напряжения.",
+        "zh-CN": "输入欠压保护触发。"
+      },
+      "action": {
+        "en": "Inspect mains input voltage.",
+        "ru": "Проверьте входное напряжение сети.",
+        "zh-CN": "检查电网输入电压。"
+      }
+    },
+    {
+      "code": "274",
+      "category": "power",
+      "name": {
+        "en": "Power fan warning",
+        "ru": "Предупреждение вентилятора БП",
+        "zh-CN": "电源风扇告警"
+      },
+      "description": {
+        "en": "PSU fan speed or airflow is abnormal.",
+        "ru": "Скорость или поток воздуха вентилятора БП аномальны.",
+        "zh-CN": "电源风扇转速或风道异常。"
+      },
+      "action": {
+        "en": "Check if PSU fan is blocked; replace PSU if needed.",
+        "ru": "Проверьте, не заблокирован ли вентилятор БП; при необходимости замените БП.",
+        "zh-CN": "检查电源风扇是否堵塞，必要时更换电源。"
+      }
+    },
+    {
+      "code": "275",
+      "category": "power",
+      "name": {
+        "en": "Power over-temperature warning",
+        "ru": "Предупреждение о перегреве БП",
+        "zh-CN": "电源过温告警"
+      },
+      "description": {
+        "en": "PSU temperature is elevated.",
+        "ru": "Температура блока питания повышена.",
+        "zh-CN": "电源温度偏高。"
+      },
+      "action": {
+        "en": "Check ambient temperature.",
+        "ru": "Проверьте температуру окружающей среды.",
+        "zh-CN": "检查环境温度。"
+      }
+    },
+    {
+      "code": "300",
+      "category": "board",
+      "name": {
+        "en": "SM0 temperature sensor detection error",
+        "ru": "Ошибка датчика температуры SM0",
+        "zh-CN": "SM0 温度传感器检测错误"
+      },
+      "description": {
+        "en": "Hashboard SM0 temperature sensor not detected.",
+        "ru": "Датчик температуры хеш-платы SM0 не обнаружен.",
+        "zh-CN": "未检测到 SM0 温度传感器。"
+      },
+      "action": {
+        "en": "Check hashboard connection and cabling.",
+        "ru": "Проверьте подключение хеш-платы и кабели.",
+        "zh-CN": "检查算力板连接与排线。"
+      }
+    },
+    {
+      "code": "301",
+      "category": "board",
+      "name": {
+        "en": "SM1 temperature sensor detection error",
+        "ru": "Ошибка датчика температуры SM1",
+        "zh-CN": "SM1 温度传感器检测错误"
+      },
+      "description": {
+        "en": "Hashboard SM1 temperature sensor not detected.",
+        "ru": "Датчик температуры хеш-платы SM1 не обнаружен.",
+        "zh-CN": "未检测到 SM1 温度传感器。"
+      },
+      "action": {
+        "en": "Check hashboard connection and cabling.",
+        "ru": "Проверьте подключение хеш-платы и кабели.",
+        "zh-CN": "检查算力板连接与排线。"
+      }
+    },
+    {
+      "code": "302",
+      "category": "board",
+      "name": {
+        "en": "SM2 temperature sensor detection error",
+        "ru": "Ошибка датчика температуры SM2",
+        "zh-CN": "SM2 温度传感器检测错误"
+      },
+      "description": {
+        "en": "Hashboard SM2 temperature sensor not detected.",
+        "ru": "Датчик температуры хеш-платы SM2 не обнаружен.",
+        "zh-CN": "未检测到 SM2 温度传感器。"
+      },
+      "action": {
+        "en": "Check hashboard connection and cabling.",
+        "ru": "Проверьте подключение хеш-платы и кабели.",
+        "zh-CN": "检查算力板连接与排线。"
+      }
+    },
+    {
+      "code": "320",
+      "category": "board",
+      "name": {
+        "en": "SM0 temperature reading error",
+        "ru": "Ошибка чтения температуры SM0",
+        "zh-CN": "SM0 温度读取错误"
+      },
+      "description": {
+        "en": "Cannot read temperature from SM0.",
+        "ru": "Не удаётся считать температуру с SM0.",
+        "zh-CN": "无法读取 SM0 温度。"
+      },
+      "action": {
+        "en": "Check control board screws and adapter board contacts.",
+        "ru": "Проверьте винты контроллера и контакты переходной платы.",
+        "zh-CN": "检查控制板螺丝与转接板接触。"
+      }
+    },
+    {
+      "code": "321",
+      "category": "board",
+      "name": {
+        "en": "SM1 temperature reading error",
+        "ru": "Ошибка чтения температуры SM1",
+        "zh-CN": "SM1 温度读取错误"
+      },
+      "description": {
+        "en": "Cannot read temperature from SM1.",
+        "ru": "Не удаётся считать температуру с SM1.",
+        "zh-CN": "无法读取 SM1 温度。"
+      },
+      "action": {
+        "en": "Check control board screws and adapter board contacts.",
+        "ru": "Проверьте винты контроллера и контакты переходной платы.",
+        "zh-CN": "检查控制板螺丝与转接板接触。"
+      }
+    },
+    {
+      "code": "322",
+      "category": "board",
+      "name": {
+        "en": "SM2 temperature reading error",
+        "ru": "Ошибка чтения температуры SM2",
+        "zh-CN": "SM2 温度读取错误"
+      },
+      "description": {
+        "en": "Cannot read temperature from SM2.",
+        "ru": "Не удаётся считать температуру с SM2.",
+        "zh-CN": "无法读取 SM2 温度。"
+      },
+      "action": {
+        "en": "Check control board screws and adapter board contacts.",
+        "ru": "Проверьте винты контроллера и контакты переходной платы.",
+        "zh-CN": "检查控制板螺丝与转接板接触。"
+      }
+    },
+    {
+      "code": "329",
+      "category": "board",
+      "name": {
+        "en": "Control board temperature sensor communication error",
+        "ru": "Ошибка связи с датчиком температуры контроллера",
+        "zh-CN": "控制板温度传感器通信错误"
+      },
+      "description": {
+        "en": "Control board temperature sensor communication failed.",
+        "ru": "Не удалось связаться с датчиком температуры контроллера.",
+        "zh-CN": "控制板温度传感器通信失败。"
+      },
+      "action": {
+        "en": "Replace the PSU or control board after inspection.",
+        "ru": "После проверки замените БП или контроллер.",
+        "zh-CN": "检查后更换电源或控制板。"
+      }
+    },
+    {
+      "code": "350",
+      "category": "board",
+      "name": {
+        "en": "SM0 temperature protecting",
+        "ru": "Температурная защита SM0",
+        "zh-CN": "SM0 温度保护"
+      },
+      "description": {
+        "en": "SM0 entered thermal protection.",
+        "ru": "SM0 перешла в температурную защиту.",
+        "zh-CN": "SM0 触发温度保护。"
+      },
+      "action": {
+        "en": "Check ambient temperature and cooling.",
+        "ru": "Проверьте температуру окружающей среды и охлаждение.",
+        "zh-CN": "检查环境温度和散热。"
+      }
+    },
+    {
+      "code": "351",
+      "category": "board",
+      "name": {
+        "en": "SM1 temperature protecting",
+        "ru": "Температурная защита SM1",
+        "zh-CN": "SM1 温度保护"
+      },
+      "description": {
+        "en": "SM1 entered thermal protection.",
+        "ru": "SM1 перешла в температурную защиту.",
+        "zh-CN": "SM1 触发温度保护。"
+      },
+      "action": {
+        "en": "Check ambient temperature and cooling.",
+        "ru": "Проверьте температуру окружающей среды и охлаждение.",
+        "zh-CN": "检查环境温度和散热。"
+      }
+    },
+    {
+      "code": "352",
+      "category": "board",
+      "name": {
+        "en": "SM2 temperature protecting",
+        "ru": "Температурная защита SM2",
+        "zh-CN": "SM2 温度保护"
+      },
+      "description": {
+        "en": "SM2 entered thermal protection.",
+        "ru": "SM2 перешла в температурную защиту.",
+        "zh-CN": "SM2 触发温度保护。"
+      },
+      "action": {
+        "en": "Check ambient temperature and cooling.",
+        "ru": "Проверьте температуру окружающей среды и охлаждение.",
+        "zh-CN": "检查环境温度和散热。"
+      }
+    },
+    {
+      "code": "410",
+      "category": "board",
+      "name": {
+        "en": "SM0 detect EEPROM error",
+        "ru": "Ошибка обнаружения EEPROM SM0",
+        "zh-CN": "SM0 EEPROM 检测错误"
+      },
+      "description": {
+        "en": "Failed to detect EEPROM on SM0.",
+        "ru": "Не удалось обнаружить EEPROM на SM0.",
+        "zh-CN": "SM0 EEPROM 检测失败。"
+      },
+      "action": {
+        "en": "Check adapter board and wiring contacts.",
+        "ru": "Проверьте переходную плату и контакты проводки.",
+        "zh-CN": "检查转接板与线路接触。"
+      }
+    },
+    {
+      "code": "411",
+      "category": "board",
+      "name": {
+        "en": "SM1 detect EEPROM error",
+        "ru": "Ошибка обнаружения EEPROM SM1",
+        "zh-CN": "SM1 EEPROM 检测错误"
+      },
+      "description": {
+        "en": "Failed to detect EEPROM on SM1.",
+        "ru": "Не удалось обнаружить EEPROM на SM1.",
+        "zh-CN": "SM1 EEPROM 检测失败。"
+      },
+      "action": {
+        "en": "Check adapter board and wiring contacts.",
+        "ru": "Проверьте переходную плату и контакты проводки.",
+        "zh-CN": "检查转接板与线路接触。"
+      }
+    },
+    {
+      "code": "412",
+      "category": "board",
+      "name": {
+        "en": "SM2 detect EEPROM error",
+        "ru": "Ошибка обнаружения EEPROM SM2",
+        "zh-CN": "SM2 EEPROM 检测错误"
+      },
+      "description": {
+        "en": "Failed to detect EEPROM on SM2.",
+        "ru": "Не удалось обнаружить EEPROM на SM2.",
+        "zh-CN": "SM2 EEPROM 检测失败。"
+      },
+      "action": {
+        "en": "Check adapter board and wiring contacts.",
+        "ru": "Проверьте переходную плату и контакты проводки.",
+        "zh-CN": "检查转接板与线路接触。"
+      }
+    },
+    {
+      "code": "420",
+      "category": "board",
+      "name": {
+        "en": "SM0 parser EEPROM error",
+        "ru": "Ошибка разбора EEPROM SM0",
+        "zh-CN": "SM0 EEPROM 解析错误"
+      },
+      "description": {
+        "en": "EEPROM data on SM0 is invalid.",
+        "ru": "Данные EEPROM на SM0 некорректны.",
+        "zh-CN": "SM0 EEPROM 数据无效。"
+      },
+      "action": {
+        "en": "Contact technical support.",
+        "ru": "Обратитесь к техническому специалисту.",
+        "zh-CN": "请联系技术人员。"
+      }
+    },
+    {
+      "code": "421",
+      "category": "board",
+      "name": {
+        "en": "SM1 parser EEPROM error",
+        "ru": "Ошибка разбора EEPROM SM1",
+        "zh-CN": "SM1 EEPROM 解析错误"
+      },
+      "description": {
+        "en": "EEPROM data on SM1 is invalid.",
+        "ru": "Данные EEPROM на SM1 некорректны.",
+        "zh-CN": "SM1 EEPROM 数据无效。"
+      },
+      "action": {
+        "en": "Contact technical support.",
+        "ru": "Обратитесь к техническому специалисту.",
+        "zh-CN": "请联系技术人员。"
+      }
+    },
+    {
+      "code": "422",
+      "category": "board",
+      "name": {
+        "en": "SM2 parser EEPROM error",
+        "ru": "Ошибка разбора EEPROM SM2",
+        "zh-CN": "SM2 EEPROM 解析错误"
+      },
+      "description": {
+        "en": "EEPROM data on SM2 is invalid.",
+        "ru": "Данные EEPROM на SM2 некорректны.",
+        "zh-CN": "SM2 EEPROM 数据无效。"
+      },
+      "action": {
+        "en": "Contact technical support.",
+        "ru": "Обратитесь к техническому специалисту.",
+        "zh-CN": "请联系技术人员。"
+      }
+    },
+    {
+      "code": "430",
+      "category": "board",
+      "name": {
+        "en": "SM0 chip bin type error",
+        "ru": "Ошибка типа bin чипов SM0",
+        "zh-CN": "SM0 芯片 bin 类型错误"
+      },
+      "description": {
+        "en": "Chip bin type mismatch on SM0.",
+        "ru": "Несоответствие bin-типа чипов на SM0.",
+        "zh-CN": "SM0 芯片 bin 类型错误。"
+      },
+      "action": {
+        "en": "Contact technical support.",
+        "ru": "Обратитесь к техническому специалисту.",
+        "zh-CN": "请联系技术人员。"
+      }
+    },
+    {
+      "code": "431",
+      "category": "board",
+      "name": {
+        "en": "SM1 chip bin type error",
+        "ru": "Ошибка типа bin чипов SM1",
+        "zh-CN": "SM1 芯片 bin 类型错误"
+      },
+      "description": {
+        "en": "Chip bin type mismatch on SM1.",
+        "ru": "Несоответствие bin-типа чипов на SM1.",
+        "zh-CN": "SM1 芯片 bin 类型错误。"
+      },
+      "action": {
+        "en": "Contact technical support.",
+        "ru": "Обратитесь к техническому специалисту.",
+        "zh-CN": "请联系技术人员。"
+      }
+    },
+    {
+      "code": "432",
+      "category": "board",
+      "name": {
+        "en": "SM2 chip bin type error",
+        "ru": "Ошибка типа bin чипов SM2",
+        "zh-CN": "SM2 芯片 bin 类型错误"
+      },
+      "description": {
+        "en": "Chip bin type mismatch on SM2.",
+        "ru": "Несоответствие bin-типа чипов на SM2.",
+        "zh-CN": "SM2 芯片 bin 类型错误。"
+      },
+      "action": {
+        "en": "Contact technical support.",
+        "ru": "Обратитесь к техническому специалисту.",
+        "zh-CN": "请联系技术人员。"
+      }
+    },
+    {
+      "code": "440",
+      "category": "board",
+      "name": {
+        "en": "SM0 EEPROM chip count error",
+        "ru": "Ошибка количества чипов в EEPROM SM0",
+        "zh-CN": "SM0 EEPROM 芯片数量错误"
+      },
+      "description": {
+        "en": "EEPROM chip count on SM0 is invalid.",
+        "ru": "Количество чипов в EEPROM SM0 некорректно.",
+        "zh-CN": "SM0 EEPROM 芯片数量错误。"
+      },
+      "action": {
+        "en": "Contact technical support.",
+        "ru": "Обратитесь к техническому специалисту.",
+        "zh-CN": "请联系技术人员。"
+      }
+    },
+    {
+      "code": "441",
+      "category": "board",
+      "name": {
+        "en": "SM1 EEPROM chip count error",
+        "ru": "Ошибка количества чипов в EEPROM SM1",
+        "zh-CN": "SM1 EEPROM 芯片数量错误"
+      },
+      "description": {
+        "en": "EEPROM chip count on SM1 is invalid.",
+        "ru": "Количество чипов в EEPROM SM1 некорректно.",
+        "zh-CN": "SM1 EEPROM 芯片数量错误。"
+      },
+      "action": {
+        "en": "Contact technical support.",
+        "ru": "Обратитесь к техническому специалисту.",
+        "zh-CN": "请联系技术人员。"
+      }
+    },
+    {
+      "code": "442",
+      "category": "board",
+      "name": {
+        "en": "SM2 EEPROM chip count error",
+        "ru": "Ошибка количества чипов в EEPROM SM2",
+        "zh-CN": "SM2 EEPROM 芯片数量错误"
+      },
+      "description": {
+        "en": "EEPROM chip count on SM2 is invalid.",
+        "ru": "Количество чипов в EEPROM SM2 некорректно.",
+        "zh-CN": "SM2 EEPROM 芯片数量错误。"
+      },
+      "action": {
+        "en": "Contact technical support.",
+        "ru": "Обратитесь к техническому специалисту.",
+        "zh-CN": "请联系技术人员。"
+      }
+    },
+    {
+      "code": "510",
+      "category": "board",
+      "name": {
+        "en": "SM0 miner type error",
+        "ru": "Ошибка типа майнера SM0",
+        "zh-CN": "SM0 矿机类型错误"
+      },
+      "description": {
+        "en": "SM0 hashboard type does not match miner model.",
+        "ru": "Тип хеш-платы SM0 не соответствует модели майнера.",
+        "zh-CN": "SM0 算力板类型与矿机不匹配。"
+      },
+      "action": {
+        "en": "Install the correct hashboard for this model.",
+        "ru": "Установите подходящую хеш-плату для этой модели.",
+        "zh-CN": "更换匹配机型的算力板。"
+      }
+    },
+    {
+      "code": "511",
+      "category": "board",
+      "name": {
+        "en": "SM1 miner type error",
+        "ru": "Ошибка типа майнера SM1",
+        "zh-CN": "SM1 矿机类型错误"
+      },
+      "description": {
+        "en": "SM1 hashboard type does not match miner model.",
+        "ru": "Тип хеш-платы SM1 не соответствует модели майнера.",
+        "zh-CN": "SM1 算力板类型与矿机不匹配。"
+      },
+      "action": {
+        "en": "Install the correct hashboard for this model.",
+        "ru": "Установите подходящую хеш-плату для этой модели.",
+        "zh-CN": "更换匹配机型的算力板。"
+      }
+    },
+    {
+      "code": "512",
+      "category": "board",
+      "name": {
+        "en": "SM2 miner type error",
+        "ru": "Ошибка типа майнера SM2",
+        "zh-CN": "SM2 矿机类型错误"
+      },
+      "description": {
+        "en": "SM2 hashboard type does not match miner model.",
+        "ru": "Тип хеш-платы SM2 не соответствует модели майнера.",
+        "zh-CN": "SM2 算力板类型与矿机不匹配。"
+      },
+      "action": {
+        "en": "Install the correct hashboard for this model.",
+        "ru": "Установите подходящую хеш-плату для этой модели.",
+        "zh-CN": "更换匹配机型的算力板。"
+      }
+    },
+    {
+      "code": "530",
+      "category": "board",
+      "name": {
+        "en": "SM0 not found",
+        "ru": "SM0 не найдена",
+        "zh-CN": "未找到 SM0"
+      },
+      "description": {
+        "en": "Hashboard slot SM0 is not detected.",
+        "ru": "Хеш-плата SM0 не обнаружена.",
+        "zh-CN": "未检测到 SM0 算力板。"
+      },
+      "action": {
+        "en": "Check adapter board wiring and hashboard connector.",
+        "ru": "Проверьте переходную плату, проводку и разъём хеш-платы.",
+        "zh-CN": "检查转接板、排线与算力板连接器。"
+      }
+    },
+    {
+      "code": "531",
+      "category": "board",
+      "name": {
+        "en": "SM1 not found",
+        "ru": "SM1 не найдена",
+        "zh-CN": "未找到 SM1"
+      },
+      "description": {
+        "en": "Hashboard slot SM1 is not detected.",
+        "ru": "Хеш-плата SM1 не обнаружена.",
+        "zh-CN": "未检测到 SM1 算力板。"
+      },
+      "action": {
+        "en": "Check adapter board wiring and hashboard connector.",
+        "ru": "Проверьте переходную плату, проводку и разъём хеш-платы.",
+        "zh-CN": "检查转接板、排线与算力板连接器。"
+      }
+    },
+    {
+      "code": "532",
+      "category": "board",
+      "name": {
+        "en": "SM2 not found",
+        "ru": "SM2 не найдена",
+        "zh-CN": "未找到 SM2"
+      },
+      "description": {
+        "en": "Hashboard slot SM2 is not detected.",
+        "ru": "Хеш-плата SM2 не обнаружена.",
+        "zh-CN": "未检测到 SM2 算力板。"
+      },
+      "action": {
+        "en": "Check adapter board wiring and hashboard connector.",
+        "ru": "Проверьте переходную плату, проводку и разъём хеш-платы.",
+        "zh-CN": "检查转接板、排线与算力板连接器。"
+      }
+    },
+    {
+      "code": "540",
+      "category": "board",
+      "name": {
+        "en": "SM0 reading chip ID error",
+        "ru": "Ошибка чтения ID чипов SM0",
+        "zh-CN": "SM0 读取芯片 ID 错误"
+      },
+      "description": {
+        "en": "Failed to enumerate chip IDs on SM0.",
+        "ru": "Не удалось считать ID чипов на SM0.",
+        "zh-CN": "SM0 读取芯片 ID 失败。"
+      },
+      "action": {
+        "en": "Check adapter board contacts and clean hashboard dust.",
+        "ru": "Проверьте контакты переходной платы и очистите плату от пыли.",
+        "zh-CN": "检查转接板接触并清理算力板灰尘。"
+      }
+    },
+    {
+      "code": "541",
+      "category": "board",
+      "name": {
+        "en": "SM1 reading chip ID error",
+        "ru": "Ошибка чтения ID чипов SM1",
+        "zh-CN": "SM1 读取芯片 ID 错误"
+      },
+      "description": {
+        "en": "Failed to enumerate chip IDs on SM1.",
+        "ru": "Не удалось считать ID чипов на SM1.",
+        "zh-CN": "SM1 读取芯片 ID 失败。"
+      },
+      "action": {
+        "en": "Check adapter board contacts and clean hashboard dust.",
+        "ru": "Проверьте контакты переходной платы и очистите плату от пыли.",
+        "zh-CN": "检查转接板接触并清理算力板灰尘。"
+      }
+    },
+    {
+      "code": "542",
+      "category": "board",
+      "name": {
+        "en": "SM2 reading chip ID error",
+        "ru": "Ошибка чтения ID чипов SM2",
+        "zh-CN": "SM2 读取芯片 ID 错误"
+      },
+      "description": {
+        "en": "Failed to enumerate chip IDs on SM2.",
+        "ru": "Не удалось считать ID чипов на SM2.",
+        "zh-CN": "SM2 读取芯片 ID 失败。"
+      },
+      "action": {
+        "en": "Check adapter board contacts and clean hashboard dust.",
+        "ru": "Проверьте контакты переходной платы и очистите плату от пыли.",
+        "zh-CN": "检查转接板接触并清理算力板灰尘。"
+      }
+    },
+    {
+      "code": "550",
+      "category": "board",
+      "name": {
+        "en": "SM0 has bad chips",
+        "ru": "На SM0 есть неисправные чипы",
+        "zh-CN": "SM0 存在坏芯片"
+      },
+      "description": {
+        "en": "One or more bad chips detected on SM0.",
+        "ru": "На SM0 обнаружены неисправные чипы.",
+        "zh-CN": "SM0 检测到坏芯片。"
+      },
+      "action": {
+        "en": "Replace defective chips or hashboard.",
+        "ru": "Замените неисправные чипы или хеш-плату.",
+        "zh-CN": "更换故障芯片或算力板。"
+      }
+    },
+    {
+      "code": "551",
+      "category": "board",
+      "name": {
+        "en": "SM1 has bad chips",
+        "ru": "На SM1 есть неисправные чипы",
+        "zh-CN": "SM1 存在坏芯片"
+      },
+      "description": {
+        "en": "One or more bad chips detected on SM1.",
+        "ru": "На SM1 обнаружены неисправные чипы.",
+        "zh-CN": "SM1 检测到坏芯片。"
+      },
+      "action": {
+        "en": "Replace defective chips or hashboard.",
+        "ru": "Замените неисправные чипы или хеш-плату.",
+        "zh-CN": "更换故障芯片或算力板。"
+      }
+    },
+    {
+      "code": "552",
+      "category": "board",
+      "name": {
+        "en": "SM2 has bad chips",
+        "ru": "На SM2 есть неисправные чипы",
+        "zh-CN": "SM2 存在坏芯片"
+      },
+      "description": {
+        "en": "One or more bad chips detected on SM2.",
+        "ru": "На SM2 обнаружены неисправные чипы.",
+        "zh-CN": "SM2 检测到坏芯片。"
+      },
+      "action": {
+        "en": "Replace defective chips or hashboard.",
+        "ru": "Замените неисправные чипы или хеш-плату.",
+        "zh-CN": "更换故障芯片或算力板。"
+      }
+    },
+    {
+      "code": "560",
+      "category": "board",
+      "name": {
+        "en": "SM0 loss balance",
+        "ru": "SM0 потеря баланса",
+        "zh-CN": "SM0 失衡"
+      },
+      "description": {
+        "en": "Voltage/current balance lost on SM0.",
+        "ru": "Потерян баланс напряжения/тока на SM0.",
+        "zh-CN": "SM0 电压/电流失衡。"
+      },
+      "action": {
+        "en": "Reseat adapter board and retighten power connections.",
+        "ru": "Переустановите переходную плату и затяните силовые соединения.",
+        "zh-CN": "重新插拔转接板并紧固电源连接。"
+      }
+    },
+    {
+      "code": "561",
+      "category": "board",
+      "name": {
+        "en": "SM1 loss balance",
+        "ru": "SM1 потеря баланса",
+        "zh-CN": "SM1 失衡"
+      },
+      "description": {
+        "en": "Voltage/current balance lost on SM1.",
+        "ru": "Потерян баланс напряжения/тока на SM1.",
+        "zh-CN": "SM1 电压/电流失衡。"
+      },
+      "action": {
+        "en": "Reseat adapter board and retighten power connections.",
+        "ru": "Переустановите переходную плату и затяните силовые соединения.",
+        "zh-CN": "重新插拔转接板并紧固电源连接。"
+      }
+    },
+    {
+      "code": "562",
+      "category": "board",
+      "name": {
+        "en": "SM2 loss balance",
+        "ru": "SM2 потеря баланса",
+        "zh-CN": "SM2 失衡"
+      },
+      "description": {
+        "en": "Voltage/current balance lost on SM2.",
+        "ru": "Потерян баланс напряжения/тока на SM2.",
+        "zh-CN": "SM2 电压/电流失衡。"
+      },
+      "action": {
+        "en": "Reseat adapter board and retighten power connections.",
+        "ru": "Переустановите переходную плату и затяните силовые соединения.",
+        "zh-CN": "重新插拔转接板并紧固电源连接。"
+      }
+    },
+    {
+      "code": "600",
+      "category": "environment",
+      "name": {
+        "en": "Environment temperature is high",
+        "ru": "Высокая температура окружающей среды",
+        "zh-CN": "环境温度过高"
+      },
+      "description": {
+        "en": "Ambient temperature is too high.",
+        "ru": "Температура окружающей среды слишком высокая.",
+        "zh-CN": "环境温度过高。"
+      },
+      "action": {
+        "en": "Lower ambient temperature; use normal mode if in high performance mode.",
+        "ru": "Снизьте температуру окружающей среды; в режиме High перейдите в Normal.",
+        "zh-CN": "降低环境温度；高性能模式下可切换到普通模式。"
+      }
+    },
+    {
+      "code": "610",
+      "category": "environment",
+      "name": {
+        "en": "Environment temperature protection",
+        "ru": "Защита от высокой температуры окружающей среды",
+        "zh-CN": "环境温度保护"
+      },
+      "description": {
+        "en": "Ambient temperature protection triggered.",
+        "ru": "Сработала защита от высокой температуры окружающей среды.",
+        "zh-CN": "环境温度保护触发。"
+      },
+      "action": {
+        "en": "Improve ventilation and reduce ambient temperature.",
+        "ru": "Улучшите вентиляцию и снизьте температуру окружающей среды.",
+        "zh-CN": "改善通风并降低环境温度。"
+      }
+    },
+    {
+      "code": "710",
+      "category": "system",
+      "name": {
+        "en": "Control board rebooted as exception",
+        "ru": "Контроллер перезагрузился аварийно",
+        "zh-CN": "控制板异常重启"
+      },
+      "description": {
+        "en": "Control board rebooted unexpectedly.",
+        "ru": "Контроллер неожиданно перезагрузился.",
+        "zh-CN": "控制板异常重启。"
+      },
+      "action": {
+        "en": "Update firmware and check control board mounting.",
+        "ru": "Обновите прошивку и проверьте крепление контроллера.",
+        "zh-CN": "更新固件并检查控制板固定。"
+      }
+    },
+    {
+      "code": "800",
+      "category": "firmware",
+      "name": {
+        "en": "cgminer checksum error",
+        "ru": "Ошибка контрольной суммы cgminer",
+        "zh-CN": "cgminer 校验错误"
+      },
+      "description": {
+        "en": "Firmware checksum validation failed.",
+        "ru": "Проверка контрольной суммы прошивки не пройдена.",
+        "zh-CN": "固件校验失败。"
+      },
+      "action": {
+        "en": "Re-flash the latest firmware.",
+        "ru": "Перепрошейте актуальную прошивку.",
+        "zh-CN": "重新刷写最新固件。"
+      }
+    },
+    {
+      "code": "801",
+      "category": "firmware",
+      "name": {
+        "en": "system-monitor checksum error",
+        "ru": "Ошибка контрольной суммы system-monitor",
+        "zh-CN": "system-monitor 校验错误"
+      },
+      "description": {
+        "en": "System monitor firmware checksum failed.",
+        "ru": "Кontrolная сумма system-monitor не пройдена.",
+        "zh-CN": "system-monitor 校验失败。"
+      },
+      "action": {
+        "en": "Re-flash the latest firmware.",
+        "ru": "Перепрошейте актуальную прошивку.",
+        "zh-CN": "重新刷写最新固件。"
+      }
+    },
+    {
+      "code": "802",
+      "category": "firmware",
+      "name": {
+        "en": "remote-daemon checksum error",
+        "ru": "Ошибка контрольной суммы remote-daemon",
+        "zh-CN": "remote-daemon 校验错误"
+      },
+      "description": {
+        "en": "Remote daemon firmware checksum failed.",
+        "ru": "Кontrolная сумма remote-daemon не пройдена.",
+        "zh-CN": "remote-daemon 校验失败。"
+      },
+      "action": {
+        "en": "Re-flash the latest firmware.",
+        "ru": "Перепрошейте актуальную прошивку.",
+        "zh-CN": "重新刷写最新固件。"
+      }
+    },
+    {
+      "code": "2010",
+      "category": "pool",
+      "name": {
+        "en": "All pools are disabled",
+        "ru": "Все пулы отключены",
+        "zh-CN": "所有矿池已禁用"
+      },
+      "description": {
+        "en": "No active mining pool is configured.",
+        "ru": "Не настроен активный майнинг-пул.",
+        "zh-CN": "未启用任何矿池。"
+      },
+      "action": {
+        "en": "Check network and pool configuration.",
+        "ru": "Проверьте сеть и настройки пулов.",
+        "zh-CN": "检查网络与矿池配置。"
+      }
+    },
+    {
+      "code": "2020",
+      "category": "pool",
+      "name": {
+        "en": "Pool0 connect failed",
+        "ru": "Не удалось подключиться к Pool0",
+        "zh-CN": "Pool0 连接失败"
+      },
+      "description": {
+        "en": "Primary pool connection failed.",
+        "ru": "Не удалось подключиться к основному пулу.",
+        "zh-CN": "Pool0 连接失败。"
+      },
+      "action": {
+        "en": "Check network, DNS, and pool settings.",
+        "ru": "Проверьте сеть, DNS и настройки пула.",
+        "zh-CN": "检查网络、DNS 和矿池设置。"
+      }
+    },
+    {
+      "code": "2021",
+      "category": "pool",
+      "name": {
+        "en": "Pool1 connect failed",
+        "ru": "Не удалось подключиться к Pool1",
+        "zh-CN": "Pool1 连接失败"
+      },
+      "description": {
+        "en": "Secondary pool connection failed.",
+        "ru": "Не удалось подключиться ко второму пулу.",
+        "zh-CN": "Pool1 连接失败。"
+      },
+      "action": {
+        "en": "Check network, DNS, and pool settings.",
+        "ru": "Проверьте сеть, DNS и настройки пула.",
+        "zh-CN": "检查网络、DNS 和矿池设置。"
+      }
+    },
+    {
+      "code": "2022",
+      "category": "pool",
+      "name": {
+        "en": "Pool2 connect failed",
+        "ru": "Не удалось подключиться к Pool2",
+        "zh-CN": "Pool2 连接失败"
+      },
+      "description": {
+        "en": "Tertiary pool connection failed.",
+        "ru": "Не удалось подключиться к третьему пулу.",
+        "zh-CN": "Pool2 连接失败。"
+      },
+      "action": {
+        "en": "Check network, DNS, and pool settings.",
+        "ru": "Проверьте сеть, DNS и настройки пула.",
+        "zh-CN": "检查网络、DNS 和矿池设置。"
+      }
+    },
+    {
+      "code": "2030",
+      "category": "pool",
+      "name": {
+        "en": "High rejection rate",
+        "ru": "Высокий процент rejected",
+        "zh-CN": "拒绝率过高"
+      },
+      "description": {
+        "en": "Share rejection rate is too high.",
+        "ru": "Слишком высокий процент отклонённых шар.",
+        "zh-CN": "拒绝率过高。"
+      },
+      "action": {
+        "en": "Check network, pool settings, and coin type.",
+        "ru": "Проверьте сеть, настройки пула и тип монеты.",
+        "zh-CN": "检查网络、矿池设置和币种。"
+      }
+    },
+    {
+      "code": "2040",
+      "category": "pool",
+      "name": {
+        "en": "Pool does not support asicboost",
+        "ru": "Пул не поддерживает asicboost",
+        "zh-CN": "矿池不支持 asicboost"
+      },
+      "description": {
+        "en": "Configured pool does not support ASICBoost.",
+        "ru": "Настроенный пул не поддерживает ASICBoost.",
+        "zh-CN": "矿池不支持 ASICBoost。"
+      },
+      "action": {
+        "en": "Change pool or disable ASICBoost mode.",
+        "ru": "Смените пул или отключите режим ASICBoost.",
+        "zh-CN": "更换矿池或关闭 ASICBoost 模式。"
+      }
+    },
+    {
+      "code": "5110",
+      "category": "board",
+      "name": {
+        "en": "SM0 frequency up timeout",
+        "ru": "SM0: таймаут повышения частоты",
+        "zh-CN": "SM0 升频超时"
+      },
+      "description": {
+        "en": "SM0 failed to complete frequency ramp in time.",
+        "ru": "SM0 не успела завершить повышение частоты.",
+        "zh-CN": "SM0 升频超时。"
+      },
+      "action": {
+        "en": "Reboot the miner and check hashboard cooling.",
+        "ru": "Перезагрузите майнер и проверьте охлаждение хеш-платы.",
+        "zh-CN": "重启矿机并检查算力板散热。"
+      }
+    },
+    {
+      "code": "5111",
+      "category": "board",
+      "name": {
+        "en": "SM1 frequency up timeout",
+        "ru": "SM1: таймаут повышения частоты",
+        "zh-CN": "SM1 升频超时"
+      },
+      "description": {
+        "en": "SM1 failed to complete frequency ramp in time.",
+        "ru": "SM1 не успела завершить повышение частоты.",
+        "zh-CN": "SM1 升频超时。"
+      },
+      "action": {
+        "en": "Reboot the miner and check hashboard cooling.",
+        "ru": "Перезагрузите майнер и проверьте охлаждение хеш-платы.",
+        "zh-CN": "重启矿机并检查算力板散热。"
+      }
+    },
+    {
+      "code": "5112",
+      "category": "board",
+      "name": {
+        "en": "SM2 frequency up timeout",
+        "ru": "SM2: таймаут повышения частоты",
+        "zh-CN": "SM2 升频超时"
+      },
+      "description": {
+        "en": "SM2 failed to complete frequency ramp in time.",
+        "ru": "SM2 не успела завершить повышение частоты.",
+        "zh-CN": "SM2 升频超时。"
+      },
+      "action": {
+        "en": "Reboot the miner and check hashboard cooling.",
+        "ru": "Перезагрузите майнер и проверьте охлаждение хеш-платы.",
+        "zh-CN": "重启矿机并检查算力板散热。"
+      }
+    },
+    {
+      "code": "8410",
+      "category": "firmware",
+      "name": {
+        "en": "Software version error",
+        "ru": "Ошибка версии прошивки",
+        "zh-CN": "软件版本错误"
+      },
+      "description": {
+        "en": "Firmware does not match miner hardware generation.",
+        "ru": "Прошивка не соответствует поколению оборудования.",
+        "zh-CN": "固件与硬件代次不匹配。"
+      },
+      "action": {
+        "en": "Flash the correct firmware for this exact model.",
+        "ru": "Установите прошивку, соответствующую exact модели.",
+        "zh-CN": "刷写与该机型完全匹配的固件。"
+      }
+    },
+    {
+      "code": "0x0001",
+      "category": "psu",
+      "name": {
+        "en": "Input undervoltage",
+        "ru": "Пониженное входное напряжение БП",
+        "zh-CN": "输入欠压"
+      },
+      "description": {
+        "en": "PSU input voltage is too low.",
+        "ru": "Входное напряжение блока питания слишком низкое.",
+        "zh-CN": "电源输入欠压。"
+      },
+      "action": {
+        "en": "Check mains supply and PSU.",
+        "ru": "Проверьте электроснабжение и блок питания.",
+        "zh-CN": "检查电网供电与电源。"
+      }
+    },
+    {
+      "code": "0x0002",
+      "category": "psu",
+      "name": {
+        "en": "Power radiator over-temperature",
+        "ru": "Перегрев радиатора БП",
+        "zh-CN": "电源散热器过温"
+      },
+      "description": {
+        "en": "PSU radiator temperature protection triggered.",
+        "ru": "Сработала защита радиатора блока питания от перегрева.",
+        "zh-CN": "电源散热器过温保护。"
+      },
+      "action": {
+        "en": "Power off 10 minutes, then restart; replace PSU if repeated.",
+        "ru": "Отключите питание на 10 минут и включите снова; при повторе замените БП.",
+        "zh-CN": "断电 10 分钟后重启，反复出现请更换电源。"
+      }
+    },
+    {
+      "code": "0x0004",
+      "category": "psu",
+      "name": {
+        "en": "Power radiator over-temperature",
+        "ru": "Перегрев радиатора БП",
+        "zh-CN": "电源散热器过温"
+      },
+      "description": {
+        "en": "PSU radiator temperature protection triggered.",
+        "ru": "Сработала защита радиатора блока питания от перегрева.",
+        "zh-CN": "电源散热器过温保护。"
+      },
+      "action": {
+        "en": "Power off 10 minutes, then restart; replace PSU if repeated.",
+        "ru": "Отключите питание на 10 минут и включите снова; при повторе замените БП.",
+        "zh-CN": "断电 10 分钟后重启，反复出现请更换电源。"
+      }
+    },
+    {
+      "code": "0x0008",
+      "category": "psu",
+      "name": {
+        "en": "Ambient temperature over-temperature",
+        "ru": "Перегрев по температуре окружающей среды БП",
+        "zh-CN": "电源环境过温"
+      },
+      "description": {
+        "en": "PSU ambient temperature protection triggered.",
+        "ru": "Сработала защита БП по температуре окружающей среды.",
+        "zh-CN": "电源环境过温保护。"
+      },
+      "action": {
+        "en": "Power off 10 minutes, then restart; replace PSU if repeated.",
+        "ru": "Отключите питание на 10 минут и включите снова; при повторе замените БП.",
+        "zh-CN": "断电 10 分钟后重启，反复出现请更换电源。"
+      }
+    },
+    {
+      "code": "0x0010",
+      "category": "psu",
+      "name": {
+        "en": "Primary side over current",
+        "ru": "Перегрузка первичной стороны БП",
+        "zh-CN": "初级过流"
+      },
+      "description": {
+        "en": "PSU primary-side overcurrent protection triggered.",
+        "ru": "Сработала защита первичной стороны БП от перегруза.",
+        "zh-CN": "电源初级过流保护。"
+      },
+      "action": {
+        "en": "Power off 10 minutes, then restart; replace PSU if repeated.",
+        "ru": "Отключите питание на 10 минут и включите снова; при повторе замените БП.",
+        "zh-CN": "断电 10 分钟后重启，反复出现请更换电源。"
+      }
+    },
+    {
+      "code": "0x0020",
+      "category": "psu",
+      "name": {
+        "en": "Output undervoltage",
+        "ru": "Пониженное выходное напряжение БП",
+        "zh-CN": "输出欠压"
+      },
+      "description": {
+        "en": "PSU output voltage is too low.",
+        "ru": "Выходное напряжение блока питания слишком низкое.",
+        "zh-CN": "电源输出欠压。"
+      },
+      "action": {
+        "en": "Check the PSU.",
+        "ru": "Проверьте блок питания.",
+        "zh-CN": "检查电源。"
+      }
+    },
+    {
+      "code": "0x0040",
+      "category": "psu",
+      "name": {
+        "en": "Output over current",
+        "ru": "Перегрузка по выходному току БП",
+        "zh-CN": "输出过流"
+      },
+      "description": {
+        "en": "PSU output overcurrent protection triggered.",
+        "ru": "Сработала защита от перегрузки по выходному току.",
+        "zh-CN": "电源输出过流保护。"
+      },
+      "action": {
+        "en": "Retighten copper bar screws.",
+        "ru": "Затяните винты медной шины.",
+        "zh-CN": "紧固铜排螺丝。"
+      }
+    },
+    {
+      "code": "0x0080",
+      "category": "psu",
+      "name": {
+        "en": "Primary side over current",
+        "ru": "Перегрузка первичной стороны БП",
+        "zh-CN": "初级过流"
+      },
+      "description": {
+        "en": "PSU primary-side overcurrent protection triggered.",
+        "ru": "Сработала защита первичной стороны БП от перегруза.",
+        "zh-CN": "电源初级过流保护。"
+      },
+      "action": {
+        "en": "Power off 10 minutes, then restart; replace PSU if repeated.",
+        "ru": "Отключите питание на 10 минут и включите снова; при повторе замените БП.",
+        "zh-CN": "断电 10 分钟后重启，反复出现请更换电源。"
+      }
+    },
+    {
+      "code": "0x0100",
+      "category": "psu",
+      "name": {
+        "en": "Single circuit overcurrent",
+        "ru": "Перегрузка одной цепи БП",
+        "zh-CN": "单路过流"
+      },
+      "description": {
+        "en": "Single PSU circuit overcurrent protection triggered.",
+        "ru": "Сработала защита одной цепи блока питания.",
+        "zh-CN": "电源单路过流保护。"
+      },
+      "action": {
+        "en": "Check the PSU.",
+        "ru": "Проверьте блок питания.",
+        "zh-CN": "检查电源。"
+      }
+    },
+    {
+      "code": "0x0200",
+      "category": "psu",
+      "name": {
+        "en": "Single circuit overcurrent",
+        "ru": "Перегрузка одной цепи БП",
+        "zh-CN": "单路过流"
+      },
+      "description": {
+        "en": "Single PSU circuit overcurrent protection triggered.",
+        "ru": "Сработала защита одной цепи блока питания.",
+        "zh-CN": "电源单路过流保护。"
+      },
+      "action": {
+        "en": "Check the PSU.",
+        "ru": "Проверьте блок питания.",
+        "zh-CN": "检查电源。"
+      }
+    },
+    {
+      "code": "0x0400",
+      "category": "psu",
+      "name": {
+        "en": "Single circuit overcurrent",
+        "ru": "Перегрузка одной цепи БП",
+        "zh-CN": "单路过流"
+      },
+      "description": {
+        "en": "Single PSU circuit overcurrent protection triggered.",
+        "ru": "Сработала защита одной цепи блока питания.",
+        "zh-CN": "电源单路过流保护。"
+      },
+      "action": {
+        "en": "Check the PSU.",
+        "ru": "Проверьте блок питания.",
+        "zh-CN": "检查电源。"
+      }
+    },
+    {
+      "code": "0x0800",
+      "category": "psu",
+      "name": {
+        "en": "Fan failure",
+        "ru": "Неисправность вентилятора БП",
+        "zh-CN": "风扇故障"
+      },
+      "description": {
+        "en": "PSU fan failure detected.",
+        "ru": "Обнаружена неисправность вентилятора блока питания.",
+        "zh-CN": "检测到电源风扇故障。"
+      },
+      "action": {
+        "en": "Replace the PSU.",
+        "ru": "Замените блок питания.",
+        "zh-CN": "更换电源。"
+      }
+    },
+    {
+      "code": "0x1000",
+      "category": "psu",
+      "name": {
+        "en": "Output over current (5 min)",
+        "ru": "Длительная перегрузка по выходному току БП",
+        "zh-CN": "输出过流(5分钟)"
+      },
+      "description": {
+        "en": "Sustained output overcurrent protection triggered.",
+        "ru": "Сработала длительная защита от перегрузки по выходному току.",
+        "zh-CN": "持续输出过流保护触发。"
+      },
+      "action": {
+        "en": "Check the PSU.",
+        "ru": "Проверьте блок питания.",
+        "zh-CN": "检查电源。"
+      }
+    },
+    {
+      "code": "0x2000",
+      "category": "psu",
+      "name": {
+        "en": "Output over current (10 min)",
+        "ru": "Длительная перегрузка по выходному току БП",
+        "zh-CN": "输出过流(10分钟)"
+      },
+      "description": {
+        "en": "Long-duration output overcurrent protection triggered.",
+        "ru": "Сработала длительная защита от перегрузки по выходному току.",
+        "zh-CN": "长时间输出过流保护触发。"
+      },
+      "action": {
+        "en": "Check the PSU.",
+        "ru": "Проверьте блок питания.",
+        "zh-CN": "检查电源。"
+      }
+    }
+  ]
+}
