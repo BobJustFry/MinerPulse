@@ -6,11 +6,25 @@ Multi-vendor ASIC miner monitor — **Tauri 2 + Rust + Svelte**.
 
 ## Quick start
 
+**Windows (recommended):**
+
+```powershell
+cd P:\Projects\AMW\minerpulse-desktop
+npm install
+npm run dev:app
+```
+
+`dev:app` adds Rust/cargo to PATH automatically (fixes `program not found`).
+
+**Other shells:**
+
 ```bash
 cd minerpulse-desktop
 npm install
 npm run tauri dev
 ```
+
+Requires **Rust** in PATH (`winget install Rustlang.Rustup`, then new terminal).
 
 ## Versioning
 
