@@ -72,6 +72,50 @@ button {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
+  position: relative;
+}
+
+.app-shell.drop-active {
+  outline: 2px dashed var(--accent);
+  outline-offset: -6px;
+}
+
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 17, 23, 0.42);
+  backdrop-filter: blur(3px);
+  pointer-events: none;
+}
+
+[data-theme="light"] .drop-overlay {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.drop-overlay-card {
+  min-width: min(420px, 100%);
+  padding: 28px 32px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 6px);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+}
+
+.drop-overlay-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.drop-overlay-hint {
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
 .toolbar {

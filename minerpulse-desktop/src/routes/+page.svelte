@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
-  import { save } from "@tauri-apps/plugin-dialog";
+  import { save, ask } from "@tauri-apps/plugin-dialog";
   import { check } from "@tauri-apps/plugin-updater";
   import { relaunch } from "@tauri-apps/plugin-process";
   import { onMount } from "svelte";
@@ -9,6 +9,11 @@
   import { openScanWindow } from "$lib/openScanWindow";
   import MinerDataPanel from "$lib/components/MinerDataPanel.svelte";
   import MinerPoolsPanel from "$lib/components/MinerPoolsPanel.svelte";
+  import {
+    isImportCandidate,
+    MAX_IMPORT_BYTES,
+    type ParseImportResponse,
+  } from "$lib/importFile";
   import type {
     Entitlements,
     MinerSnapshot,
@@ -30,6 +35,8 @@
   let snapshot = $state<MinerSnapshot | null>(null);
   let appVersion = $state("1.0.0 (build 1)");
   let connectionLoaded = $state(false);
+  let dropActive = $state(false);
+  let dropDepth = $state(0);
   let entitlements = $state<Entitlements>({
     tier: "free",
     can_poll: false,
@@ -199,6 +206,74 @@
     await refreshEntitlements();
   }
 
+  function handleDragEnter(event: DragEvent) {
+    event.preventDefault();
+    dropDepth += 1;
+    dropActive = true;
+  }
+
+  function handleDragLeave(event: DragEvent) {
+    event.preventDefault();
+    dropDepth = Math.max(0, dropDepth - 1);
+    if (dropDepth === 0) {
+      dropActive = false;
+    }
+  }
+
+  function handleDragOver(event: DragEvent) {
+    event.preventDefault();
+  }
+
+  async function handleDrop(event: DragEvent) {
+    event.preventDefault();
+    dropDepth = 0;
+    dropActive = false;
+
+    const file = event.dataTransfer?.files?.[0];
+    if (!file) return;
+
+    if (file.size > MAX_IMPORT_BYTES) {
+      statusText = msg("import.tooLarge");
+      return;
+    }
+
+    if (!isImportCandidate(file)) return;
+
+    try {
+      const content = await file.text();
+      const result = await invoke<ParseImportResponse>("parse_import_file", {
+        content,
+        filename: file.name,
+      });
+
+      const confirmed = await ask(
+        msg("import.openPrompt", {
+          name: file.name,
+          model: result.snapshot.identity.model,
+        }),
+        {
+          title: msg("import.title"),
+          kind: "info",
+        },
+      );
+
+      if (!confirmed) return;
+
+      snapshot = result.snapshot;
+      await invoke("remember_snapshot", { snapshot: result.snapshot });
+
+      if (result.miner_ip) {
+        ip = result.miner_ip;
+        saveConnection();
+      }
+
+      activeTab = "data";
+      statusText = msg("import.opened", { name: file.name });
+    } catch (err) {
+      statusText = formatError(err);
+    }
+  }
+
   function tabDisabled(tab: TabId): boolean {
     if (tab === "charts") return !entitlements.can_show_charts;
     if (tab === "commands") return !entitlements.can_poll;
@@ -257,7 +332,22 @@
   });
 </script>
 
-<div class="app-shell">
+<div
+  class="app-shell"
+  class:drop-active={dropActive}
+  ondragenter={handleDragEnter}
+  ondragleave={handleDragLeave}
+  ondragover={handleDragOver}
+  ondrop={handleDrop}
+>
+  {#if dropActive}
+    <div class="drop-overlay" aria-hidden="true">
+      <div class="drop-overlay-card">
+        <div class="drop-overlay-title">{msg("import.dropTitle")}</div>
+        <div class="drop-overlay-hint">{msg("import.dropHint")}</div>
+      </div>
+    </div>
+  {/if}
   <header class="toolbar">
     <div class="brand">
       <div class="brand-mark"></div>

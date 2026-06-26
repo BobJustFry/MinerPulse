@@ -1,8 +1,9 @@
 use minerpulse_core::drivers::registry::fetch_with_detect;
 use minerpulse_core::{
-    list_scan_subnets as discover_subnets, save_snapshot, scan_network, scan_network_streaming,
-    EntitlementGate, ErrorResponse, MinerPulseError, MpulseFile, RateLimiter, ScanRequest,
-    ScanResult, ScanSubnet, SubscriptionTier, TcpCgminerClient,
+    import_file_content, list_scan_subnets as discover_subnets, save_snapshot, scan_network,
+    scan_network_streaming, EntitlementGate, ErrorResponse, MinerPulseError, MinerSnapshot,
+    MpulseFile, RateLimiter, ScanRequest, ScanResult, ScanSubnet, SubscriptionTier,
+    TcpCgminerClient,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -351,6 +352,28 @@ async fn scan_miners(request: ScanRequest) -> Result<ScanResult, ErrorResponse> 
 }
 
 #[derive(Debug, Serialize)]
+struct ParseImportResponse {
+    snapshot: MinerSnapshot,
+    source_label: String,
+    miner_ip: Option<String>,
+}
+
+#[tauri::command]
+fn parse_import_file(content: String, filename: Option<String>) -> Result<ParseImportResponse, ErrorResponse> {
+    let result = import_file_content(&content, filename.as_deref()).map_err(|e| ErrorResponse::from(&e))?;
+    Ok(ParseImportResponse {
+        snapshot: result.snapshot,
+        source_label: result.source_label,
+        miner_ip: result.miner_ip,
+    })
+}
+
+#[tauri::command]
+fn remember_snapshot(state: State<'_, AppState>, snapshot: MinerSnapshot) {
+    *state.last_snapshot.lock().unwrap() = Some(snapshot);
+}
+
+#[derive(Debug, Serialize)]
 struct AppVersionInfo {
     version: String,
     build: u32,
@@ -402,6 +425,8 @@ pub fn run() {
             start_scan,
             cancel_scan,
             scan_miners,
+            parse_import_file,
+            remember_snapshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

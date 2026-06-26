@@ -1,3 +1,4 @@
+pub mod import;
 pub mod discovery;
 pub mod drivers;
 pub mod entitlements;
@@ -18,6 +19,7 @@ pub use drivers::registry::{
 pub use entitlements::{EntitlementGate, SubscriptionTier};
 pub use error::{ErrorCode, ErrorResponse, MinerPulseError};
 pub use model::MinerSnapshot;
+pub use import::{import_file_content, ImportResult, MAX_IMPORT_BYTES};
 pub use mpulse::{save_snapshot, MpulseFile, MpulseKind};
 pub use rate_limit::RateLimiter;
 pub use tcp::TcpCgminerClient;

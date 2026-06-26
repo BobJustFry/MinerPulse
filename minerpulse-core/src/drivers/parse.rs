@@ -11,7 +11,7 @@ pub fn get_parameter(text: &str, key: &str) -> Option<String> {
     };
 
     let end = value
-        .find([',', '|', '\t', ']'])
+        .find([',', '|', '\t', ']', '\n', '\r'])
         .unwrap_or(value.len());
     let trimmed = value[..end].trim();
     if trimmed.is_empty() {
