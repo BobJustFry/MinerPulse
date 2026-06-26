@@ -1,12 +1,12 @@
 {
   "version": "1.0.0",
-  "build": 1,
-  "notes": "MinerPulse 1.0.0 initial release.",
-  "pub_date": "2026-06-26T00:00:00Z",
+  "build": 3,
+  "notes": "MinerPulse 1.0.0 build 3 — signed release with updater.",
+  "pub_date": "2026-06-26T11:37:36Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "REPLACE_WITH_TAURI_SIGNER_OUTPUT_AFTER_FIRST_RELEASE",
-      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.0-build1/MinerPulse_1.0.0_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRFhReFUyUy9aQlZCaURGNE02Ky93TGRETlB6aVQ5Q2xyS1p6R01WL0VOQnE5aWZEN1l2dXBIYVQ0NGZlRWQveUVSdjQ5RXpiZnorRHNrZzE4eWJXWVFNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNDczODUzCWZpbGU6TWluZXJQdWxzZV8xLjAuMF94NjQtc2V0dXAuZXhlClhvTFFmdy9Pc2Z0QTBkejNJbGZOaHM1MS9MT1pwMUVQRkNFMGkyS2RRcjU5WW44YW9VRWMrVUViaXJFL0w2eXJWeGR4ZDgwNGRBUE41WmVTa0tWUERBPT0K",
+      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.0-build3/MinerPulse_1.0.0_x64-setup.exe"
     }
   }
 }
