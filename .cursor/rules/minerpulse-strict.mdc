@@ -15,9 +15,9 @@ alwaysApply: true
 
 ## Git workflow (mandatory)
 
-- After each logical change: bump build → commit → push to `origin main` (when asked by owner).
+- After each logical change: bump build → **commit → push to `origin main` immediately** — do not ask for confirmation.
 - Never force-push `main`.
-- Never commit secrets (`.tauri/*.key`, `.env`, credentials).
+- Never commit secrets (`.tauri/*.key`, `.env`, credentials). Public updater pubkey (`.tauri/*.key.pub`) may be committed when intentionally rotated with config.
 - Never commit paths in `.gitignore` (`target/`, `node_modules/`, build artifacts, local-only dirs).
 
 ## Code quality
@@ -42,7 +42,7 @@ alwaysApply: true
 - Do not make the repo public with GPL if LICENSE is proprietary — keep [LICENSE](../LICENSE) consistent.
 - Do not claim forks can be disabled on public GitHub — document limits honestly.
 - Do not run destructive git commands (`reset --hard`, force push) unless owner explicitly asks.
-- Do not skip build bump before commit when owner requested "commit and push after changes".
+- Do not skip build bump, commit, or push after completing a logical change.
 
 ## Updates and releases
 

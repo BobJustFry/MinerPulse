@@ -1,18 +1,50 @@
-use minerpulse_core::{
-    list_scan_subnets as discover_subnets, save_snapshot, scan_network, EntitlementGate,
-    ErrorResponse, MinerPulseError, MpulseFile, RateLimiter, ScanRequest, ScanResult, ScanSubnet,
-    SubscriptionTier, TcpCgminerClient,
-};
 use minerpulse_core::drivers::registry::fetch_with_detect;
+use minerpulse_core::{
+    list_scan_subnets as discover_subnets, save_snapshot, scan_network, scan_network_streaming,
+    EntitlementGate, ErrorResponse, MinerPulseError, MpulseFile, RateLimiter, ScanRequest,
+    ScanResult, ScanSubnet, SubscriptionTier, TcpCgminerClient,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
-use std::sync::Mutex;
-use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+
+struct ScanSession {
+    cancel: Arc<AtomicBool>,
+    running: Arc<AtomicBool>,
+}
+
+impl ScanSession {
+    fn new() -> Self {
+        Self {
+            cancel: Arc::new(AtomicBool::new(false)),
+            running: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    fn try_begin(&self) -> Result<(), ErrorResponse> {
+        if self.running.swap(true, Ordering::SeqCst) {
+            return Err(ErrorResponse {
+                code: minerpulse_core::ErrorCode::InvalidInput,
+                args: None,
+            });
+        }
+        self.cancel.store(false, Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn finish(&self) {
+        self.running.store(false, Ordering::SeqCst);
+    }
+}
+
 struct AppState {
     rate_limiter: Mutex<RateLimiter>,
     tier: Mutex<SubscriptionTier>,
     last_snapshot: Mutex<Option<minerpulse_core::MinerSnapshot>>,
+    scan: ScanSession,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -43,8 +75,68 @@ struct EntitlementsResponse {
     min_read_interval_sec: u64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct ScanProgressPayload {
+    scanned: u32,
+    total: u32,
+    found_count: u32,
+    range_label: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ScanFinishedPayload {
+    cancelled: bool,
+    error: Option<String>,
+    scanned: u32,
+    total: u32,
+    found_count: u32,
+    range_label: String,
+}
+
+const SCAN_WINDOW_LABEL: &str = "scan";
+const MAIN_WINDOW_LABEL: &str = "main";
+
 fn gate(tier: SubscriptionTier) -> EntitlementGate {
     EntitlementGate::new(tier)
+}
+
+fn io_error() -> ErrorResponse {
+    ErrorResponse {
+        code: minerpulse_core::ErrorCode::IoError,
+        args: None,
+    }
+}
+
+fn block_main_window(app: &AppHandle) -> Result<(), ErrorResponse> {
+    let main = app
+        .get_webview_window(MAIN_WINDOW_LABEL)
+        .ok_or_else(io_error)?;
+    main.set_enabled(false).map_err(|_| io_error())
+}
+
+fn unblock_main_window(app: &AppHandle) {
+    if let Some(main) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+        let _ = main.set_enabled(true);
+    }
+}
+
+fn cancel_active_scan(app: &AppHandle) {
+    if let Some(state) = app.try_state::<AppState>() {
+        state.scan.cancel.store(true, Ordering::Relaxed);
+    }
+}
+
+fn attach_scan_window_cleanup(app: AppHandle, scan_window: tauri::WebviewWindow) {
+    let app_for_event = app.clone();
+    scan_window.on_window_event(move |event| {
+        if matches!(
+            event,
+            WindowEvent::CloseRequested { .. } | WindowEvent::Destroyed
+        ) {
+            cancel_active_scan(&app_for_event);
+            unblock_main_window(&app_for_event);
+        }
+    });
 }
 
 #[tauri::command]
@@ -84,7 +176,8 @@ fn read_miner(
 
     let port = request.port.unwrap_or(4028);
     let client = TcpCgminerClient::default();
-    let snapshot = fetch_with_detect(&client, &request.ip, port).map_err(|e| ErrorResponse::from(&e))?;
+    let snapshot =
+        fetch_with_detect(&client, &request.ip, port).map_err(|e| ErrorResponse::from(&e))?;
 
     *state.last_snapshot.lock().unwrap() = Some(snapshot.clone());
 
@@ -121,42 +214,139 @@ fn list_scan_subnets() -> Vec<ScanSubnet> {
 
 #[tauri::command]
 async fn open_scan_window(app: AppHandle) -> Result<(), ErrorResponse> {
-    const LABEL: &str = "scan";
-
-    if let Some(window) = app.get_webview_window(LABEL) {
-        window.show().map_err(|_| ErrorResponse {
-            code: minerpulse_core::ErrorCode::IoError,
-            args: None,
-        })?;
-        window.set_focus().map_err(|_| ErrorResponse {
-            code: minerpulse_core::ErrorCode::IoError,
-            args: None,
-        })?;
+    if let Some(window) = app.get_webview_window(SCAN_WINDOW_LABEL) {
+        block_main_window(&app)?;
+        window.show().map_err(|_| io_error())?;
+        window.set_focus().map_err(|_| io_error())?;
         return Ok(());
     }
 
-    WebviewWindowBuilder::new(&app, LABEL, WebviewUrl::App("/scan".into()))
+    let main = app
+        .get_webview_window(MAIN_WINDOW_LABEL)
+        .ok_or_else(io_error)?;
+
+    let scan_window = WebviewWindowBuilder::new(&app, SCAN_WINDOW_LABEL, WebviewUrl::App("/scan".into()))
         .title("MinerPulse — Scan")
         .inner_size(540.0, 680.0)
         .min_inner_size(420.0, 480.0)
         .center()
+        .parent(&main)
+        .map_err(|_| io_error())?
+        .always_on_top(true)
         .build()
-        .map_err(|_| ErrorResponse {
-            code: minerpulse_core::ErrorCode::IoError,
-            args: None,
-        })?;
+        .map_err(|_| io_error())?;
+
+    block_main_window(&app)?;
+    attach_scan_window_cleanup(app.clone(), scan_window);
 
     Ok(())
+}
+
+#[tauri::command]
+async fn start_scan(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: ScanRequest,
+) -> Result<(), ErrorResponse> {
+    state.scan.try_begin()?;
+
+    let cancel = Arc::clone(&state.scan.cancel);
+    let app_for_scan = app.clone();
+
+    tauri::async_runtime::spawn(async move {
+        let scan_result = tauri::async_runtime::spawn_blocking(move || {
+            let mut last_total = 0u32;
+
+            let result = scan_network_streaming(
+                request,
+                cancel.clone(),
+                |scanned, total, found_count, range_label| {
+                    last_total = total;
+                    let payload = ScanProgressPayload {
+                        scanned,
+                        total,
+                        found_count,
+                        range_label: range_label.to_string(),
+                    };
+                    let _ = app_for_scan.emit("scan://progress", payload);
+                },
+                |miner| {
+                    let _ = app_for_scan.emit("scan://found", miner);
+                },
+            );
+
+            (result, last_total, cancel.load(Ordering::Relaxed))
+        })
+        .await;
+
+        let (scan_outcome, last_total, cancelled) = match scan_result {
+            Ok(value) => value,
+            Err(_) => {
+                if let Some(state) = app.try_state::<AppState>() {
+                    state.scan.finish();
+                }
+                let _ = app.emit(
+                    "scan://finished",
+                    ScanFinishedPayload {
+                        cancelled: false,
+                        error: Some("scan_failed".into()),
+                        scanned: 0,
+                        total: 0,
+                        found_count: 0,
+                        range_label: String::new(),
+                    },
+                );
+                return;
+            }
+        };
+
+        if let Some(state) = app.try_state::<AppState>() {
+            state.scan.finish();
+        }
+
+        match scan_outcome {
+            Ok(result) => {
+                let _ = app.emit(
+                    "scan://finished",
+                    ScanFinishedPayload {
+                        cancelled,
+                        error: None,
+                        scanned: result.scanned,
+                        total: last_total,
+                        found_count: result.miners.len() as u32,
+                        range_label: result.range_label,
+                    },
+                );
+            }
+            Err(err) => {
+                let _ = app.emit(
+                    "scan://finished",
+                    ScanFinishedPayload {
+                        cancelled,
+                        error: Some(format!("{:?}", err.code())),
+                        scanned: 0,
+                        total: last_total,
+                        found_count: 0,
+                        range_label: String::new(),
+                    },
+                );
+            }
+        }
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+fn cancel_scan(state: State<'_, AppState>) {
+    state.scan.cancel.store(true, Ordering::Relaxed);
 }
 
 #[tauri::command]
 async fn scan_miners(request: ScanRequest) -> Result<ScanResult, ErrorResponse> {
     tauri::async_runtime::spawn_blocking(move || scan_network(request))
         .await
-        .map_err(|_| ErrorResponse {
-            code: minerpulse_core::ErrorCode::IoError,
-            args: None,
-        })?
+        .map_err(|_| io_error())?
         .map_err(|e| ErrorResponse::from(&e))
 }
 
@@ -199,6 +389,7 @@ pub fn run() {
             rate_limiter: Mutex::new(RateLimiter::new(10)),
             tier: Mutex::new(SubscriptionTier::Free),
             last_snapshot: Mutex::new(None),
+            scan: ScanSession::new(),
         })
         .invoke_handler(tauri::generate_handler![
             get_entitlements,
@@ -208,6 +399,8 @@ pub fn run() {
             get_app_version,
             list_scan_subnets,
             open_scan_window,
+            start_scan,
+            cancel_scan,
             scan_miners,
         ])
         .run(tauri::generate_context!())

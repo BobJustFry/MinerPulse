@@ -1,17 +1,32 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { emit } from "@tauri-apps/api/event";
+  import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { onMount } from "svelte";
   import { t, type Locale, type MessageKey } from "$lib/i18n";
   import type {
     DiscoveredMiner,
     ErrorResponse,
-    ScanResult,
     ScanSubnet,
   } from "$lib/types";
 
   const CUSTOM_SUBNET_ID = "custom";
+
+  interface ScanProgressPayload {
+    scanned: number;
+    total: number;
+    found_count: number;
+    range_label: string;
+  }
+
+  interface ScanFinishedPayload {
+    cancelled: boolean;
+    error?: string | null;
+    scanned: number;
+    total: number;
+    found_count: number;
+    range_label: string;
+  }
 
   let locale = $state<Locale>("ru");
   let subnets = $state<ScanSubnet[]>([]);
@@ -22,6 +37,15 @@
   let scanning = $state(false);
   let statusText = $state("");
   let discovered = $state<DiscoveredMiner[]>([]);
+  let progressScanned = $state(0);
+  let progressTotal = $state(0);
+  let progressFound = $state(0);
+  let progressRange = $state("");
+  let hasScanned = $state(false);
+
+  let unlistenProgress: UnlistenFn | undefined;
+  let unlistenFound: UnlistenFn | undefined;
+  let unlistenFinished: UnlistenFn | undefined;
 
   function msg(key: MessageKey, args?: Record<string, string | number>) {
     return t(locale, key, args);
@@ -62,6 +86,29 @@
     return map[vendor] ?? vendor;
   }
 
+  function ipSortKey(ip: string): number[] {
+    return ip.split(".").map((part) => Number(part) || 0);
+  }
+
+  function compareIp(a: string, b: string): number {
+    const ka = ipSortKey(a);
+    const kb = ipSortKey(b);
+    for (let i = 0; i < 4; i += 1) {
+      if (ka[i] !== kb[i]) return ka[i] - kb[i];
+    }
+    return 0;
+  }
+
+  function addDiscoveredMiner(miner: DiscoveredMiner) {
+    if (discovered.some((item) => item.ip === miner.ip)) return;
+    discovered = [...discovered, miner].sort((a, b) => compareIp(a.ip, b.ip));
+  }
+
+  function progressPercent(): number {
+    if (progressTotal <= 0) return 0;
+    return Math.min(100, Math.round((progressScanned / progressTotal) * 100));
+  }
+
   function selectedSubnet(): ScanSubnet | undefined {
     return subnets.find((s) => s.id === selectedSubnetId);
   }
@@ -86,28 +133,75 @@
     };
   }
 
+  function applyProgress(payload: ScanProgressPayload) {
+    progressScanned = payload.scanned;
+    progressTotal = payload.total;
+    progressFound = payload.found_count;
+    progressRange = payload.range_label;
+    statusText = msg("scan.progress", {
+      scanned: payload.scanned,
+      total: payload.total,
+      found: payload.found_count,
+      percent: progressPercent(),
+    });
+  }
+
+  function finishScan(payload: ScanFinishedPayload) {
+    scanning = false;
+    hasScanned = true;
+    progressScanned = payload.scanned;
+    progressTotal = payload.total;
+    progressFound = payload.found_count;
+    progressRange = payload.range_label;
+
+    if (payload.error) {
+      statusText = formatError({ code: payload.error });
+      return;
+    }
+
+    localStorage.setItem("minerpulse.scan", JSON.stringify(discovered));
+
+    if (payload.cancelled) {
+      statusText =
+        payload.found_count > 0
+          ? msg("scan.cancelledWithResults", { count: payload.found_count })
+          : msg("scan.cancelled");
+      return;
+    }
+
+    if (payload.found_count === 0) {
+      statusText = msg("status.scanEmpty", { range: payload.range_label });
+    } else {
+      statusText = msg("status.scanDone", {
+        count: payload.found_count,
+        scanned: payload.scanned,
+      });
+    }
+  }
+
   async function runScan() {
     scanning = true;
+    hasScanned = false;
     discovered = [];
+    progressScanned = 0;
+    progressTotal = 0;
+    progressFound = 0;
+    progressRange = "";
     statusText = msg("status.scanning");
+
     try {
       const request = buildScanRequest();
-      const result = await invoke<ScanResult>("scan_miners", { request });
-      discovered = result.miners;
-      localStorage.setItem("minerpulse.scan", JSON.stringify(discovered));
-      if (result.miners.length === 0) {
-        statusText = msg("status.scanEmpty", { range: result.range_label });
-      } else {
-        statusText = msg("status.scanDone", {
-          count: result.miners.length,
-          scanned: result.scanned,
-        });
-      }
+      await invoke("start_scan", { request });
     } catch (err) {
-      statusText = formatError(err);
-    } finally {
       scanning = false;
+      statusText = formatError(err);
     }
+  }
+
+  async function cancelScan() {
+    if (!scanning) return;
+    statusText = msg("scan.cancelling");
+    await invoke("cancel_scan");
   }
 
   async function pickMiner(miner: DiscoveredMiner) {
@@ -124,6 +218,23 @@
     subnets = await invoke<ScanSubnet[]>("list_scan_subnets");
     selectedSubnetId = subnets[0]?.id ?? CUSTOM_SUBNET_ID;
     statusText = msg("scan.hint");
+
+    unlistenProgress = await listen<ScanProgressPayload>("scan://progress", (event) => {
+      applyProgress(event.payload);
+    });
+    unlistenFound = await listen<DiscoveredMiner>("scan://found", (event) => {
+      addDiscoveredMiner(event.payload);
+      progressFound = discovered.length;
+    });
+    unlistenFinished = await listen<ScanFinishedPayload>("scan://finished", (event) => {
+      finishScan(event.payload);
+    });
+
+    return () => {
+      unlistenProgress?.();
+      unlistenFound?.();
+      unlistenFinished?.();
+    };
   });
 </script>
 
@@ -162,13 +273,31 @@
       <input class="port" bind:value={port} disabled={scanning} />
     </label>
 
-    <button class="btn primary" disabled={scanning} onclick={runScan}>
-      {scanning ? msg("toolbar.scanning") : msg("toolbar.scan")}
-    </button>
+    <div class="scan-actions">
+      <button class="btn primary" disabled={scanning} onclick={runScan}>
+        {scanning ? msg("toolbar.scanning") : msg("toolbar.scan")}
+      </button>
+      {#if scanning}
+        <button class="btn" onclick={cancelScan}>{msg("scan.cancel")}</button>
+      {/if}
+    </div>
   </section>
 
   <section class="scan-results-wrap">
-    <div class="scan-status">{statusText}</div>
+    {#if scanning}
+      <div class="scan-progress-panel">
+        <div class="scan-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progressPercent()}>
+          <div class="scan-progress-fill" style:width="{progressPercent()}%"></div>
+        </div>
+        <div class="scan-progress">{statusText}</div>
+        {#if progressRange}
+          <div class="scan-panel-range">{progressRange}</div>
+        {/if}
+      </div>
+    {:else}
+      <div class="scan-status">{statusText}</div>
+    {/if}
+
     {#if discovered.length > 0}
       <div class="scan-results" role="listbox">
         {#each discovered as miner (miner.ip)}
@@ -189,7 +318,7 @@
         {/each}
       </div>
       <p class="scan-footnote">{msg("scan.pickHint")}</p>
-    {:else if !scanning && statusText && !statusText.includes("…")}
+    {:else if hasScanned && !scanning && discovered.length === 0}
       <div class="scan-empty">{msg("scan.noMiners")}</div>
     {/if}
   </section>

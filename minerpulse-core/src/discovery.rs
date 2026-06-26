@@ -5,6 +5,8 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, Ipv4Addr};
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 
 const DEFAULT_PORT: u16 = 4028;
 
@@ -93,6 +95,20 @@ pub fn preview_scan_ranges() -> String {
 }
 
 pub fn scan_network(request: ScanRequest) -> Result<ScanResult, crate::error::MinerPulseError> {
+    let cancel = Arc::new(AtomicBool::new(false));
+    scan_network_streaming(request, cancel, |_, _, _, _| {}, |_| {})
+}
+
+pub fn scan_network_streaming<P, F>(
+    request: ScanRequest,
+    cancel: Arc<AtomicBool>,
+    on_progress: P,
+    on_found: F,
+) -> Result<ScanResult, crate::error::MinerPulseError>
+where
+    P: FnMut(u32, u32, u32, &str) + Send + Sync,
+    F: FnMut(DiscoveredMiner) + Send + Sync,
+{
     let port = request.port.unwrap_or(DEFAULT_PORT);
     let ranges = resolve_ranges(request.start_ip.as_deref(), request.end_ip.as_deref())?;
     let client = TcpCgminerClient::for_discovery();
@@ -112,18 +128,51 @@ pub fn scan_network(request: ScanRequest) -> Result<ScanResult, crate::error::Mi
         }
     }
 
-    let scanned = all_ips.len() as u32;
-    let mut miners: Vec<DiscoveredMiner> = all_ips
-        .par_iter()
-        .filter_map(|ip| probe_miner(&client, &ip.to_string(), port))
-        .collect();
+    let total = all_ips.len() as u32;
+    let range_label = range_labels.join(", ");
+    let scanned_counter = AtomicU32::new(0);
+    let found_counter = AtomicU32::new(0);
+    let miners_store: Mutex<Vec<DiscoveredMiner>> = Mutex::new(Vec::new());
+    let on_progress = Arc::new(Mutex::new(on_progress));
+    let on_found = Arc::new(Mutex::new(on_found));
 
+    all_ips.par_iter().for_each(|ip| {
+        if cancel.load(Ordering::Relaxed) {
+            return;
+        }
+
+        if let Some(miner) = probe_miner(&client, &ip.to_string(), port) {
+            found_counter.fetch_add(1, Ordering::Relaxed);
+            if let Ok(mut miners) = miners_store.lock() {
+                miners.push(miner.clone());
+            }
+            if let Ok(mut found) = on_found.lock() {
+                found(miner);
+            }
+        }
+
+        let scanned = scanned_counter.fetch_add(1, Ordering::Relaxed) + 1;
+        if scanned % 4 == 0 || scanned == total {
+            let found = found_counter.load(Ordering::Relaxed);
+            if let Ok(mut progress) = on_progress.lock() {
+                progress(scanned, total, found, &range_label);
+            }
+        }
+    });
+
+    let final_scanned = scanned_counter.load(Ordering::Relaxed);
+    let final_found = found_counter.load(Ordering::Relaxed);
+    if let Ok(mut progress) = on_progress.lock() {
+        progress(final_scanned, total, final_found, &range_label);
+    }
+
+    let mut miners = miners_store.into_inner().unwrap_or_default();
     miners.sort_by(|a, b| ipv4_sort_key(&a.ip).cmp(&ipv4_sort_key(&b.ip)));
 
     Ok(ScanResult {
         miners,
-        scanned,
-        range_label: range_labels.join(", "),
+        scanned: final_scanned,
+        range_label,
     })
 }
 
