@@ -18,7 +18,7 @@ alwaysApply: true
 - After each logical change: bump build → commit → push to `origin main` (when asked by owner).
 - Never force-push `main`.
 - Never commit secrets (`.tauri/*.key`, `.env`, credentials).
-- Never commit `OldProject/`, `target/`, `node_modules/`, build artifacts.
+- Never commit paths in `.gitignore` (`target/`, `node_modules/`, build artifacts, local-only dirs).
 
 ## Code quality
 
@@ -32,7 +32,7 @@ alwaysApply: true
 - **Never** weaken entitlement checks client-side only; subscription tier must remain enforceable server-side.
 - **Never** remove or bypass updater signature verification.
 - **Never** add code that exfiltrates user data without documented consent.
-- **Never** copy proprietary code from `OldProject/` into public files without owner review.
+- **Never** paste unreviewed third-party or local-only reference code into the public tree.
 
 ## Forbidden actions (AI agents)
 

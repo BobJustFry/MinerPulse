@@ -3,9 +3,6 @@
 .env
 .env.*
 
-# Legacy reference (not part of public product)
-OldProject/
-
 # Build
 /target/
 **/node_modules/

@@ -32,7 +32,6 @@ your trademarks or bypass server-side subscription checks.
 
 ## Not in this repo
 
-- `OldProject/` — legacy AvalonMinerViewer reference (local only, gitignored)
 - Private signing key — `.tauri/minerpulse.key` (gitignored)
 - `minerpulse-api` / `minerpulse-admin` — planned; may live in separate repos
 
