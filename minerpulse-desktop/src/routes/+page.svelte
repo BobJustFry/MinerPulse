@@ -206,10 +206,11 @@
 
   async function importFromFile() {
     const path = await open({
+      title: msg("import.title"),
       multiple: false,
       filters: [
         {
-          name: "Miner logs",
+          name: msg("import.fileFilter"),
           extensions: ["txt", "log", "json", "mpulse"],
         },
       ],
@@ -377,8 +378,8 @@
       </button>
     {/if}
 
-    <button class="btn" disabled={busy} onclick={importFromFile}>
-      {msg("toolbar.open")}
+    <button class="btn" disabled={busy} onclick={importFromFile} title={msg("import.dropHint")}>
+      {msg("toolbar.importLog")}
     </button>
 
     <button class="btn" disabled={!snapshot || busy} onclick={saveSnapshot}>

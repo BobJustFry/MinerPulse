@@ -9,7 +9,7 @@ Multi-vendor ASIC miner monitor — **Tauri 2 + Rust + Svelte**.
 **Windows (recommended):**
 
 ```powershell
-cd P:\Projects\AMW\minerpulse-desktop
+cd P:\Projects\MinerPulse\minerpulse-desktop
 npm install
 npm run dev:app
 ```
