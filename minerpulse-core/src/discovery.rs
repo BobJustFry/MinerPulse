@@ -31,6 +31,14 @@ pub struct ScanResult {
     pub range_label: String,
 }
 
+pub fn preview_scan_ranges() -> String {
+    default_local_ranges()
+        .iter()
+        .map(|(start, end)| format!("{start}-{end}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 pub fn scan_network(request: ScanRequest) -> Result<ScanResult, crate::error::MinerPulseError> {
     let port = request.port.unwrap_or(DEFAULT_PORT);
     let ranges = resolve_ranges(request.start_ip.as_deref(), request.end_ip.as_deref())?;
@@ -122,34 +130,102 @@ fn default_local_ranges() -> Vec<(Ipv4Addr, Ipv4Addr)> {
 
 fn probe_miner(client: &TcpCgminerClient, ip: &str, port: u16) -> Option<DiscoveredMiner> {
     if let Ok(stats) = client.send_command(ip, port, "stats") {
-        if is_miner_response(&stats) {
-            let vendor = detect_vendor(&stats);
-            let model = model_from_stats(&stats);
-            if vendor != MinerVendor::Unknown && !model.is_empty() {
-                return Some(DiscoveredMiner {
-                    ip: ip.to_string(),
-                    port,
-                    vendor,
-                    model,
-                    supported: driver_available(vendor),
-                });
-            }
+        if let Some((vendor, model)) = classify_cgminer_response(&stats) {
+            return Some(make_discovered(ip, port, vendor, model));
+        }
+    }
+
+    if let Ok(stats) = client.send_receive(ip, port, "stats", "", true) {
+        if let Some((vendor, model)) = classify_cgminer_response(&stats) {
+            return Some(make_discovered(ip, port, vendor, model));
         }
     }
 
     if let Ok(summary) = client.send_payload(ip, port, r#"{"cmd":"summary"}"#) {
         if let Some((vendor, model)) = classify_whatsminer(&summary) {
-            return Some(DiscoveredMiner {
-                ip: ip.to_string(),
-                port,
-                vendor,
-                model,
-                supported: driver_available(vendor),
-            });
+            return Some(make_discovered(ip, port, vendor, model));
         }
     }
 
     None
+}
+
+fn make_discovered(ip: &str, port: u16, vendor: MinerVendor, model: String) -> DiscoveredMiner {
+    DiscoveredMiner {
+        ip: ip.to_string(),
+        port,
+        vendor,
+        model,
+        supported: driver_available(vendor),
+    }
+}
+
+fn classify_cgminer_response(response: &str) -> Option<(MinerVendor, String)> {
+    if !is_miner_response(response) {
+        return None;
+    }
+
+    if let Some(result) = classify_cgminer_json(response) {
+        return Some(result);
+    }
+
+    let vendor = detect_vendor(response);
+    if vendor == MinerVendor::Unknown {
+        return None;
+    }
+
+    let model = model_from_stats(response);
+    let model = if model.is_empty() {
+        default_model_for_vendor(vendor)
+    } else {
+        model
+    };
+
+    Some((vendor, model))
+}
+
+fn classify_cgminer_json(response: &str) -> Option<(MinerVendor, String)> {
+    let trimmed = response.trim();
+    if !trimmed.starts_with('{') {
+        return None;
+    }
+
+    let value: serde_json::Value = serde_json::from_str(trimmed).ok()?;
+    let stats = value.get("STATS")?.as_array()?.first()?;
+
+    if let Some(kind) = stats.get("Type").and_then(|v| v.as_str()) {
+        if kind.contains("Antminer") {
+            return Some((MinerVendor::Antminer, kind.to_string()));
+        }
+    }
+
+    if let Some(id) = stats.get("ID").and_then(|v| v.as_str()) {
+        if id.contains("AV") {
+            let model = stats
+                .get("Ver")
+                .or_else(|| stats.get("Version"))
+                .and_then(|v| v.as_str())
+                .map(|ver| format!("Avalon-{ver}"))
+                .unwrap_or_else(|| "Avalon".to_string());
+            return Some((MinerVendor::Avalon, model));
+        }
+        if id.contains("DT") {
+            return Some((MinerVendor::Innosilicon, "Innosilicon".to_string()));
+        }
+    }
+
+    None
+}
+
+fn default_model_for_vendor(vendor: MinerVendor) -> String {
+    match vendor {
+        MinerVendor::Avalon => "Avalon".to_string(),
+        MinerVendor::Antminer => "Antminer".to_string(),
+        MinerVendor::Innosilicon => "Innosilicon".to_string(),
+        MinerVendor::Whatsminer => "WhatsMiner".to_string(),
+        MinerVendor::Generic => "CGMiner".to_string(),
+        MinerVendor::Unknown => "Unknown".to_string(),
+    }
 }
 
 fn is_miner_response(response: &str) -> bool {
@@ -215,6 +291,14 @@ mod tests {
         let (vendor, model) = classify_whatsminer(sample).unwrap();
         assert_eq!(vendor, MinerVendor::Whatsminer);
         assert_eq!(model, "M50");
+    }
+
+    #[test]
+    fn classifies_antminer_json_stats() {
+        let sample = r#"{"STATUS":[{"STATUS":"S"}],"STATS":[{"Type":"Antminer L7","GHS 5s":"9500.00"}]}"#;
+        let (vendor, model) = classify_cgminer_json(sample).unwrap();
+        assert_eq!(vendor, MinerVendor::Antminer);
+        assert_eq!(model, "Antminer L7");
     }
 
     #[test]

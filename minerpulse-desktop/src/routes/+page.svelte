@@ -29,6 +29,8 @@
   let appVersion = $state("1.0.0 (build 1)");
   let discovered = $state<DiscoveredMiner[]>([]);
   let showScanResults = $state(false);
+  let scanning = $state(false);
+  let scanRange = $state("");
   let entitlements = $state<Entitlements>({
     tier: "free",
     can_poll: false,
@@ -90,14 +92,16 @@
 
   async function scanNetwork() {
     busy = true;
-    showScanResults = false;
-    statusText = msg("status.scanning");
+    scanning = true;
+    showScanResults = true;
+    discovered = [];
     try {
+      scanRange = await invoke<string>("get_scan_range_preview");
+      statusText = msg("status.scanningRange", { range: scanRange });
       const result = await invoke<ScanResult>("scan_miners", {
         request: { port: Number(port) || 4028 },
       });
       discovered = result.miners;
-      showScanResults = true;
       localStorage.setItem("minerpulse.scan", JSON.stringify(discovered));
       if (result.miners.length === 0) {
         statusText = msg("status.scanEmpty", { range: result.range_label });
@@ -108,10 +112,16 @@
         });
       }
     } catch (err) {
+      showScanResults = false;
       statusText = formatError(err);
     } finally {
+      scanning = false;
       busy = false;
     }
+  }
+
+  function closeScanResults() {
+    showScanResults = false;
   }
 
   function selectDiscovered(miner: DiscoveredMiner) {
@@ -265,32 +275,8 @@
       <label for="ip">{msg("toolbar.ip")}</label>
       <input id="ip" bind:value={ip} />
       <button class="btn" disabled={busy} onclick={scanNetwork}>
-        {msg("toolbar.scan")}
+        {scanning ? msg("toolbar.scanning") : msg("toolbar.scan")}
       </button>
-      {#if showScanResults}
-        <div class="scan-results" role="listbox">
-          {#if discovered.length === 0}
-            <div class="scan-empty">{msg("status.scanEmpty", { range: "" })}</div>
-          {:else}
-            {#each discovered as miner (miner.ip)}
-              <button
-                type="button"
-                class="scan-item"
-                class:unsupported={!miner.supported}
-                onclick={() => selectDiscovered(miner)}
-              >
-                <span class="scan-item-ip">{miner.ip}</span>
-                <span class="scan-item-model">
-                  {miner.model || vendorLabel(miner.vendor)}
-                </span>
-                {#if !miner.supported}
-                  <span class="scan-item-badge">{msg("scan.preview")}</span>
-                {/if}
-              </button>
-            {/each}
-          {/if}
-        </div>
-      {/if}
     </div>
     <div class="field">
       <label for="port">{msg("toolbar.port")}</label>
@@ -344,6 +330,45 @@
       {tierLabel(entitlements.tier)}
     </button>
   </header>
+
+  {#if showScanResults}
+    <section class="scan-panel" aria-live="polite">
+      <div class="scan-panel-head">
+        <span class="scan-panel-title">{msg("scan.title")}</span>
+        {#if scanRange}
+          <span class="scan-panel-range">{scanRange}</span>
+        {/if}
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" onclick={closeScanResults}>
+          {msg("scan.close")}
+        </button>
+      </div>
+      {#if scanning}
+        <div class="scan-progress">{msg("status.scanningRange", { range: scanRange })}</div>
+      {:else if discovered.length === 0}
+        <div class="scan-empty">{msg("scan.noMiners")}</div>
+      {:else}
+        <div class="scan-results" role="listbox">
+          {#each discovered as miner (miner.ip)}
+            <button
+              type="button"
+              class="scan-item"
+              class:unsupported={!miner.supported}
+              onclick={() => selectDiscovered(miner)}
+            >
+              <span class="scan-item-ip">{miner.ip}</span>
+              <span class="scan-item-model">
+                {miner.model || vendorLabel(miner.vendor)}
+              </span>
+              {#if !miner.supported}
+                <span class="scan-item-badge">{msg("scan.preview")}</span>
+              {/if}
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </section>
+  {/if}
 
   <nav class="tabs">
     {#each tabs as tab}
@@ -409,7 +434,7 @@
   </main>
 
   <footer class="statusbar">
-    <span class="status-dot"></span>
+    <span class="status-dot" class:busy={scanning || busy}></span>
     <span>{statusText || msg("status.ready")}</span>
     <span class="spacer"></span>
     <span>{appVersion}</span>

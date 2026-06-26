@@ -130,18 +130,45 @@ button {
   position: relative;
 }
 
+.scan-panel {
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+  padding: calc(var(--space) * 1.5) calc(var(--space) * 2);
+}
+
+.scan-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.scan-panel-title {
+  font-weight: 600;
+}
+
+.scan-panel-range {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.scan-progress {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
 .scan-results {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 20;
-  min-width: 280px;
-  max-height: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
   overflow: auto;
-  background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
+  background: var(--bg-elevated);
 }
 
 .scan-item {
@@ -272,6 +299,21 @@ button {
   height: 8px;
   border-radius: 50%;
   background: var(--status-dot);
+}
+
+.status-dot.busy {
+  background: var(--accent);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 .card-grid {
