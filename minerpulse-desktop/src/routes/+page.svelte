@@ -27,6 +27,7 @@
   let statusText = $state("");
   let snapshot = $state<MinerSnapshot | null>(null);
   let appVersion = $state("1.0.0 (build 1)");
+  let connectionLoaded = $state(false);
   let entitlements = $state<Entitlements>({
     tier: "free",
     can_poll: false,
@@ -38,6 +39,7 @@
   });
 
   const tabs: TabId[] = ["data", "console", "pools", "charts", "commands"];
+  const CONNECTION_KEY = "minerpulse.connection";
 
   function msg(key: MessageKey, args?: Record<string, string | number>) {
     return t(locale, key, args);
@@ -51,6 +53,22 @@
       "minerpulse.ui",
       JSON.stringify({ theme, density, locale }),
     );
+  }
+
+  function loadConnection() {
+    const saved = localStorage.getItem(CONNECTION_KEY);
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved) as { ip?: string; port?: string | number };
+      ip = parsed.ip ?? ip;
+      port = String(parsed.port ?? port);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function saveConnection() {
+    localStorage.setItem(CONNECTION_KEY, JSON.stringify({ ip, port }));
   }
 
   function tabLabel(tab: TabId) {
@@ -201,6 +219,8 @@
         }
       }
       applyUiPrefs();
+      loadConnection();
+      connectionLoaded = true;
       await refreshEntitlements();
       try {
         const v = await invoke<{ display: string }>("get_app_version");
@@ -218,12 +238,20 @@
         ip = event.payload.ip;
         port = String(event.payload.port);
         statusText = `${event.payload.model} · ${event.payload.ip}`;
+        saveConnection();
       });
     })();
 
     return () => {
       unlisten?.();
     };
+  });
+
+  $effect(() => {
+    if (!connectionLoaded) return;
+    ip;
+    port;
+    saveConnection();
   });
 </script>
 

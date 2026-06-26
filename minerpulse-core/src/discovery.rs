@@ -1,7 +1,9 @@
 use crate::drivers::registry::{detect_vendor, model_from_stats};
+use crate::drivers::whatsminer::classify_whatsminer;
 use crate::model::MinerVendor;
 use crate::tcp::TcpCgminerClient;
 use rayon::prelude::*;
+use rayon::ThreadPoolBuilder;
 use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, Ipv4Addr};
 use std::str::FromStr;
@@ -136,28 +138,39 @@ where
     let on_progress = Arc::new(Mutex::new(on_progress));
     let on_found = Arc::new(Mutex::new(on_found));
 
-    all_ips.par_iter().for_each(|ip| {
-        if cancel.load(Ordering::Relaxed) {
-            return;
-        }
+    let thread_count = std::thread::available_parallelism()
+        .map(|n| n.get() * 2)
+        .unwrap_or(4);
 
-        if let Some(miner) = probe_miner(&client, &ip.to_string(), port) {
-            found_counter.fetch_add(1, Ordering::Relaxed);
-            if let Ok(mut miners) = miners_store.lock() {
-                miners.push(miner.clone());
-            }
-            if let Ok(mut found) = on_found.lock() {
-                found(miner);
-            }
-        }
+    let pool = ThreadPoolBuilder::new()
+        .num_threads(thread_count)
+        .build()
+        .map_err(|_| crate::error::MinerPulseError::with_code(crate::error::ErrorCode::IoError))?;
 
-        let scanned = scanned_counter.fetch_add(1, Ordering::Relaxed) + 1;
-        if scanned % 4 == 0 || scanned == total {
-            let found = found_counter.load(Ordering::Relaxed);
-            if let Ok(mut progress) = on_progress.lock() {
-                progress(scanned, total, found, &range_label);
+    pool.install(|| {
+        all_ips.par_iter().for_each(|ip| {
+            if cancel.load(Ordering::Relaxed) {
+                return;
             }
-        }
+
+            if let Some(miner) = probe_miner(&client, &ip.to_string(), port) {
+                found_counter.fetch_add(1, Ordering::Relaxed);
+                if let Ok(mut miners) = miners_store.lock() {
+                    miners.push(miner.clone());
+                }
+                if let Ok(mut found) = on_found.lock() {
+                    found(miner);
+                }
+            }
+
+            let scanned = scanned_counter.fetch_add(1, Ordering::Relaxed) + 1;
+            if scanned % 4 == 0 || scanned == total {
+                let found = found_counter.load(Ordering::Relaxed);
+                if let Ok(mut progress) = on_progress.lock() {
+                    progress(scanned, total, found, &range_label);
+                }
+            }
+        });
     });
 
     let final_scanned = scanned_counter.load(Ordering::Relaxed);
@@ -238,7 +251,7 @@ fn make_discovered(ip: &str, port: u16, vendor: MinerVendor, model: String) -> D
         port,
         vendor,
         model,
-        supported: driver_available(vendor),
+        supported: crate::drivers::registry::driver_available(vendor),
     }
 }
 
@@ -317,44 +330,6 @@ fn is_miner_response(response: &str) -> bool {
         && !response.contains("Stream broken")
 }
 
-fn classify_whatsminer(json: &str) -> Option<(MinerVendor, String)> {
-    let trimmed = json.trim();
-    if !trimmed.starts_with('{') {
-        return None;
-    }
-
-    let value: serde_json::Value = serde_json::from_str(trimmed).ok()?;
-    let status_msg = value
-        .get("STATUS")
-        .and_then(|s| s.as_array())
-        .and_then(|items| items.first())
-        .and_then(|item| item.get("Msg"))
-        .and_then(|msg| msg.as_str());
-
-    let has_summary = value.get("SUMMARY").is_some();
-    if !has_summary && status_msg != Some("Summary") {
-        return None;
-    }
-
-    let model = value
-        .get("SUMMARY")
-        .and_then(|s| s.as_array())
-        .and_then(|items| items.first())
-        .and_then(|item| {
-            item.get("Miner Type")
-                .or_else(|| item.get("Type"))
-                .and_then(|v| v.as_str())
-                .map(str::to_string)
-        })
-        .unwrap_or_else(|| "WhatsMiner".to_string());
-
-    Some((MinerVendor::Whatsminer, model))
-}
-
-pub fn driver_available(vendor: MinerVendor) -> bool {
-    matches!(vendor, MinerVendor::Avalon)
-}
-
 fn next_ipv4(addr: Ipv4Addr) -> Ipv4Addr {
     u32::from(addr).checked_add(1).map(Ipv4Addr::from).unwrap_or(addr)
 }
@@ -366,6 +341,7 @@ fn ipv4_sort_key(ip: &str) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::drivers::whatsminer::classify_whatsminer;
 
     #[test]
     fn classifies_whatsminer_summary_json() {

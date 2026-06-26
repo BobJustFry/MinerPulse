@@ -11,6 +11,15 @@
   } from "$lib/types";
 
   const CUSTOM_SUBNET_ID = "custom";
+  const SCAN_CONFIG_KEY = "minerpulse.scanConfig";
+  const SCAN_RESULTS_KEY = "minerpulse.scan";
+
+  interface ScanConfig {
+    selectedSubnetId: string;
+    customStart: string;
+    customEnd: string;
+    port: string;
+  }
 
   interface ScanProgressPayload {
     scanned: number;
@@ -42,6 +51,7 @@
   let progressFound = $state(0);
   let progressRange = $state("");
   let hasScanned = $state(false);
+  let prefsLoaded = $state(false);
 
   let unlistenProgress: UnlistenFn | undefined;
   let unlistenFound: UnlistenFn | undefined;
@@ -64,6 +74,61 @@
       /* ignore */
     }
   }
+
+  function loadScanPrefs(subnetList: ScanSubnet[]) {
+    const savedConfig = localStorage.getItem(SCAN_CONFIG_KEY);
+    if (savedConfig) {
+      try {
+        const cfg = JSON.parse(savedConfig) as ScanConfig;
+        if (
+          cfg.selectedSubnetId === CUSTOM_SUBNET_ID ||
+          subnetList.some((subnet) => subnet.id === cfg.selectedSubnetId)
+        ) {
+          selectedSubnetId = cfg.selectedSubnetId;
+        }
+        customStart = cfg.customStart ?? customStart;
+        customEnd = cfg.customEnd ?? customEnd;
+        port = cfg.port ?? port;
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const savedResults = localStorage.getItem(SCAN_RESULTS_KEY);
+    if (savedResults) {
+      try {
+        const miners = JSON.parse(savedResults) as DiscoveredMiner[];
+        if (Array.isArray(miners) && miners.length > 0) {
+          discovered = miners;
+          progressFound = miners.length;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  function saveScanConfig() {
+    if (!prefsLoaded) return;
+    localStorage.setItem(
+      SCAN_CONFIG_KEY,
+      JSON.stringify({
+        selectedSubnetId,
+        customStart,
+        customEnd,
+        port,
+      } satisfies ScanConfig),
+    );
+  }
+
+  $effect(() => {
+    if (!prefsLoaded) return;
+    selectedSubnetId;
+    customStart;
+    customEnd;
+    port;
+    saveScanConfig();
+  });
 
   function formatError(err: unknown): string {
     const e = err as ErrorResponse;
@@ -160,6 +225,7 @@
     }
 
     localStorage.setItem("minerpulse.scan", JSON.stringify(discovered));
+    saveScanConfig();
 
     if (payload.cancelled) {
       statusText =
@@ -217,6 +283,8 @@
     applyUiPrefs();
     subnets = await invoke<ScanSubnet[]>("list_scan_subnets");
     selectedSubnetId = subnets[0]?.id ?? CUSTOM_SUBNET_ID;
+    loadScanPrefs(subnets);
+    prefsLoaded = true;
     statusText = msg("scan.hint");
 
     unlistenProgress = await listen<ScanProgressPayload>("scan://progress", (event) => {
