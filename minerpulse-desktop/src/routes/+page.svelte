@@ -10,10 +10,9 @@
   import MinerDataPanel from "$lib/components/MinerDataPanel.svelte";
   import MinerPoolsPanel from "$lib/components/MinerPoolsPanel.svelte";
   import {
-    isImportCandidate,
-    MAX_IMPORT_BYTES,
     type ParseImportResponse,
   } from "$lib/importFile";
+  import { setupNativeFileDrop } from "$lib/setupNativeFileDrop";
   import type {
     Entitlements,
     MinerSnapshot,
@@ -36,7 +35,6 @@
   let appVersion = $state("1.0.0 (build 1)");
   let connectionLoaded = $state(false);
   let dropActive = $state(false);
-  let dropDepth = $state(0);
   let entitlements = $state<Entitlements>({
     tier: "free",
     can_poll: false,
@@ -206,72 +204,30 @@
     await refreshEntitlements();
   }
 
-  function handleDragEnter(event: DragEvent) {
-    event.preventDefault();
-    dropDepth += 1;
-    dropActive = true;
-  }
+  async function applyImportedSnapshot(result: ParseImportResponse, fileName: string) {
+    const confirmed = await ask(
+      msg("import.openPrompt", {
+        name: fileName,
+        model: result.snapshot.identity.model,
+      }),
+      {
+        title: msg("import.title"),
+        kind: "info",
+      },
+    );
 
-  function handleDragLeave(event: DragEvent) {
-    event.preventDefault();
-    dropDepth = Math.max(0, dropDepth - 1);
-    if (dropDepth === 0) {
-      dropActive = false;
-    }
-  }
+    if (!confirmed) return;
 
-  function handleDragOver(event: DragEvent) {
-    event.preventDefault();
-  }
+    snapshot = result.snapshot;
+    await invoke("remember_snapshot", { snapshot: result.snapshot });
 
-  async function handleDrop(event: DragEvent) {
-    event.preventDefault();
-    dropDepth = 0;
-    dropActive = false;
-
-    const file = event.dataTransfer?.files?.[0];
-    if (!file) return;
-
-    if (file.size > MAX_IMPORT_BYTES) {
-      statusText = msg("import.tooLarge");
-      return;
+    if (result.miner_ip) {
+      ip = result.miner_ip;
+      saveConnection();
     }
 
-    if (!isImportCandidate(file)) return;
-
-    try {
-      const content = await file.text();
-      const result = await invoke<ParseImportResponse>("parse_import_file", {
-        content,
-        filename: file.name,
-      });
-
-      const confirmed = await ask(
-        msg("import.openPrompt", {
-          name: file.name,
-          model: result.snapshot.identity.model,
-        }),
-        {
-          title: msg("import.title"),
-          kind: "info",
-        },
-      );
-
-      if (!confirmed) return;
-
-      snapshot = result.snapshot;
-      await invoke("remember_snapshot", { snapshot: result.snapshot });
-
-      if (result.miner_ip) {
-        ip = result.miner_ip;
-        saveConnection();
-      }
-
-      activeTab = "data";
-      statusText = msg("import.opened", { name: file.name });
-    } catch (err) {
-      statusText = formatError(err);
-    }
+    activeTab = "data";
+    statusText = msg("import.opened", { name: fileName });
   }
 
   function tabDisabled(tab: TabId): boolean {
@@ -281,7 +237,8 @@
   }
 
   onMount(() => {
-    let unlisten: (() => void) | undefined;
+    let unlistenMiner: (() => void) | undefined;
+    let unlistenDrop: (() => void) | undefined;
 
     void (async () => {
       const saved = localStorage.getItem("minerpulse.ui");
@@ -307,7 +264,7 @@
       }
       statusText = msg("status.ready");
 
-      unlisten = await listen<{
+      unlistenMiner = await listen<{
         ip: string;
         port: number;
         model: string;
@@ -317,10 +274,36 @@
         statusText = `${event.payload.model} · ${event.payload.ip}`;
         saveConnection();
       });
+
+      unlistenDrop = await setupNativeFileDrop({
+        onHover: () => {
+          dropActive = true;
+        },
+        onLeave: () => {
+          dropActive = false;
+        },
+        onDrop: async (result, fileName) => {
+          dropActive = false;
+          await applyImportedSnapshot(result, fileName);
+        },
+        onError: (err) => {
+          dropActive = false;
+          if (String(err).includes("InvalidInput") || String(err).includes("INVALID_INPUT")) {
+            statusText = msg("import.tooLarge");
+            return;
+          }
+          statusText = formatError(err);
+        },
+        onTooLarge: () => {
+          dropActive = false;
+          statusText = msg("import.tooLarge");
+        },
+      });
     })();
 
     return () => {
-      unlisten?.();
+      unlistenMiner?.();
+      unlistenDrop?.();
     };
   });
 
@@ -332,14 +315,7 @@
   });
 </script>
 
-<div
-  class="app-shell"
-  class:drop-active={dropActive}
-  ondragenter={handleDragEnter}
-  ondragleave={handleDragLeave}
-  ondragover={handleDragOver}
-  ondrop={handleDrop}
->
+<div class="app-shell" class:drop-active={dropActive}>
   {#if dropActive}
     <div class="drop-overlay" aria-hidden="true">
       <div class="drop-overlay-card">

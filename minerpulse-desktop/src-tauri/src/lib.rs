@@ -369,6 +369,31 @@ fn parse_import_file(content: String, filename: Option<String>) -> Result<ParseI
 }
 
 #[tauri::command]
+fn import_file_path(path: String) -> Result<ParseImportResponse, ErrorResponse> {
+    let path = PathBuf::from(path);
+    let meta = std::fs::metadata(&path).map_err(|_| io_error())?;
+    if meta.len() > minerpulse_core::MAX_IMPORT_BYTES as u64 {
+        return Err(ErrorResponse {
+            code: minerpulse_core::ErrorCode::InvalidInput,
+            args: None,
+        });
+    }
+
+    let content = std::fs::read_to_string(&path).map_err(|_| io_error())?;
+    let filename = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(str::to_string);
+
+    let result = import_file_content(&content, filename.as_deref()).map_err(|e| ErrorResponse::from(&e))?;
+    Ok(ParseImportResponse {
+        snapshot: result.snapshot,
+        source_label: result.source_label,
+        miner_ip: result.miner_ip,
+    })
+}
+
+#[tauri::command]
 fn remember_snapshot(state: State<'_, AppState>, snapshot: MinerSnapshot) {
     *state.last_snapshot.lock().unwrap() = Some(snapshot);
 }
@@ -426,6 +451,7 @@ pub fn run() {
             cancel_scan,
             scan_miners,
             parse_import_file,
+            import_file_path,
             remember_snapshot,
         ])
         .run(tauri::generate_context!())

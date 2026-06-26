@@ -51,7 +51,7 @@ pub fn import_file_content(content: &str, filename: Option<&str>) -> Result<Impo
 
     if AntminerDriver::detect(trimmed) {
         return Ok(ImportResult {
-            snapshot: parse_antminer_snapshot(trimmed, "", ""),
+            snapshot: parse_antminer_snapshot(trimmed, "", "", ""),
             source_label: label,
             miner_ip: None,
         });
@@ -105,7 +105,7 @@ fn import_json(trimmed: &str, label: &str) -> Result<ImportResult, MinerPulseErr
 
     if AntminerDriver::detect(trimmed) {
         return Ok(ImportResult {
-            snapshot: parse_antminer_snapshot(trimmed, "", ""),
+            snapshot: parse_antminer_snapshot(trimmed, "", "", ""),
             source_label: label.to_string(),
             miner_ip: None,
         });

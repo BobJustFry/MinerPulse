@@ -77,7 +77,7 @@ pub fn fetch_with_detect(
     host: &str,
     port: u16,
 ) -> Result<MinerSnapshot, MinerPulseError> {
-    for json_mode in [false, true] {
+    for json_mode in [true, false] {
         if let Ok(stats) = client.send_receive(host, port, "stats", "", json_mode) {
             if is_error_response(&stats) {
                 continue;

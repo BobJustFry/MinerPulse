@@ -1,4 +1,7 @@
-use super::json_util::{array_items, first_in_array, json_f64, json_str, json_u64};
+use super::json_util::{
+    array_items, collect_fan_rpms, collect_temp_boards, json_f64, json_hashrate_ghs, json_str,
+    json_u64, merge_stats_objects,
+};
 use super::parse::{get_parameter, parse_f64, parse_u64};
 use super::MinerDriver;
 use crate::error::MinerPulseError;
@@ -8,6 +11,26 @@ use crate::model::{
 };
 use crate::tcp::TcpCgminerClient;
 use serde_json::Value;
+
+const HASHRATE_KEYS: [&str; 8] = [
+    "GHS 5s",
+    "GHS av",
+    "GHS 30m",
+    "GHS 5m",
+    "MHS 5s",
+    "MHS av",
+    "rate_5s",
+    "rate_avg",
+];
+
+const AVG_HASHRATE_KEYS: [&str; 6] = [
+    "GHS av",
+    "GHS 30m",
+    "GHS 5m",
+    "MHS av",
+    "MHS 1m",
+    "rate_avg",
+];
 
 pub struct AntminerDriver;
 
@@ -38,6 +61,10 @@ impl MinerDriver for AntminerDriver {
             .send_receive(host, port, "stats", "", true)
             .or_else(|_| client.send_receive(host, port, "stats", "", false))?;
 
+        let summary = client
+            .send_receive(host, port, "summary", "", true)
+            .unwrap_or_default();
+
         let pools_raw = client
             .send_receive(host, port, "pools", "", true)
             .unwrap_or_default();
@@ -46,7 +73,12 @@ impl MinerDriver for AntminerDriver {
             .send_receive(host, port, "devs", "", true)
             .unwrap_or_default();
 
-        Ok(parse_antminer_snapshot(&stats, &pools_raw, &devs_raw))
+        Ok(parse_antminer_snapshot(
+            &stats,
+            &summary,
+            &pools_raw,
+            &devs_raw,
+        ))
     }
 }
 
@@ -61,10 +93,44 @@ fn detect_antminer_json(raw: &str) -> bool {
         Err(_) => return false,
     };
 
-    first_in_array(&value, "STATS")
-        .and_then(|stats| json_str(stats, "Type"))
-        .map(|kind| kind.contains("Antminer"))
-        .unwrap_or(false)
+    if let Some(merged) = merge_stats_objects(&value) {
+        if json_str(&merged, "Type")
+            .map(|kind| kind.contains("Antminer"))
+            .unwrap_or(false)
+        {
+            return true;
+        }
+        if json_hashrate_ghs(&merged, &HASHRATE_KEYS).is_some() {
+            return true;
+        }
+    }
+
+    if let Some(summary) = merge_summary_objects(&value) {
+        return json_str(&summary, "Type")
+            .map(|kind| kind.contains("Antminer"))
+            .unwrap_or(false)
+            || json_hashrate_ghs(&summary, &HASHRATE_KEYS).is_some();
+    }
+
+    false
+}
+
+fn merge_summary_objects(value: &Value) -> Option<Value> {
+    let items = array_items(value, "SUMMARY")?;
+    let mut merged = serde_json::Map::new();
+    for item in items {
+        let Some(obj) = item.as_object() else {
+            continue;
+        };
+        for (key, val) in obj {
+            merged.insert(key.clone(), val.clone());
+        }
+    }
+    if merged.is_empty() {
+        None
+    } else {
+        Some(Value::Object(merged))
+    }
 }
 
 fn parse_pools_json(raw: &str) -> Vec<PoolInfo> {
@@ -123,9 +189,7 @@ fn parse_antminer_devs(raw: &str) -> (Vec<BoardStats>, Option<u64>) {
             .unwrap_or("Board")
             .to_string();
 
-        let hashrate_ghs = json_f64(dev, "GHS 5s")
-            .or_else(|| json_f64(dev, "GHS av"))
-            .or_else(|| json_f64(dev, "MHS 5s").map(|mhs| mhs / 1000.0));
+        let hashrate_ghs = json_hashrate_ghs(dev, &HASHRATE_KEYS);
 
         boards.push(BoardStats {
             label: if label == "Board" {
@@ -134,7 +198,7 @@ fn parse_antminer_devs(raw: &str) -> (Vec<BoardStats>, Option<u64>) {
                 label
             },
             hashrate_ghs,
-            temp_c: json_f64(dev, "Temperature"),
+            temp_c: json_f64(dev, "Temperature").or_else(|| json_temp_from_dev(dev)),
             fan_rpm: json_u64(dev, "Fan Speed").map(|rpm| rpm as u32),
             status: json_str(dev, "Status").unwrap_or("").to_string(),
         });
@@ -147,7 +211,22 @@ fn parse_antminer_devs(raw: &str) -> (Vec<BoardStats>, Option<u64>) {
     (boards, hw_errors)
 }
 
-pub fn parse_antminer_snapshot(stats_raw: &str, pools_raw: &str, devs_raw: &str) -> MinerSnapshot {
+fn json_temp_from_dev(dev: &Value) -> Option<f64> {
+    for index in 1..=4 {
+        let key = format!("temp{index}");
+        if let Some(value) = json_f64(dev, &key) {
+            return Some(value);
+        }
+    }
+    None
+}
+
+pub fn parse_antminer_snapshot(
+    stats_raw: &str,
+    summary_raw: &str,
+    pools_raw: &str,
+    devs_raw: &str,
+) -> MinerSnapshot {
     let mut snapshot = if stats_raw.trim().starts_with('{') {
         parse_antminer_json(stats_raw, pools_raw).unwrap_or_else(|| {
             parse_antminer_pipe(stats_raw, pools_raw)
@@ -156,9 +235,24 @@ pub fn parse_antminer_snapshot(stats_raw: &str, pools_raw: &str, devs_raw: &str)
         parse_antminer_pipe(stats_raw, pools_raw)
     };
 
+    if summary_raw.trim().starts_with('{') {
+        enrich_from_summary(&mut snapshot, summary_raw);
+    }
+
     let (dev_boards, dev_hw_errors) = parse_antminer_devs(devs_raw);
     if !dev_boards.is_empty() {
         snapshot.boards = dev_boards;
+        if snapshot.hashrate.avg5s_ghs <= 0.0 {
+            let total: f64 = snapshot
+                .boards
+                .iter()
+                .filter_map(|board| board.hashrate_ghs)
+                .sum();
+            if total > 0.0 {
+                snapshot.hashrate.avg5s_ghs = total;
+                snapshot.hashrate.current_ghs = total;
+            }
+        }
     } else if snapshot.boards.is_empty() {
         snapshot.boards = boards_from_vectors(
             &snapshot.hashrate.per_board_ghs,
@@ -171,12 +265,65 @@ pub fn parse_antminer_snapshot(stats_raw: &str, pools_raw: &str, devs_raw: &str)
         snapshot.hw_errors = dev_hw_errors;
     }
 
-    if !devs_raw.is_empty() {
+    if !summary_raw.is_empty() && !snapshot.raw_log.contains("--- summary ---") {
+        snapshot.raw_log.push_str("\n--- summary ---\n");
+        snapshot.raw_log.push_str(summary_raw);
+    }
+    if !devs_raw.is_empty() && !snapshot.raw_log.contains("--- devs ---") {
         snapshot.raw_log.push_str("\n--- devs ---\n");
         snapshot.raw_log.push_str(devs_raw);
     }
 
     snapshot
+}
+
+fn enrich_from_summary(snapshot: &mut MinerSnapshot, summary_raw: &str) {
+    let Ok(value) = serde_json::from_str::<Value>(summary_raw.trim()) else {
+        return;
+    };
+    let Some(summary) = merge_summary_objects(&value) else {
+        return;
+    };
+
+    if snapshot.identity.model.is_empty() || snapshot.identity.model == "Antminer" {
+        if let Some(model) = json_str(&summary, "Type") {
+            snapshot.identity.model = model.to_string();
+        }
+    }
+
+    if snapshot.hashrate.avg5s_ghs <= 0.0 {
+        snapshot.hashrate.avg5s_ghs =
+            json_hashrate_ghs(&summary, &HASHRATE_KEYS).unwrap_or(0.0);
+        snapshot.hashrate.current_ghs = snapshot.hashrate.avg5s_ghs;
+    }
+    if snapshot.hashrate.avg_ghs <= 0.0 {
+        snapshot.hashrate.avg_ghs =
+            json_hashrate_ghs(&summary, &AVG_HASHRATE_KEYS).unwrap_or(0.0);
+    }
+
+    if snapshot.thermal.inlet_c.is_none() {
+        snapshot.thermal.inlet_c = json_temp_c(&summary);
+    }
+    if snapshot.fans.rpm.is_empty() {
+        snapshot.fans.rpm = collect_fan_rpms(&summary);
+    }
+    if snapshot.power.watts.is_none() {
+        snapshot.power.watts = json_f64(&summary, "Power")
+            .or_else(|| json_f64(&summary, "Power Consumption"));
+    }
+    if snapshot.uptime_sec.is_none() {
+        snapshot.uptime_sec = json_u64(&summary, "Elapsed");
+    }
+    if snapshot.shares_accepted.is_none() {
+        snapshot.shares_accepted = json_u64(&summary, "Accepted");
+    }
+    if snapshot.shares_rejected.is_none() {
+        snapshot.shares_rejected = json_u64(&summary, "Rejected");
+    }
+}
+
+fn json_temp_c(obj: &Value) -> Option<f64> {
+    super::json_util::json_temp_c(obj)
 }
 
 fn boards_from_vectors(
@@ -202,47 +349,38 @@ fn boards_from_vectors(
 
 fn parse_antminer_json(stats_raw: &str, pools_raw: &str) -> Option<MinerSnapshot> {
     let value: Value = serde_json::from_str(stats_raw.trim()).ok()?;
-    let stats = first_in_array(&value, "STATS")?;
+    let stats = merge_stats_objects(&value)?;
 
-    let model = json_str(stats, "Type").unwrap_or("Antminer").to_string();
-    let firmware = json_str(stats, "Miner")
-        .or_else(|| json_str(stats, "BMMiner"))
-        .or_else(|| json_str(stats, "CompileTime"))
+    let model = json_str(&stats, "Type").unwrap_or("Antminer").to_string();
+    let firmware = json_str(&stats, "Miner")
+        .or_else(|| json_str(&stats, "BMMiner"))
+        .or_else(|| json_str(&stats, "CompileTime"))
         .unwrap_or("")
         .to_string();
 
     let mut hashrate = HashrateStats::default();
-    hashrate.avg5s_ghs = json_f64(stats, "GHS 5s").unwrap_or(0.0);
-    hashrate.avg_ghs = json_f64(stats, "GHS av")
-        .or_else(|| json_f64(stats, "GHS 30m"))
-        .unwrap_or(0.0);
+    hashrate.avg5s_ghs = json_hashrate_ghs(&stats, &HASHRATE_KEYS).unwrap_or(0.0);
+    hashrate.avg_ghs = json_hashrate_ghs(&stats, &AVG_HASHRATE_KEYS).unwrap_or(0.0);
     hashrate.current_ghs = hashrate.avg5s_ghs;
 
     let mut thermal = ThermalStats::default();
-    thermal.inlet_c = json_f64(stats, "Temperature");
+    thermal.inlet_c = json_temp_c(&stats);
+    thermal.per_board_max_c = collect_temp_boards(&stats);
 
     let mut fans = FanStats::default();
-    if let Some(fan_in) = json_u64(stats, "Fan Speed In") {
-        fans.rpm.push(fan_in as u32);
-    }
-    if let Some(fan_out) = json_u64(stats, "Fan Speed Out") {
-        fans.rpm.push(fan_out as u32);
-    }
-    for index in 1..=4 {
-        let key = format!("Fan{index}");
-        if let Some(rpm) = json_u64(stats, &key) {
-            fans.rpm.push(rpm as u32);
-        }
-    }
+    fans.rpm = collect_fan_rpms(&stats);
 
     let mut power = PowerStats::default();
-    power.watts = json_f64(stats, "Power")
-        .or_else(|| json_f64(stats, "Power Consumption"))
-        .or_else(|| json_f64(stats, "Power Rate"));
-    power.voltage = json_f64(stats, "Voltage");
+    power.watts = json_f64(&stats, "Power")
+        .or_else(|| json_f64(&stats, "Power Consumption"))
+        .or_else(|| json_f64(&stats, "Power Rate"));
+    power.voltage = json_f64(&stats, "Voltage");
 
-    let status = json_str(stats, "Status").unwrap_or("Unknown").to_string();
-    let uptime_sec = json_u64(stats, "Elapsed");
+    let status = json_str(&stats, "Status")
+        .or_else(|| json_str(&stats, "Work"))
+        .unwrap_or("Unknown")
+        .to_string();
+    let uptime_sec = json_u64(&stats, "Elapsed");
 
     let mut raw_log = stats_raw.to_string();
     if !pools_raw.is_empty() {
@@ -263,9 +401,9 @@ fn parse_antminer_json(stats_raw: &str, pools_raw: &str) -> Option<MinerSnapshot
         power,
         boards: Vec::new(),
         pools: parse_pools_json(pools_raw),
-        shares_accepted: json_u64(stats, "Accepted"),
-        shares_rejected: json_u64(stats, "Rejected"),
-        hw_errors: json_u64(stats, "Hardware Errors"),
+        shares_accepted: json_u64(&stats, "Accepted"),
+        shares_rejected: json_u64(&stats, "Rejected"),
+        hw_errors: json_u64(&stats, "Hardware Errors"),
         raw_log,
         status,
         uptime_sec,
@@ -337,13 +475,20 @@ mod tests {
     }
 
     #[test]
-    fn parses_antminer_json_snapshot() {
-        let stats = r#"{"STATS":[{"Type":"Antminer L7","GHS 5s":"9500.00","GHS av":"9400.00","Temperature":65,"Accepted":100,"Rejected":1,"Elapsed":3600}]}"#;
-        let snap = parse_antminer_snapshot(stats, "", "");
+    fn parses_split_stats_entries() {
+        let stats = r#"{"STATS":[{"BMMiner":"1.0.0","Type":"Antminer L7"},{"GHS 5s":9500.0,"GHS av":9400.0,"Temperature":65.0,"Fan Speed In":3200,"Elapsed":3600}]}"#;
+        let snap = parse_antminer_snapshot(stats, "", "", "");
         assert_eq!(snap.identity.model, "Antminer L7");
         assert!((snap.hashrate.avg5s_ghs - 9500.0).abs() < 0.01);
-        assert_eq!(snap.shares_accepted, Some(100));
+        assert_eq!(snap.fans.rpm.len(), 1);
         assert_eq!(snap.uptime_sec, Some(3600));
+    }
+
+    #[test]
+    fn parses_antminer_mhs_fields() {
+        let stats = r#"{"STATS":[{"Type":"Antminer E9","MHS 5s":2400000.0,"MHS av":2380000.0,"Temperature":58.0}]}"#;
+        let snap = parse_antminer_snapshot(stats, "", "", "");
+        assert!((snap.hashrate.avg5s_ghs - 2400.0).abs() < 0.01);
     }
 
     #[test]
