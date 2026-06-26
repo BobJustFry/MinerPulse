@@ -16,6 +16,13 @@ if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
 }
 
 Write-Host ("cargo: " + (cargo --version)) -ForegroundColor DarkGray
+
+# Stop stale dev instances that lock minerpulse-desktop.exe or port 1420
+Get-Process -Name "minerpulse-desktop" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-NetTCPConnection -LocalPort 1420 -ErrorAction SilentlyContinue |
+  ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
+Start-Sleep -Milliseconds 500
+
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location (Join-Path $root "minerpulse-desktop")
 npm run tauri dev
