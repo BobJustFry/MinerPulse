@@ -1,4 +1,4 @@
-use super::antminer::AntminerDriver;
+use super::antminer::{detect_antminer_summary, parse_antminer_snapshot, AntminerDriver};
 use super::avalon::AvalonDriver;
 use super::whatsminer::WhatsminerDriver;
 use super::MinerDriver;
@@ -77,15 +77,53 @@ pub fn fetch_with_detect(
     host: &str,
     port: u16,
 ) -> Result<MinerSnapshot, MinerPulseError> {
+    let mut last_stats = String::new();
+
     for json_mode in [true, false] {
         if let Ok(stats) = client.send_receive(host, port, "stats", "", json_mode) {
             if is_error_response(&stats) {
                 continue;
             }
+            last_stats = stats.clone();
             if let Some(driver) = detect_driver(&stats) {
                 return driver.fetch_snapshot(client, host, port);
             }
         }
+    }
+
+    let summary = client
+        .send_receive(host, port, "summary", "", true)
+        .unwrap_or_default();
+    let pools_raw = client
+        .send_receive(host, port, "pools", "", true)
+        .unwrap_or_default();
+    let devs_raw = client
+        .send_receive(host, port, "devs", "", true)
+        .unwrap_or_default();
+
+    if AntminerDriver::detect(&last_stats)
+        || detect_antminer_summary(&summary)
+        || last_stats.contains("Antminer")
+    {
+        let stats = if last_stats.is_empty() {
+            client
+                .send_receive(host, port, "stats", "", true)
+                .or_else(|_| client.send_receive(host, port, "stats", "", false))
+                .unwrap_or_default()
+        } else {
+            last_stats
+        };
+        return Ok(parse_antminer_snapshot(
+            &stats,
+            &summary,
+            &pools_raw,
+            &devs_raw,
+        ));
+    }
+
+    if WhatsminerDriver::detect(&summary) {
+        let driver = WhatsminerDriver;
+        return driver.fetch_snapshot(client, host, port);
     }
 
     if let Ok(summary) = client.send_payload(host, port, r#"{"cmd":"summary"}"#) {

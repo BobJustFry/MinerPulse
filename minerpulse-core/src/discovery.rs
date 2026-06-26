@@ -1,4 +1,6 @@
+use crate::drivers::antminer::{detect_antminer_summary, AntminerDriver};
 use crate::drivers::registry::{detect_vendor, model_from_stats};
+use crate::drivers::MinerDriver;
 use crate::drivers::whatsminer::classify_whatsminer;
 use crate::model::MinerVendor;
 use crate::tcp::TcpCgminerClient;
@@ -233,6 +235,21 @@ fn probe_miner(client: &TcpCgminerClient, ip: &str, port: u16) -> Option<Discove
     if let Ok(stats) = client.send_receive(ip, port, "stats", "", true) {
         if let Some((vendor, model)) = classify_cgminer_response(&stats) {
             return Some(make_discovered(ip, port, vendor, model));
+        }
+    }
+
+    if let Ok(summary) = client.send_receive(ip, port, "summary", "", true) {
+        if detect_antminer_summary(&summary)
+            || AntminerDriver::detect(&summary)
+            || summary.contains("Antminer")
+        {
+            let model = model_from_stats(&summary);
+            let model = if model.is_empty() {
+                "Antminer".to_string()
+            } else {
+                model
+            };
+            return Some(make_discovered(ip, port, MinerVendor::Antminer, model));
         }
     }
 

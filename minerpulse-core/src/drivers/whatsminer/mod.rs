@@ -83,22 +83,48 @@ pub fn classify_whatsminer(json: &str) -> Option<(MinerVendor, String)> {
         .and_then(|item| item.get("Msg"))
         .and_then(|msg| msg.as_str());
 
+    if value.get("msg").and_then(|msg| msg.get("summary")).is_some() {
+        let model = value
+            .get("msg")
+            .and_then(|msg| msg.get("summary"))
+            .and_then(|summary| {
+                summary
+                    .get("type")
+                    .or_else(|| summary.get("Miner Type"))
+                    .and_then(|v| v.as_str())
+            })
+            .unwrap_or("WhatsMiner")
+            .to_string();
+        return Some((MinerVendor::Whatsminer, model));
+    }
+
+    let summary_item = value.get("SUMMARY").and_then(|s| s.as_array())?.first()?;
+
     let has_summary = value.get("SUMMARY").is_some();
     if !has_summary && status_msg != Some("Summary") {
         return None;
     }
 
-    let model = value
-        .get("SUMMARY")
-        .and_then(|s| s.as_array())
-        .and_then(|items| items.first())
-        .and_then(|item| {
-            item.get("Miner Type")
-                .or_else(|| item.get("Type"))
-                .and_then(|v| v.as_str())
-                .map(str::to_string)
-        })
-        .unwrap_or_else(|| "WhatsMiner".to_string());
+    // CGMiner Antminer summary uses GHS fields; WhatsMiner uses MHS / Miner Type.
+    let miner_type = summary_item
+        .get("Miner Type")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let has_mhs = summary_item.get("MHS 5s").is_some()
+        || summary_item.get("MHS av").is_some()
+        || summary_item.get("MHS 1m").is_some();
+    let has_whatsminer_hash = summary_item.get("hash-realtime").is_some()
+        || summary_item.get("hash-average").is_some();
+
+    if miner_type.is_none() && !has_mhs && !has_whatsminer_hash {
+        return None;
+    }
+
+    if summary_item.get("GHS 5s").is_some() && miner_type.is_none() && !has_mhs {
+        return None;
+    }
+
+    let model = miner_type.unwrap_or_else(|| "WhatsMiner".to_string());
 
     Some((MinerVendor::Whatsminer, model))
 }
@@ -474,6 +500,12 @@ pub fn parse_whatsminer_snapshot(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_antminer_summary_as_whatsminer() {
+        let sample = r#"{"STATUS":[{"Msg":"Summary","STATUS":"S"}],"SUMMARY":[{"GHS 5s":2863.31,"GHS av":3949.71}]}"#;
+        assert!(classify_whatsminer(sample).is_none());
+    }
 
     #[test]
     fn classifies_whatsminer_summary_json() {

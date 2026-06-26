@@ -15,6 +15,10 @@ pub struct ImportResult {
     pub miner_ip: Option<String>,
 }
 
+fn normalize_import_content(content: &str) -> &str {
+    content.trim_start_matches('\u{feff}').trim()
+}
+
 pub fn import_file_content(content: &str, filename: Option<&str>) -> Result<ImportResult, MinerPulseError> {
     if content.len() > MAX_IMPORT_BYTES {
         return Err(MinerPulseError::with_code(
@@ -26,7 +30,7 @@ pub fn import_file_content(content: &str, filename: Option<&str>) -> Result<Impo
         .filter(|name| !name.is_empty())
         .unwrap_or("import.txt")
         .to_string();
-    let trimmed = content.trim();
+    let trimmed = normalize_import_content(content);
 
     if trimmed.is_empty() {
         return Err(MinerPulseError::with_code(
@@ -137,6 +141,7 @@ fn import_json(trimmed: &str, label: &str) -> Result<ImportResult, MinerPulseErr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::drivers::whatsminer::classify_whatsminer;
     use std::fs;
     use std::path::PathBuf;
 
@@ -144,6 +149,30 @@ mod tests {
     fn rejects_oversized_import() {
         let huge = "x".repeat(MAX_IMPORT_BYTES + 1);
         assert!(import_file_content(&huge, Some("big.txt")).is_err());
+    }
+
+    #[test]
+    fn rejects_antminer_summary_as_whatsminer() {
+        let sample = r#"{"STATUS":[{"Msg":"Summary","STATUS":"S"}],"SUMMARY":[{"GHS 5s":2863.31,"GHS av":3949.71}]}"#;
+        assert!(classify_whatsminer(sample).is_none());
+    }
+
+    #[test]
+    fn imports_e9_pro_combined_console_log() {
+        let raw = r#"{"STATUS":[{"STATUS":"S","Msg":"CGMiner stats"}],"STATS":[{"Type":"Antminer E9 Pro"},{"STATS":2,"GHS 5s":2863.31,"GHS av":3949.71,"total_rateideal":3800.0,"miner_count":2,"fan1":5760,"fan2":5760,"fan3":5760,"fan4":5880,"temp1":58,"temp2":59,"temp2_1":74,"temp2_2":74,"temp_in_chip_1":"66-65-74-73","temp_in_chip_2":"66-65-72-72","chain_rate1":1.990750336,"chain_rate2":1.97701632,"chain_acs1":"oooooooo","chain_acs2":"oooooooo","chain_acn1":8,"chain_acn2":8}]}
+--- pools ---
+{"POOLS":[{"URL":"stratum+tcp://gate.emcd.network:7878","User":"subbob.6x2x1","Status":"Alive","Accepted":5207,"Rejected":74}]}
+--- summary ---
+{"SUMMARY":[{"Elapsed":13196,"GHS 5s":2863.31,"GHS av":3949.71,"Accepted":5239,"Rejected":74,"Hardware Errors":2}]}
+--- devs ---
+{"STATUS":[{"STATUS":"E","Msg":"Invalid command"}]}"#;
+        let result = import_file_content(raw, Some("e9.txt")).expect("import");
+        assert_eq!(result.snapshot.identity.model, "Antminer E9 Pro");
+        assert_eq!(result.snapshot.boards.len(), 2);
+        assert_eq!(result.snapshot.fans.rpm.len(), 4);
+        assert_eq!(result.snapshot.pools.len(), 1);
+        assert_eq!(result.snapshot.hw_errors, Some(2));
+        assert!((result.snapshot.hashrate.avg5s_ghs - 2.86331).abs() < 0.01);
     }
 
     #[test]

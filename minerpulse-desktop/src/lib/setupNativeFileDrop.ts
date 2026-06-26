@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ParseImportResponse } from "$lib/importFile";
 
 export async function setupNativeFileDrop(handlers: {
@@ -9,9 +9,9 @@ export async function setupNativeFileDrop(handlers: {
   onError: (message: string) => void;
   onTooLarge: () => void;
 }): Promise<() => void> {
-  const webview = getCurrentWebview();
+  const window = getCurrentWindow();
 
-  const unlisten = await webview.onDragDropEvent(async (event) => {
+  const unlisten = await window.onDragDropEvent(async (event) => {
     const payload = event.payload;
 
     if (payload.type === "enter" || payload.type === "over") {

@@ -219,6 +219,31 @@ fn json_temp_from_dev(dev: &Value) -> Option<f64> {
     None
 }
 
+pub fn detect_antminer_summary(raw: &str) -> bool {
+    let trimmed = raw.trim();
+    if !trimmed.starts_with('{') {
+        return false;
+    }
+
+    let value: Value = match serde_json::from_str(trimmed) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    let Some(summary) = merge_summary_objects(&value) else {
+        return false;
+    };
+
+    if json_str(&summary, "Type")
+        .map(|kind| kind.contains("Antminer"))
+        .unwrap_or(false)
+    {
+        return true;
+    }
+
+    json_f64(&summary, "GHS 5s").is_some() && json_str(&summary, "Miner Type").is_none()
+}
+
 pub fn split_antminer_log(raw: &str) -> (String, String, String, String) {
     let mut stats = String::new();
     let mut summary = String::new();

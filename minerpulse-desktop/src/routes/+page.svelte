@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
-  import { save, ask } from "@tauri-apps/plugin-dialog";
+  import { save, ask, open } from "@tauri-apps/plugin-dialog";
   import { check } from "@tauri-apps/plugin-updater";
   import { relaunch } from "@tauri-apps/plugin-process";
   import { onMount } from "svelte";
@@ -204,6 +204,32 @@
     await refreshEntitlements();
   }
 
+  async function importFromFile() {
+    const path = await open({
+      multiple: false,
+      filters: [
+        {
+          name: "Miner logs",
+          extensions: ["txt", "log", "json", "mpulse"],
+        },
+      ],
+    });
+
+    if (!path || Array.isArray(path)) return;
+
+    busy = true;
+    statusText = msg("import.opening");
+    try {
+      const result = await invoke<ParseImportResponse>("import_file_path", { path });
+      const fileName = path.split(/[/\\]/).pop() ?? path;
+      await applyImportedSnapshot(result, fileName);
+    } catch (err) {
+      statusText = formatError(err);
+    } finally {
+      busy = false;
+    }
+  }
+
   async function applyImportedSnapshot(result: ParseImportResponse, fileName: string) {
     const confirmed = await ask(
       msg("import.openPrompt", {
@@ -298,7 +324,7 @@
           dropActive = false;
           statusText = msg("import.tooLarge");
         },
-      });
+      }).catch(() => undefined);
     })();
 
     return () => {
@@ -350,6 +376,10 @@
         {msg("toolbar.read")}
       </button>
     {/if}
+
+    <button class="btn" disabled={busy} onclick={importFromFile}>
+      {msg("toolbar.open")}
+    </button>
 
     <button class="btn" disabled={!snapshot || busy} onclick={saveSnapshot}>
       {msg("toolbar.save")}

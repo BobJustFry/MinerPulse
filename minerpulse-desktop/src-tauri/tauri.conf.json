@@ -13,11 +13,12 @@
     "windows": [
       {
         "label": "main",
-        "title": "MinerPulse 1.0.0 (build 18)",
+        "title": "MinerPulse 1.0.0 (build 19)",
         "width": 1180,
         "height": 760,
         "minWidth": 960,
-        "minHeight": 600
+        "minHeight": 600,
+        "dragDropEnabled": true
       }
     ],
     "security": {
