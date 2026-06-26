@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 struct AppState {
     rate_limiter: Mutex<RateLimiter>,
     tier: Mutex<SubscriptionTier>,
@@ -120,6 +120,36 @@ fn list_scan_subnets() -> Vec<ScanSubnet> {
 }
 
 #[tauri::command]
+async fn open_scan_window(app: AppHandle) -> Result<(), ErrorResponse> {
+    const LABEL: &str = "scan";
+
+    if let Some(window) = app.get_webview_window(LABEL) {
+        window.show().map_err(|_| ErrorResponse {
+            code: minerpulse_core::ErrorCode::IoError,
+            args: None,
+        })?;
+        window.set_focus().map_err(|_| ErrorResponse {
+            code: minerpulse_core::ErrorCode::IoError,
+            args: None,
+        })?;
+        return Ok(());
+    }
+
+    WebviewWindowBuilder::new(&app, LABEL, WebviewUrl::App("/scan".into()))
+        .title("MinerPulse — Scan")
+        .inner_size(540.0, 680.0)
+        .min_inner_size(420.0, 480.0)
+        .center()
+        .build()
+        .map_err(|_| ErrorResponse {
+            code: minerpulse_core::ErrorCode::IoError,
+            args: None,
+        })?;
+
+    Ok(())
+}
+
+#[tauri::command]
 async fn scan_miners(request: ScanRequest) -> Result<ScanResult, ErrorResponse> {
     tauri::async_runtime::spawn_blocking(move || scan_network(request))
         .await
@@ -177,6 +207,7 @@ pub fn run() {
             save_snapshot_file,
             get_app_version,
             list_scan_subnets,
+            open_scan_window,
             scan_miners,
         ])
         .run(tauri::generate_context!())

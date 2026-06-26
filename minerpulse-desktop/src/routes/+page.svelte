@@ -87,10 +87,12 @@
   }
 
   async function openScan() {
+    statusText = msg("scan.opening");
     try {
       await openScanWindow();
+      statusText = msg("status.ready");
     } catch (err) {
-      statusText = String(err);
+      statusText = formatError(err);
     }
   }
 

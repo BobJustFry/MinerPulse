@@ -27,6 +27,7 @@
   "scan.from": "从",
   "scan.to": "到",
   "scan.hint": "选择子网并开始扫描",
+  "scan.opening": "正在打开搜索窗口…",
   "scan.pickHint": "点击矿机可将 IP 填入主窗口",
   "scan.close": "关闭",
   "scan.noMiners": "在所扫描子网中未发现矿机。请检查网络、4028 端口及 WhatsMiner API。",

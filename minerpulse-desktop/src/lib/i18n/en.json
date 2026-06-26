@@ -27,6 +27,7 @@
   "scan.from": "From",
   "scan.to": "To",
   "scan.hint": "Select a subnet and start scanning",
+  "scan.opening": "Opening scan window…",
   "scan.pickHint": "Click a miner to apply its IP in the main window",
   "scan.close": "Close",
   "scan.noMiners": "No miners found in the scanned subnet. Check network, port 4028, and WhatsMiner API.",
