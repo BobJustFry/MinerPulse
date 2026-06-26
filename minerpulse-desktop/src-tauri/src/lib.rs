@@ -123,8 +123,13 @@ struct AppVersionInfo {
 
 #[tauri::command]
 fn get_app_version() -> AppVersionInfo {
-    let meta: Value = serde_json::from_str(env!("MINERPULSE_VERSION_JSON"))
-        .expect("invalid MINERPULSE_VERSION_JSON");
+    let meta = serde_json::from_str::<Value>(env!("MINERPULSE_VERSION_JSON")).unwrap_or_else(|_| {
+        serde_json::json!({
+            "version": "0.0.0",
+            "build": 0,
+            "product": "MinerPulse"
+        })
+    });
     let version = meta["version"].as_str().unwrap_or("0.0.0").to_string();
     let build = meta["build"].as_u64().unwrap_or(0) as u32;
     let product = meta["product"].as_str().unwrap_or("MinerPulse").to_string();
