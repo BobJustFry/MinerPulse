@@ -1,0 +1,21 @@
+# MinerPulse signing key — NEVER COMMIT
+.tauri/*.key
+.env
+.env.*
+
+# Legacy reference (not part of public product)
+OldProject/
+
+# Build
+/target/
+**/node_modules/
+**/.svelte-kit/
+**/build/
+
+# IDE
+**/.vs/
+*.log
+
+# OS
+**/.DS_Store
+Thumbs.db

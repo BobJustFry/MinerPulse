@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "build": 1,
+  "notes": "MinerPulse 1.0.0 initial release.",
+  "pub_date": "2026-06-26T00:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "REPLACE_WITH_TAURI_SIGNER_OUTPUT_AFTER_FIRST_RELEASE",
+      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.0-build1/MinerPulse_1.0.0_x64-setup.exe"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+[package]
+name = "minerpulse-core"
+version = "1.0.0"
+edition = "2021"
+description = "MinerPulse core: miner drivers, TCP, snapshots, logs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+chrono = { version = "0.4", features = ["serde"] }

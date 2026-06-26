@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "minerpulse-core",
+    "minerpulse-desktop/src-tauri",
+]
+resolver = "2"
