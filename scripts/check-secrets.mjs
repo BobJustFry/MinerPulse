@@ -13,12 +13,15 @@ const scanAll = process.argv.includes("--all");
 
 const forbiddenPaths = [
   /^\.tauri\/.*\.key$/,
-  /^\.env(\.|$)/,
+  /^\.env$/,
+  /^\.env\.(?!example)/,
   /\.(pem|p12|pfx)$/i,
   /^Documents\//,
   /^OldProject\//,
   /^\.cursor\//,
 ];
+
+const skipPatternScan = new Set(["scripts/check-secrets.mjs"]);
 
 const patterns = [
   { name: "GitHub PAT", re: /ghp_[A-Za-z0-9]{20,}/ },
@@ -73,6 +76,8 @@ for (const rel of files) {
   } catch {
     continue;
   }
+
+  if (skipPatternScan.has(rel.replace(/\\/g, "/"))) continue;
 
   for (const { name, re } of patterns) {
     if (re.test(text)) {
