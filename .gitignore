@@ -19,6 +19,9 @@ secrets.json
 Documents/
 OldProject/
 
+# IDE / editor (local only — not published)
+.cursor/
+
 # Build
 /target/
 **/node_modules/

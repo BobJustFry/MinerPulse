@@ -17,6 +17,7 @@ const forbiddenPaths = [
   /\.(pem|p12|pfx)$/i,
   /^Documents\//,
   /^OldProject\//,
+  /^\.cursor\//,
 ];
 
 const patterns = [

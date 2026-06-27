@@ -126,7 +126,7 @@ npm run dev:app
 | Версия `X.Y.Z` | `VERSION.json` | Меняется **только с одобрения владельца** |
 | Сборка `BBB` | `VERSION.json` | `node scripts/bump-build.mjs` после каждого изменения |
 
-Подробнее: [.cursor/rules/minerpulse-strict.mdc](.cursor/rules/minerpulse-strict.mdc) · [REPOSITORY.md](REPOSITORY.md) · [LICENSING.md](LICENSING.md) · [LICENSE](LICENSE)
+Подробнее: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · [REPOSITORY.md](REPOSITORY.md) · [LICENSING.md](LICENSING.md) · [LICENSE](LICENSE)
 
 ## Лицензия и использование
 
