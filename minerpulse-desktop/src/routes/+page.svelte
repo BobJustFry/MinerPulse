@@ -56,9 +56,9 @@
   let busy = $state(false);
   let statusText = $state("");
   let snapshot = $state<MinerSnapshot | null>(null);
-  let appVersion = $state("Miner Pulse 1.0.1 (25)");
+  let appVersion = $state("Miner Pulse 1.0.1 (26)");
   let appVersionNumber = $state("1.0.1");
-  let appBuild = $state(25);
+  let appBuild = $state(26);
   let appProduct = $state("Miner Pulse");
   let aboutOpen = $state(false);
   let connectionLoaded = $state(false);
