@@ -1,0 +1,25 @@
+# Exclude proprietary source from GitHub auto-generated release zip/tar archives.
+# Download MinerPulse_*_x64-setup.exe from Releases — source is not distributed via archives.
+
+/assets export-ignore
+/docs export-ignore
+/minerpulse-core export-ignore
+/minerpulse-desktop export-ignore
+/scripts export-ignore
+/.github export-ignore
+/Documents export-ignore
+/OldProject export-ignore
+/releases export-ignore
+/target export-ignore
+/.cursor export-ignore
+/.tauri export-ignore
+
+Cargo.toml export-ignore
+Cargo.lock export-ignore
+.env.example export-ignore
+README.md export-ignore
+REPOSITORY.md export-ignore
+SECURITY.md export-ignore
+VERSION.json export-ignore
+.gitignore export-ignore
+.gitattributes export-ignore

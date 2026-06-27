@@ -101,16 +101,6 @@
 
 > Версия и номер сборки отображаются в заголовке окна: `Miner Pulse X.Y.Z (BBB)`.
 
-## Поддержать проект
-
-Разработка ведётся в свободное время. Если Miner Pulse помогает вам в работе — можно поблагодарить:
-
-```
-USDT TRC20: TAQLsXQA7WzNfoCTHvXxj8yFBXTJRKz99w
-```
-
-Тот же адрес указан в приложении: **О программе → Поддержать проект**.
-
 ## Для разработчиков
 
 **Windows:**
@@ -156,6 +146,16 @@ scripts/               bump build / sync version
 - **GitHub:** [BobJustFry/MinerPulse](https://github.com/BobJustFry/MinerPulse)
 - **Telegram:** [@miner_pulse](https://t.me/miner_pulse)
 - **Разработчик:** Bobrov Andrey
+
+## Поддержать проект
+
+Разработка ведётся в свободное время. Если Miner Pulse помогает вам в работе — можно поблагодарить:
+
+```
+USDT TRC20: TAQLsXQA7WzNfoCTHvXxj8yFBXTJRKz99w
+```
+
+Тот же адрес указан в приложении: **О программе → Поддержать проект**.
 
 ---
 

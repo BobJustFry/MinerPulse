@@ -1,0 +1,7 @@
+Miner Pulse — proprietary software (© Bobrov Andrey / BobJustFry).
+
+Source code is not distributed via GitHub release archives.
+Download the signed Windows installer from the Releases page:
+https://github.com/BobJustFry/MinerPulse/releases/latest
+
+Licensing: see LICENSE and LICENSING.md in this repository.
