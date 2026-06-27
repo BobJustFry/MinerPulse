@@ -2,9 +2,9 @@ use minerpulse_core::drivers::registry::fetch_with_detect;
 use minerpulse_core::{
     import_file_content, list_scan_subnets as discover_subnets, load_mpulse, save_session,
     save_snapshot, scan_network, scan_network_streaming, EntitlementGate, ErrorResponse,
-    MinerPulseError, MinerSnapshot, MpulseFile, RateLimiter, ScanRequest, ScanResult, ScanSubnet,
-    SubscriptionTier, TcpCgminerClient, MAX_SESSION_DURATION_SEC,
-    normalize_poll_rate_hz, poll_interval_ms, poll_wait_after_tick,
+    FetchOptions, MinerPulseError, MinerSnapshot, MpulseFile, RateLimiter, ScanRequest,
+    ScanResult, ScanSubnet, SubscriptionTier, TcpCgminerClient, WhatsminerLuciAuth,
+    MAX_SESSION_DURATION_SEC, normalize_poll_rate_hz, poll_interval_ms, poll_wait_after_tick,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -89,9 +89,28 @@ struct AppState {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+struct WhatsminerAuthRequest {
+    #[serde(default)]
+    username: String,
+    #[serde(default)]
+    password: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct ReadMinerRequest {
     ip: String,
     port: Option<u16>,
+    #[serde(default)]
+    whatsminer_auth: Option<WhatsminerAuthRequest>,
+}
+
+fn fetch_options_from_request(auth: Option<WhatsminerAuthRequest>) -> FetchOptions {
+    FetchOptions {
+        whatsminer_luci: auth.map(|value| WhatsminerLuciAuth {
+            username: value.username,
+            password: value.password,
+        }),
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -207,8 +226,20 @@ fn get_entitlements(state: State<'_, AppState>) -> EntitlementsResponse {
 }
 
 #[tauri::command]
-fn set_tier(state: State<'_, AppState>, tier: SubscriptionTier) {
-    *state.tier.lock().unwrap() = tier;
+fn set_tier(state: State<'_, AppState>, tier: SubscriptionTier) -> Result<(), ErrorResponse> {
+    #[cfg(not(debug_assertions))]
+    {
+        let _ = (state, tier);
+        return Err(ErrorResponse {
+            code: minerpulse_core::ErrorCode::NotSupported,
+            args: None,
+        });
+    }
+    #[cfg(debug_assertions)]
+    {
+        *state.tier.lock().unwrap() = tier;
+        Ok(())
+    }
 }
 
 #[tauri::command]
@@ -228,8 +259,9 @@ fn read_miner(
 
     let port = request.port.unwrap_or(4028);
     let client = TcpCgminerClient::default();
+    let options = fetch_options_from_request(request.whatsminer_auth);
     let snapshot =
-        fetch_with_detect(&client, &request.ip, port).map_err(|e| ErrorResponse::from(&e))?;
+        fetch_with_detect(&client, &request.ip, port, &options).map_err(|e| ErrorResponse::from(&e))?;
 
     *state.last_snapshot.lock().unwrap() = Some(snapshot.clone());
 
@@ -242,6 +274,8 @@ struct StartPollRequest {
     port: Option<u16>,
     poll_rate_hz: Option<u32>,
     record_path: Option<String>,
+    #[serde(default)]
+    whatsminer_auth: Option<WhatsminerAuthRequest>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -301,6 +335,7 @@ async fn start_poll(
     let port = request.port.unwrap_or(4028);
     let poll_rate_hz = normalize_poll_rate_hz(request.poll_rate_hz);
     let record_path = request.record_path.map(PathBuf::from);
+    let fetch_options = fetch_options_from_request(request.whatsminer_auth);
     let cancel = Arc::clone(&state.poll.cancel);
     let app_for_poll = app.clone();
 
@@ -315,6 +350,7 @@ async fn start_poll(
                 recording,
                 record_path,
                 cancel,
+                fetch_options,
             )
         })
         .await;
@@ -348,6 +384,7 @@ fn run_poll_loop(
     recording: bool,
     record_path: Option<PathBuf>,
     cancel: Arc<AtomicBool>,
+    fetch_options: FetchOptions,
 ) {
     let client = TcpCgminerClient::default();
     let started = Instant::now();
@@ -376,7 +413,7 @@ fn run_poll_loop(
 
         let tick_start = Instant::now();
 
-        match fetch_with_detect(&client, ip, port) {
+        match fetch_with_detect(&client, ip, port, &fetch_options) {
             Ok(snapshot) => {
                 let t_ms = started.elapsed().as_millis() as u64;
                 if let Some(session) = session.as_mut() {

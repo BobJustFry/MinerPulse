@@ -2,6 +2,22 @@
 .tauri/*.key
 .env
 .env.*
+!.env.example
+
+# Credentials and certificates
+*.pem
+*.p12
+*.pfx
+*.cer
+*.crt
+credentials.json
+secrets.json
+**/secrets/
+**/*-secrets.json
+
+# Local-only reference material (API PDFs, old prototypes)
+Documents/
+OldProject/
 
 # Build
 /target/

@@ -49,6 +49,28 @@ Unauthorized forks, mirrors, republished code, or derivative products may be rep
 - Private signing key — `.tauri/minerpulse.key` (gitignored)
 - `minerpulse-api` / `minerpulse-admin` — planned; may live in separate repos
 
+## Future: private components (encryption & API keys)
+
+The following must **not** live in the public GitHub tree when implemented:
+
+| Secret / logic | Where it belongs |
+|----------------|------------------|
+| Production API keys | Server env / GitHub Actions Secrets |
+| JWT signing **private** key | `minerpulse-api` (private) only |
+| License / entitlement crypto | Private crate or server-side validation |
+| Stripe / payment webhooks | Private backend only |
+| Customer database credentials | Private infra only |
+
+Public repo may contain:
+
+- Client UI and open driver scaffolding
+- **Public** JWT verify key (when added) — never the signing private key
+- Updater **public** pubkey (already in `tauri.conf.json`)
+
+Local development: copy [.env.example](.env.example) → `.env` (gitignored).
+
+Run `node scripts/check-secrets.mjs --all` before every push.
+
 ## If you need stronger technical protection
 
 1. Make the repo **private** and publish **releases only** (binaries + update.json via public raw URL).

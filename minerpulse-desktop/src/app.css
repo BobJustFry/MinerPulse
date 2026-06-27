@@ -277,6 +277,14 @@ button {
   user-select: none;
 }
 
+.whatsminer-auth-field input.wm-user {
+  width: 72px;
+}
+
+.whatsminer-auth-field input.wm-pass {
+  width: 72px;
+}
+
 .ip-field {
   position: relative;
 }
@@ -1628,6 +1636,15 @@ button {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
+}
+
+.tier-badge-static {
+  cursor: default;
+  opacity: 0.95;
+}
+
+.tier-badge-static:disabled {
+  color: inherit;
 }
 
 .spacer {

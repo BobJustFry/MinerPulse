@@ -30,9 +30,12 @@ alwaysApply: true
 ## Security and licensing
 
 - **Never** weaken entitlement checks client-side only; subscription tier must remain enforceable server-side.
+- **Never** expose `set_tier` or dev-only license bypass in release builds.
 - **Never** remove or bypass updater signature verification.
+- **Never** commit secrets — run `node scripts/check-secrets.mjs --all` before push; see [SECURITY.md](../SECURITY.md).
+- **Never** add production API keys, JWT signing private keys, or proprietary encryption to the public tree — use private repos / server / GitHub Secrets.
 - **Never** add code that exfiltrates user data without documented consent.
-- **Never** paste unreviewed third-party or local-only reference code into the public tree.
+- **Never** paste unreviewed third-party or local-only reference code into the public tree (`Documents/`, `OldProject/` stay gitignored).
 
 ## Forbidden actions (AI agents)
 

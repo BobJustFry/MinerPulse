@@ -53,6 +53,8 @@
   let activeTab = $state<TabId>("data");
   let ip = $state("192.168.0.100");
   let port = $state("4028");
+  let whatsminerUser = $state("root");
+  let whatsminerPassword = $state("root");
   let busy = $state(false);
   let statusText = $state("");
   let snapshot = $state<MinerSnapshot | null>(null);
@@ -165,20 +167,37 @@
     );
   }
 
+  function whatsminerAuthPayload() {
+    return {
+      username: whatsminerUser.trim(),
+      password: whatsminerPassword,
+    };
+  }
+
   function loadConnection() {
     const saved = localStorage.getItem(CONNECTION_KEY);
     if (!saved) return;
     try {
-      const parsed = JSON.parse(saved) as { ip?: string; port?: string | number };
+      const parsed = JSON.parse(saved) as {
+        ip?: string;
+        port?: string | number;
+        whatsminerUser?: string;
+        whatsminerPassword?: string;
+      };
       ip = parsed.ip ?? ip;
       port = String(parsed.port ?? port);
+      whatsminerUser = parsed.whatsminerUser ?? whatsminerUser;
+      whatsminerPassword = parsed.whatsminerPassword ?? whatsminerPassword;
     } catch {
       /* ignore */
     }
   }
 
   function saveConnection() {
-    localStorage.setItem(CONNECTION_KEY, JSON.stringify({ ip, port }));
+    localStorage.setItem(
+      CONNECTION_KEY,
+      JSON.stringify({ ip, port, whatsminerUser, whatsminerPassword }),
+    );
   }
 
   function tabLabel(tab: TabId) {
@@ -246,7 +265,11 @@
     statusText = msg("status.reading");
     try {
       const response = await invoke<{ snapshot: MinerSnapshot }>("read_miner", {
-        request: { ip, port: Number(port) || 4028 },
+        request: {
+          ip,
+          port: Number(port) || 4028,
+          whatsminer_auth: whatsminerAuthPayload(),
+        },
       });
       snapshot = response.snapshot;
       clearCharts();
@@ -365,6 +388,7 @@
         port: Number(port) || 4028,
         recordPath,
         pollRateHz,
+        whatsminerAuth: whatsminerAuthPayload(),
       });
       polling = true;
       recording = record;
@@ -706,6 +730,8 @@
     if (!connectionLoaded) return;
     ip;
     port;
+    whatsminerUser;
+    whatsminerPassword;
     saveConnection();
   });
 
@@ -780,6 +806,26 @@
       <button class="btn" disabled={connectionLocked} onclick={openScan}>
         {msg("toolbar.scan")}
       </button>
+    </div>
+
+    <div class="field whatsminer-auth-field">
+      <label for="wm-user">{msg("toolbar.whatsminerUser")}</label>
+      <input
+        id="wm-user"
+        class="wm-user"
+        bind:value={whatsminerUser}
+        disabled={connectionLocked}
+        autocomplete="username"
+      />
+      <label for="wm-pass">{msg("toolbar.whatsminerPassword")}</label>
+      <input
+        id="wm-pass"
+        class="wm-pass"
+        type="password"
+        bind:value={whatsminerPassword}
+        disabled={connectionLocked}
+        autocomplete="current-password"
+      />
     </div>
 
     {#if entitlements.can_poll}
@@ -932,8 +978,11 @@
     <button
       class="tier-badge"
       class:service={entitlements.tier === "service"}
-      onclick={cycleTier}
-      title="Dev: cycle tier"
+      class:tier-badge-static={!import.meta.env.DEV}
+      onclick={import.meta.env.DEV ? cycleTier : undefined}
+      title={import.meta.env.DEV ? "Dev: cycle tier" : tierLabel(entitlements.tier)}
+      disabled={!import.meta.env.DEV}
+      type="button"
     >
       {tierLabel(entitlements.tier)}
     </button>
