@@ -1,11 +1,11 @@
 {
   "version": "1.0.1",
-  "build": 40,
-  "notes": "Miner Pulse 1.0.1 (40) — WhatsMiner chip maps, fast poll, LuCI auth modal, modal centering.",
-  "pub_date": "2026-06-27T12:01:14Z",
+  "build": 42,
+  "notes": "Miner Pulse 1.0.1 (42) — WhatsMiner chip maps, fast poll, LuCI auth; release archives exclude source code.",
+  "pub_date": "2026-06-27T12:12:22Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRFk4MCt1UUFEZVgrUnFPczlxTXl3WVMwZDdGMkJ6U1B2Uit4eG9NRGlwazE1OXZZK3h2SFdYd2RhRG5mTlpFSlBaUEtTNDBjenFKUjVrVEorQmsyNmdVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNTYxNjY5CWZpbGU6TWluZXJQdWxzZV8xLjAuMV94NjQtc2V0dXAuZXhlCnRqanIrSTQ3OXozdjJ2SXNxZ3BIZ25SMjJSdjRseU42THoyeDBWY3hvdUtsWmxUckY5WmxtNWNpNGU2V2UxL2FKak0rVGhHc1pEMmU1UXN0TGM2MkFBPT0K",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRFYvdVZKbjc4SGZJZ1c3YkxGL2M4MjdoNXNiSHZoMlVLOWdtdkpXN1A0T25ZRE94OG00c0grTmJOZFpNa01NbjVTcjk4RmVVS0FRaVArWXV6WEEwdFF3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNTYyMzQyCWZpbGU6TWluZXJQdWxzZV8xLjAuMV94NjQtc2V0dXAuZXhlCmVUdDJ0QTBWeUd6Ry9BVWwvVWl1S3ZBbG1zWHJoS2V4VCtTT1VGN3VLeEs2YmdqRVhxL1dOK0JtTEwrdGFUT1ppNklxUVQ0NnNGbnVGUGhNdGlxd0FRPT0K",
       "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build40/MinerPulse_1.0.1_x64-setup.exe"
     }
   }
