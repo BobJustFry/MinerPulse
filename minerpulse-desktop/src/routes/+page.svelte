@@ -4,6 +4,7 @@
   import { save, open } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
   import AboutModal from "$lib/components/AboutModal.svelte";
+  import WhatsminerAuthModal from "$lib/components/WhatsminerAuthModal.svelte";
   import WindowCaption from "$lib/components/WindowCaption.svelte";
   import { locales, t, type Locale, type MessageKey } from "$lib/i18n";
   import { openScanWindow } from "$lib/openScanWindow";
@@ -53,8 +54,14 @@
   let activeTab = $state<TabId>("data");
   let ip = $state("192.168.0.100");
   let port = $state("4028");
-  let whatsminerUser = $state("root");
-  let whatsminerPassword = $state("root");
+  let whatsminerUser = $state("");
+  let whatsminerPassword = $state("");
+  let whatsminerCustomAuth = $state(false);
+  let whatsminerAuthOpen = $state(false);
+  let whatsminerAuthError = $state("");
+  let whatsminerAuthBusy = $state(false);
+  let whatsminerAuthPrompted = $state(false);
+  let pendingAuthRetry = $state<(() => Promise<void>) | null>(null);
   let busy = $state(false);
   let statusText = $state("");
   let snapshot = $state<MinerSnapshot | null>(null);
@@ -167,11 +174,30 @@
     );
   }
 
-  function whatsminerAuthPayload() {
-    return {
-      username: whatsminerUser.trim(),
-      password: whatsminerPassword,
-    };
+  function whatsminerAuthPayload(): { username: string; password: string } | null {
+    if (!whatsminerCustomAuth) return null;
+    const username = whatsminerUser.trim();
+    if (!username) return null;
+    return { username, password: whatsminerPassword };
+  }
+
+  function isDefaultWhatsminerCredentials(user: string, pass: string) {
+    return (user === "admin" && pass === "admin") || (user === "root" && pass === "root");
+  }
+
+  function shouldPromptWhatsminerAuth(nextSnapshot: MinerSnapshot) {
+    return (
+      nextSnapshot.identity.vendor === "whatsminer" &&
+      (nextSnapshot.board_chips?.length ?? 0) === 0 &&
+      !whatsminerAuthPrompted
+    );
+  }
+
+  function promptWhatsminerAuth(retry?: () => Promise<void>) {
+    whatsminerAuthPrompted = true;
+    pendingAuthRetry = retry ?? null;
+    whatsminerAuthError = "";
+    whatsminerAuthOpen = true;
   }
 
   function loadConnection() {
@@ -186,18 +212,30 @@
       };
       ip = parsed.ip ?? ip;
       port = String(parsed.port ?? port);
-      whatsminerUser = parsed.whatsminerUser ?? whatsminerUser;
-      whatsminerPassword = parsed.whatsminerPassword ?? whatsminerPassword;
+      const savedUser = parsed.whatsminerUser?.trim() ?? "";
+      const savedPass = parsed.whatsminerPassword ?? "";
+      if (savedUser && !isDefaultWhatsminerCredentials(savedUser, savedPass)) {
+        whatsminerUser = savedUser;
+        whatsminerPassword = savedPass;
+        whatsminerCustomAuth = true;
+      }
     } catch {
       /* ignore */
     }
   }
 
   function saveConnection() {
-    localStorage.setItem(
-      CONNECTION_KEY,
-      JSON.stringify({ ip, port, whatsminerUser, whatsminerPassword }),
-    );
+    const payload: {
+      ip: string;
+      port: string;
+      whatsminerUser?: string;
+      whatsminerPassword?: string;
+    } = { ip, port: String(port) };
+    if (whatsminerCustomAuth) {
+      payload.whatsminerUser = whatsminerUser.trim();
+      payload.whatsminerPassword = whatsminerPassword;
+    }
+    localStorage.setItem(CONNECTION_KEY, JSON.stringify(payload));
   }
 
   function tabLabel(tab: TabId) {
@@ -275,12 +313,53 @@
       clearCharts();
       pushChartPoint(response.snapshot, 0);
       statusText = `${snapshot.identity.model} · ${snapshot.status}`;
+      if (shouldPromptWhatsminerAuth(response.snapshot)) {
+        promptWhatsminerAuth();
+        return;
+      }
     } catch (err) {
       snapshot = null;
       statusText = formatError(err);
     } finally {
       busy = false;
       connectionLocked = false;
+    }
+  }
+
+  async function submitWhatsminerAuth() {
+    const username = whatsminerUser.trim();
+    if (!username) return;
+    whatsminerAuthBusy = true;
+    whatsminerAuthError = "";
+    try {
+      const response = await invoke<{ snapshot: MinerSnapshot }>("read_miner", {
+        request: {
+          ip,
+          port: Number(port) || 4028,
+          whatsminer_auth: { username, password: whatsminerPassword },
+        },
+      });
+      if ((response.snapshot.board_chips?.length ?? 0) === 0) {
+        whatsminerAuthError = msg("auth.invalid");
+        return;
+      }
+      whatsminerCustomAuth = true;
+      saveConnection();
+      snapshot = response.snapshot;
+      clearCharts();
+      pushChartPoint(response.snapshot, 0);
+      statusText = `${snapshot.identity.model} · ${snapshot.status}`;
+      whatsminerAuthOpen = false;
+      whatsminerAuthError = "";
+      const retry = pendingAuthRetry;
+      pendingAuthRetry = null;
+      if (retry) {
+        await retry();
+      }
+    } catch (err) {
+      whatsminerAuthError = formatError(err);
+    } finally {
+      whatsminerAuthBusy = false;
     }
   }
 
@@ -687,6 +766,16 @@
         statusText = event.payload.recording
           ? msg("status.recording", { frame: pollFrame })
           : msg("status.polling", { frame: pollFrame });
+        if (
+          event.payload.frame_index === 0 &&
+          shouldPromptWhatsminerAuth(event.payload.snapshot)
+        ) {
+          void (async () => {
+            const wasRecording = event.payload.recording;
+            await stopPoll();
+            promptWhatsminerAuth(() => startPolling(wasRecording));
+          })();
+        }
       });
 
       unlistenPollFinished = await listen<PollFinishedEvent>("poll://finished", (event) => {
@@ -729,9 +818,16 @@
   $effect(() => {
     if (!connectionLoaded) return;
     ip;
+    whatsminerAuthPrompted = false;
+  });
+
+  $effect(() => {
+    if (!connectionLoaded) return;
+    ip;
     port;
     whatsminerUser;
     whatsminerPassword;
+    whatsminerCustomAuth;
     saveConnection();
   });
 
@@ -806,26 +902,6 @@
       <button class="btn" disabled={connectionLocked} onclick={openScan}>
         {msg("toolbar.scan")}
       </button>
-    </div>
-
-    <div class="field whatsminer-auth-field">
-      <label for="wm-user">{msg("toolbar.whatsminerUser")}</label>
-      <input
-        id="wm-user"
-        class="wm-user"
-        bind:value={whatsminerUser}
-        disabled={connectionLocked}
-        autocomplete="username"
-      />
-      <label for="wm-pass">{msg("toolbar.whatsminerPassword")}</label>
-      <input
-        id="wm-pass"
-        class="wm-pass"
-        type="password"
-        bind:value={whatsminerPassword}
-        disabled={connectionLocked}
-        autocomplete="current-password"
-      />
     </div>
 
     {#if entitlements.can_poll}
@@ -1088,12 +1164,22 @@
       {appVersion}
     </button>
   </footer>
-</div>
 
-<AboutModal
-  bind:open={aboutOpen}
-  {locale}
-  version={appVersionNumber}
-  build={appBuild}
-  product={appProduct}
-/>
+  <AboutModal
+    bind:open={aboutOpen}
+    {locale}
+    version={appVersionNumber}
+    build={appBuild}
+    product={appProduct}
+  />
+
+  <WhatsminerAuthModal
+    bind:open={whatsminerAuthOpen}
+    {locale}
+    bind:username={whatsminerUser}
+    bind:password={whatsminerPassword}
+    busy={whatsminerAuthBusy}
+    errorText={whatsminerAuthError}
+    onSubmit={submitWhatsminerAuth}
+  />
+</div>

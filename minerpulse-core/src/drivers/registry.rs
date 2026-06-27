@@ -142,6 +142,15 @@ pub fn fetch_with_detect(
     ))
 }
 
+pub fn fetch_whatsminer(
+    client: &TcpCgminerClient,
+    host: &str,
+    port: u16,
+    options: &FetchOptions,
+) -> Result<MinerSnapshot, MinerPulseError> {
+    WhatsminerDriver.fetch_snapshot(client, host, port, options)
+}
+
 pub fn detect_vendor(stats_response: &str) -> MinerVendor {
     if AvalonDriver::detect(stats_response) {
         MinerVendor::Avalon

@@ -14,8 +14,8 @@ pub use discovery::{
     ScanRequest, ScanResult, ScanSubnet,
 };
 pub use drivers::registry::{
-    detect_driver, detect_vendor, driver_available, fetch_with_detect, model_from_stats,
-    DriverRegistry,
+    detect_driver, detect_vendor, driver_available, fetch_whatsminer, fetch_with_detect,
+    model_from_stats, DriverRegistry,
 };
 pub use entitlements::{EntitlementGate, SubscriptionTier};
 pub use error::{ErrorCode, ErrorResponse, MinerPulseError};

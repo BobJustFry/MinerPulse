@@ -1,5 +1,7 @@
 use crate::model::{BoardChipMap, ChipStats};
 
+use super::layout;
+
 #[derive(Debug, Default)]
 struct ParsedSlot {
     id: u32,
@@ -11,13 +13,16 @@ pub fn parse_btminer_log(text: &str) -> Vec<BoardChipMap> {
     let mut current: Option<ParsedSlot> = None;
 
     for line in text.lines().map(str::trim) {
-        if line.starts_with("slot:") {
-            if let Some(slot) = current.take() {
-                if !slot.chips.is_empty() {
-                    slots.push(slot);
+        if line.is_empty() || line == "(" || line == ")" {
+            continue;
+        }
+        if let Some(slot) = parse_slot_line(line) {
+            if let Some(prev) = current.take() {
+                if !prev.chips.is_empty() {
+                    slots.push(prev);
                 }
             }
-            current = Some(parse_slot_header(line));
+            current = Some(slot);
         } else if line.starts_with('C') && line.contains("freq:") && line.contains("temp:") {
             if let Some(slot) = &mut current {
                 if let Some(chip) = parse_chip_line(line) {
@@ -36,7 +41,8 @@ pub fn parse_btminer_log(text: &str) -> Vec<BoardChipMap> {
     slots
         .into_iter()
         .map(|slot| {
-            let chips_per_domain = infer_chips_per_domain(slot.chips.len());
+            let chips_per_domain =
+                layout::infer_chips_per_domain(slot.chips.len());
             BoardChipMap {
                 slot: slot.id,
                 label: format!("SM{}", slot.id),
@@ -54,24 +60,23 @@ pub fn parse_btminer_html(html: &str) -> Option<String> {
     Some(html[start..end].to_string())
 }
 
-pub fn infer_chips_per_domain(chip_count: usize) -> u32 {
-    if chip_count == 0 {
-        return 3;
+fn parse_slot_line(line: &str) -> Option<ParsedSlot> {
+    if line.starts_with("slot:") {
+        return Some(parse_slot_header(line));
     }
-    for cpd in [3u32, 2, 4, 5, 6] {
-        if chip_count.is_multiple_of(cpd as usize) {
-            let domains = chip_count / cpd as usize;
-            if (20..=100).contains(&domains) {
-                return cpd;
-            }
-        }
+
+    let rest = line.strip_prefix("slot")?;
+    let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+    if digits.is_empty() {
+        return None;
     }
-    for cpd in [2u32, 3, 4, 5, 6] {
-        if chip_count.is_multiple_of(cpd as usize) {
-            return cpd;
-        }
+    if !rest[digits.len()..].starts_with(':') {
+        return None;
     }
-    3
+    Some(ParsedSlot {
+        id: digits.parse().ok()?,
+        chips: Vec::new(),
+    })
 }
 
 fn parse_slot_header(line: &str) -> ParsedSlot {
@@ -108,7 +113,7 @@ fn parse_chip_line(line: &str) -> Option<ChipStats> {
             "freq" => chip.freq_mhz = val.parse().ok(),
             "vol" => chip.voltage = val.parse().ok(),
             "temp" => chip.temp_c = val.parse().unwrap_or(0),
-            "err" => chip.errors = val.parse().ok(),
+            "err" | "error" => chip.errors = val.parse().ok(),
             _ => {}
         }
     }
@@ -119,6 +124,32 @@ fn parse_chip_line(line: &str) -> Option<ChipStats> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_luci_btminerapi_log_format() {
+        let sample = r#"
+slot0:
+(
+   slot: 0
+   temp: 69.56
+   C0  : freq:609  vol:325 temp:60  nonce:2418565  error:40   crc:0
+   C1  : freq:635  vol:322 temp:67  nonce:2500039  error:52   crc:0
+)
+slot1:
+(
+   slot: 1
+   temp: 68.10
+   C0  : freq:610  vol:324 temp:61  nonce:2400000  error:41   crc:0
+)
+"#;
+        let boards = parse_btminer_log(sample);
+        assert_eq!(boards.len(), 2);
+        assert_eq!(boards[0].slot, 0);
+        assert_eq!(boards[0].chips.len(), 2);
+        assert_eq!(boards[0].chips[0].temp_c, 60);
+        assert_eq!(boards[0].chips[0].errors, Some(40));
+        assert_eq!(boards[1].slot, 1);
+    }
 
     #[test]
     fn parses_chip_lines_from_btminer_log() {

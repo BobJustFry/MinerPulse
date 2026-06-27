@@ -66,6 +66,102 @@ export function chipLookup(
   return map;
 }
 
+interface DomainChipInput {
+  index: number;
+  temp_c: number;
+}
+
+function domainGridCell(chip: DomainChipInput): ChipCell {
+  return {
+    index: chip.index,
+    temp: chip.temp_c,
+    empty: false,
+  };
+}
+
+function sortedDomainChips(chips: DomainChipInput[]): DomainChipInput[] {
+  return [...chips].sort((a, b) => a.index - b.index);
+}
+
+/** Wide boards: domains left-to-right, few rows (WhatsMiner-style). */
+function buildHorizontalDomainGrid(
+  chips: DomainChipInput[],
+  numDomains: number,
+  chipsPerDomain: number,
+): ChipCell[][] {
+  const ordered = sortedDomainChips(chips);
+  const rows: ChipCell[][] = [];
+
+  for (let rowIdx = 0; rowIdx < chipsPerDomain; rowIdx += 1) {
+    const row: ChipCell[] = [];
+    for (let domainIdx = 0; domainIdx < numDomains; domainIdx += 1) {
+      const chipIdx = domainIdx * chipsPerDomain + rowIdx;
+      if (chipIdx < ordered.length) {
+        row.push(domainGridCell(ordered[chipIdx]));
+      }
+    }
+    if (row.length > 0) {
+      rows.push(row);
+    }
+  }
+
+  return rows;
+}
+
+/** Tall boards: Avalon-style serpentine domain columns. */
+function buildVerticalDomainGrid(
+  chips: DomainChipInput[],
+  numDomains: number,
+  chipsPerDomain: number,
+): ChipCell[][] {
+  const ordered = sortedDomainChips(chips);
+  const remaining = Math.max(0, numDomains - 1);
+  const bottomDomains = 1 + Math.floor(remaining / 2);
+  const topDomains = remaining - Math.floor(remaining / 2);
+
+  const sections: Array<{ start: number; end: number; reversed: boolean }> = [];
+  if (topDomains > 0) {
+    sections.push({ start: bottomDomains, end: numDomains, reversed: false });
+  }
+  sections.push({ start: 0, end: bottomDomains, reversed: true });
+
+  const rows: ChipCell[][] = [];
+
+  for (const section of sections) {
+    for (let rowIdx = 0; rowIdx < chipsPerDomain; rowIdx += 1) {
+      const row: ChipCell[] = [];
+      const domainCount = section.end - section.start;
+      for (let i = 0; i < domainCount; i += 1) {
+        const domainIdx = section.reversed ? section.end - 1 - i : section.start + i;
+        const chipIdx = domainIdx * chipsPerDomain + rowIdx;
+        if (chipIdx < ordered.length) {
+          row.push(domainGridCell(ordered[chipIdx]));
+        }
+      }
+      if (row.length > 0) {
+        rows.push(row);
+      }
+    }
+  }
+
+  return rows;
+}
+
+export function buildChipGrid(
+  chips: DomainChipInput[],
+  chipsPerDomain: number,
+): ChipCell[][] {
+  if (chips.length === 0 || chipsPerDomain <= 0) {
+    return [];
+  }
+
+  const numDomains = Math.ceil(chips.length / chipsPerDomain);
+  if (numDomains > chipsPerDomain) {
+    return buildHorizontalDomainGrid(chips, numDomains, chipsPerDomain);
+  }
+  return buildVerticalDomainGrid(chips, numDomains, chipsPerDomain);
+}
+
 export function buildMatrixGrid(
   matrix: ChipMatrix,
   chips: ChipCellData[],

@@ -1,4 +1,4 @@
-use minerpulse_core::drivers::registry::fetch_with_detect;
+use minerpulse_core::drivers::registry::{fetch_whatsminer, fetch_with_detect};
 use minerpulse_core::{
     import_file_content, list_scan_subnets as discover_subnets, load_mpulse, save_session,
     save_snapshot, scan_network, scan_network_streaming, EntitlementGate, ErrorResponse,
@@ -6,6 +6,7 @@ use minerpulse_core::{
     ScanResult, ScanSubnet, SubscriptionTier, TcpCgminerClient, WhatsminerLuciAuth,
     MAX_SESSION_DURATION_SEC, normalize_poll_rate_hz, poll_interval_ms, poll_wait_after_tick,
 };
+use minerpulse_core::model::BoardChipMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
@@ -110,6 +111,7 @@ fn fetch_options_from_request(auth: Option<WhatsminerAuthRequest>) -> FetchOptio
             username: value.username,
             password: value.password,
         }),
+        fast_poll: false,
     }
 }
 
@@ -375,6 +377,8 @@ async fn start_poll(
     Ok(())
 }
 
+const WHATSMINER_FULL_REFRESH_FRAMES: u32 = 15;
+
 fn run_poll_loop(
     app: &AppHandle,
     ip: &str,
@@ -386,11 +390,13 @@ fn run_poll_loop(
     cancel: Arc<AtomicBool>,
     fetch_options: FetchOptions,
 ) {
-    let client = TcpCgminerClient::default();
+    let client = TcpCgminerClient::for_polling();
     let started = Instant::now();
     let max_duration = Duration::from_secs(MAX_SESSION_DURATION_SEC);
     let interval = Duration::from_millis(poll_interval_ms(poll_rate_hz));
     let mut frame_index = 0u32;
+    let mut cached_driver = String::new();
+    let mut cached_board_chips = Vec::<BoardChipMap>::new();
     let mut session = if recording {
         Some(MpulseFile::new_session(
             ip,
@@ -413,8 +419,30 @@ fn run_poll_loop(
 
         let tick_start = Instant::now();
 
-        match fetch_with_detect(&client, ip, port, &fetch_options) {
-            Ok(snapshot) => {
+        let full_refresh =
+            frame_index == 0 || frame_index % WHATSMINER_FULL_REFRESH_FRAMES == 0;
+        let mut options = fetch_options.clone();
+        options.fast_poll = cached_driver == "whatsminer" && !full_refresh;
+
+        let fetch_result = if cached_driver == "whatsminer" {
+            fetch_whatsminer(&client, ip, port, &options)
+        } else {
+            fetch_with_detect(&client, ip, port, &options)
+        };
+
+        match fetch_result {
+            Ok(mut snapshot) => {
+                if cached_driver.is_empty() {
+                    cached_driver = snapshot.identity.driver_id.clone();
+                }
+                if options.fast_poll {
+                    if snapshot.board_chips.is_empty() && !cached_board_chips.is_empty() {
+                        snapshot.board_chips = cached_board_chips.clone();
+                    }
+                } else if !snapshot.board_chips.is_empty() {
+                    cached_board_chips = snapshot.board_chips.clone();
+                }
+
                 let t_ms = started.elapsed().as_millis() as u64;
                 if let Some(session) = session.as_mut() {
                     if session.driver_id == "unknown" {

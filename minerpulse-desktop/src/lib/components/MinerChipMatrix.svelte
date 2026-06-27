@@ -2,6 +2,7 @@
   import { t, type Locale, type MessageKey } from "$lib/i18n";
   import {
     availableChipMetrics,
+    buildChipGrid,
     buildMatrixGrid,
     chipCellBackground,
     chipCellDisplayValue,
@@ -14,7 +15,10 @@
     type ChipDisplayMetric,
     type ChipMatrix,
   } from "$lib/chipMatrix";
-  import { buildChipGrid } from "$lib/whatsminerErrors";
+  import {
+    buildWhatsminerChipGrid,
+    whatsminerLayoutMeta,
+  } from "$lib/whatsminerChipMap";
   import type { BoardChipMap } from "$lib/types";
 
   let {
@@ -39,6 +43,7 @@
   };
 
   let voltageUnit = $derived(chipVoltageUnitForVendor(vendor));
+  let boardsStacked = $derived(vendor.toLowerCase() === "whatsminer");
 
   function msg(key: MessageKey, args?: Record<string, string | number>) {
     return t(locale, key, args);
@@ -58,9 +63,12 @@
     };
   }
 
-  function domainGrid(board: BoardChipMap): ChipCell[][] {
+  function enrichGridRows(
+    grid: ChipCell[][],
+    board: BoardChipMap,
+  ): ChipCell[][] {
     const byIndex = new Map(board.chips.map((chip) => [chip.index, chip]));
-    return buildChipGrid(board.chips, board.chips_per_domain).map((row) =>
+    return grid.map((row) =>
       row.map((cell) => {
         const chip = byIndex.get(cell.index);
         return {
@@ -73,6 +81,22 @@
         };
       }),
     );
+  }
+
+  function domainGrid(board: BoardChipMap): ChipCell[][] {
+    const builder = boardsStacked ? buildWhatsminerChipGrid : buildChipGrid;
+    return enrichGridRows(builder(board.chips, board.chips_per_domain), board);
+  }
+
+  function boardSectionBreak(board: BoardChipMap): number {
+    if (!boardsStacked) return -1;
+    return whatsminerLayoutMeta(board.chips.length, board.chips_per_domain).sectionBreakRow;
+  }
+
+  function boardLayoutLabel(board: BoardChipMap): string | null {
+    if (!boardsStacked || board.chips_per_domain <= 0) return null;
+    const meta = whatsminerLayoutMeta(board.chips.length, board.chips_per_domain);
+    return `${meta.domains}d × ${meta.chipsPerDomain}c`;
   }
 
   function matrixGrid(board: BoardChipMap): ChipCell[][] {
@@ -175,9 +199,11 @@
     {#if matrixError}
       <p class="chip-matrix-error">{msg("data.chipMatrixLoadFailed", { id: matrixError })}</p>
     {/if}
-    <div class="chip-boards">
+    <div class="chip-boards" class:chip-boards-stacked={boardsStacked}>
       {#each boards as board (board.slot)}
         {@const grid = boardGrid(board)}
+        {@const sectionBreak = boardSectionBreak(board)}
+        {@const layoutLabel = boardLayoutLabel(board)}
         <article class="chip-board-card">
           <div class="chip-board-head">
             <span class="chip-board-label">{board.label}</span>
@@ -185,6 +211,8 @@
               {board.chips.length} {msg("data.chips")}
               {#if board.matrix_id}
                 · {board.matrix_id}
+              {:else if layoutLabel}
+                · {layoutLabel}
               {:else if board.chips_per_domain > 0}
                 · {board.chips_per_domain}/d
               {/if}
@@ -192,7 +220,10 @@
           </div>
           <div class="chip-grid">
             {#each grid as row, rowIndex (rowIndex)}
-              <div class="chip-row">
+              <div
+                class="chip-row"
+                class:chip-row-section-gap={sectionBreak >= 0 && rowIndex === sectionBreak}
+              >
                 {#each row as cell, cellIndex (`${board.slot}-${rowIndex}-${cellIndex}`)}
                   {#if cell.empty}
                     <div class="chip-cell chip-cell-empty" aria-hidden="true"></div>

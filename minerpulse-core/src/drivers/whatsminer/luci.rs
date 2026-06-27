@@ -3,12 +3,68 @@ use crate::fetch_options::FetchOptions;
 use crate::model::BoardChipMap;
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, SET_COOKIE};
-use std::time::Duration;
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
+const LUCI_SESSION_TTL: Duration = Duration::from_secs(600);
+const HTTP_TIMEOUT: Duration = Duration::from_secs(4);
+
+struct LuciSession {
+    cookie: String,
+    expires: Instant,
+}
+
+fn luci_sessions() -> &'static Mutex<HashMap<String, LuciSession>> {
+    static SESSIONS: OnceLock<Mutex<HashMap<String, LuciSession>>> = OnceLock::new();
+    SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn cache_key(host: &str, base: &str) -> String {
+    format!("{base}|{host}")
+}
+
+fn store_session(host: &str, base: &str, cookie: &str) {
+    if let Ok(mut sessions) = luci_sessions().lock() {
+        sessions.insert(
+            cache_key(host, base),
+            LuciSession {
+                cookie: cookie.to_string(),
+                expires: Instant::now() + LUCI_SESSION_TTL,
+            },
+        );
+    }
+}
+
+fn cached_log(client: &Client, host: &str, base: &str) -> Option<String> {
+    let key = cache_key(host, base);
+    let cookie = {
+        let mut sessions = luci_sessions().lock().ok()?;
+        let session = sessions.get(&key)?;
+        if session.expires <= Instant::now() {
+            sessions.remove(&key);
+            return None;
+        }
+        session.cookie.clone()
+    };
+
+    let url = format!("{base}/cgi-bin/luci/admin/status/btminerapi");
+    let response = client
+        .get(&url)
+        .header("Cookie", cookie)
+        .send()
+        .ok()?;
+    if !response.status().is_success() {
+        luci_sessions().lock().ok()?.remove(&key);
+        return None;
+    }
+    extract_chip_log(&response.text().ok()?)
+}
 
 pub fn fetch_btminer_chip_data(host: &str, options: &FetchOptions) -> (Vec<BoardChipMap>, String) {
     let client = match Client::builder()
         .danger_accept_invalid_certs(true)
-        .timeout(Duration::from_secs(8))
+        .timeout(HTTP_TIMEOUT)
         .redirect(reqwest::redirect::Policy::limited(4))
         .build()
     {
@@ -18,12 +74,15 @@ pub fn fetch_btminer_chip_data(host: &str, options: &FetchOptions) -> (Vec<Board
 
     for scheme in ["https", "http"] {
         let base = format!("{scheme}://{host}");
+        if let Some(log) = cached_log(&client, host, &base) {
+            return (parse_btminer_log(&log), log);
+        }
         if let Some(log) = fetch_log_anonymous(&client, &base) {
             return (parse_btminer_log(&log), log);
         }
 
         for (username, password) in options.luci_credential_pairs() {
-            if let Some(log) = fetch_log_authenticated(&client, &base, &username, &password) {
+            if let Some(log) = fetch_log_authenticated(&client, host, &base, &username, &password) {
                 return (parse_btminer_log(&log), log);
             }
         }
@@ -43,11 +102,13 @@ fn fetch_log_anonymous(client: &Client, base: &str) -> Option<String> {
 
 fn fetch_log_authenticated(
     client: &Client,
+    host: &str,
     base: &str,
     username: &str,
     password: &str,
 ) -> Option<String> {
-    let cookie = luci_login(client, base, username, password)?;
+    let cookie = luci_login(base, username, password)?;
+    store_session(host, base, &cookie);
     let url = format!("{base}/cgi-bin/luci/admin/status/btminerapi");
     let response = client
         .get(&url)
@@ -60,17 +121,28 @@ fn fetch_log_authenticated(
     extract_chip_log(&response.text().ok()?)
 }
 
-fn luci_login(client: &Client, base: &str, username: &str, password: &str) -> Option<String> {
+fn luci_login(base: &str, username: &str, password: &str) -> Option<String> {
+    let login_client = Client::builder()
+        .danger_accept_invalid_certs(true)
+        .timeout(HTTP_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .ok()?;
+
     let login_url = format!("{base}/cgi-bin/luci");
-    let response = client
+    let response = login_client
         .post(&login_url)
         .header("Referer", format!("{base}/cgi-bin/luci"))
         .form(&[("luci_username", username), ("luci_password", password)])
         .send()
         .ok()?;
 
-    let cookie = extract_sysauth_cookie(response.headers())?;
-    Some(cookie)
+    let status = response.status();
+    if !status.is_success() && status.as_u16() != 302 {
+        return None;
+    }
+
+    extract_sysauth_cookie(response.headers())
 }
 
 fn extract_sysauth_cookie(headers: &HeaderMap) -> Option<String> {
@@ -117,5 +189,15 @@ mod tests {
     #[test]
     fn rejects_html_without_chip_dump() {
         assert!(extract_chip_log("<html><body>login</body></html>").is_none());
+    }
+
+    #[test]
+    #[ignore = "requires WhatsMiner on local network"]
+    fn fetches_chip_data_from_live_whatsminer() {
+        let options = FetchOptions::default();
+        let (boards, log) = fetch_btminer_chip_data("192.168.35.35", &options);
+        assert!(!log.is_empty(), "expected btminer log text");
+        assert!(!boards.is_empty(), "expected parsed chip boards");
+        assert!(boards.iter().any(|board| !board.chips.is_empty()));
     }
 }

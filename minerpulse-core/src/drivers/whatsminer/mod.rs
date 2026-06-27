@@ -1,5 +1,6 @@
 mod btminer_log;
 mod errors;
+mod layout;
 mod luci;
 
 use super::json_util::{array_items, json_f64, json_str, json_u64};
@@ -38,27 +39,47 @@ impl MinerDriver for WhatsminerDriver {
         options: &FetchOptions,
     ) -> Result<MinerSnapshot, MinerPulseError> {
         let summary = client.send_payload(host, port, r#"{"cmd":"summary"}"#)?;
-        let pools = client
-            .send_payload(host, port, r#"{"cmd":"pools"}"#)
-            .unwrap_or_default();
-        let devs = client
-            .send_payload(host, port, r#"{"cmd":"devs"}"#)
-            .unwrap_or_default();
+        let pools = if options.fast_poll {
+            String::new()
+        } else {
+            client
+                .send_payload(host, port, r#"{"cmd":"pools"}"#)
+                .unwrap_or_default()
+        };
+        let devs = if options.fast_poll {
+            String::new()
+        } else {
+            client
+                .send_payload(host, port, r#"{"cmd":"devs"}"#)
+                .unwrap_or_default()
+        };
         let edevs = client
             .send_payload(host, port, r#"{"cmd":"edevs"}"#)
             .unwrap_or_default();
-        let error_codes = client
-            .send_payload(host, port, r#"{"cmd":"get_error_code"}"#)
-            .unwrap_or_default();
-        let device_info = client
-            .send_payload(
-                host,
-                port,
-                r#"{"cmd":"get.device.info","param":"error-code"}"#,
-            )
-            .unwrap_or_default();
+        let error_codes = if options.fast_poll {
+            String::new()
+        } else {
+            client
+                .send_payload(host, port, r#"{"cmd":"get_error_code"}"#)
+                .unwrap_or_default()
+        };
+        let device_info = if options.fast_poll {
+            String::new()
+        } else {
+            client
+                .send_payload(
+                    host,
+                    port,
+                    r#"{"cmd":"get.device.info","param":"error-code"}"#,
+                )
+                .unwrap_or_default()
+        };
 
-        let (board_chips, btminer_log) = fetch_btminer_chip_data(host, options);
+        let (board_chips, btminer_log) = if options.fast_poll {
+            (Vec::new(), String::new())
+        } else {
+            fetch_btminer_chip_data(host, options)
+        };
 
         Ok(parse_whatsminer_snapshot(
             &summary,
@@ -490,11 +511,14 @@ pub fn parse_whatsminer_snapshot(
     faults.sort_by(|a, b| a.code.cmp(&b.code));
     faults.dedup_by(|a, b| a.code == b.code);
 
-    let board_chips = if board_chips.is_empty() && !btminer_log_raw.is_empty() {
+    let mut board_chips = if board_chips.is_empty() && !btminer_log_raw.is_empty() {
         parse_btminer_log(btminer_log_raw)
     } else {
         board_chips
     };
+    for board in &mut board_chips {
+        board.chips_per_domain = layout::resolve_chips_per_domain(&model, board.chips.len());
+    }
 
     if !board_chips.is_empty() {
         thermal.per_chip_c = board_chips

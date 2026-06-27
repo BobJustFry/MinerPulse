@@ -10,6 +10,9 @@ pub struct WhatsminerLuciAuth {
 pub struct FetchOptions {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub whatsminer_luci: Option<WhatsminerLuciAuth>,
+    /// Skip slow LuCI chip dump and non-essential API calls (poll loop).
+    #[serde(default)]
+    pub fast_poll: bool,
 }
 
 impl FetchOptions {
@@ -30,8 +33,8 @@ impl FetchOptions {
 
         if let Some(auth) = &self.whatsminer_luci {
             push(&auth.username, &auth.password);
+            return pairs;
         }
-        push("root", "root");
         push("admin", "admin");
         pairs
     }
@@ -42,17 +45,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn deduplicates_default_credentials() {
+    fn default_credentials_are_admin_admin() {
+        let options = FetchOptions::default();
+        let pairs = options.luci_credential_pairs();
+        assert_eq!(pairs, vec![("admin".to_string(), "admin".to_string())]);
+    }
+
+    #[test]
+    fn custom_credentials_skip_defaults() {
         let options = FetchOptions {
             whatsminer_luci: Some(WhatsminerLuciAuth {
                 username: "root".into(),
                 password: "root".into(),
             }),
+            fast_poll: false,
         };
         let pairs = options.luci_credential_pairs();
-        assert_eq!(pairs.len(), 2);
-        assert_eq!(pairs[0], ("root".to_string(), "root".to_string()));
-        assert_eq!(pairs[1], ("admin".to_string(), "admin".to_string()));
+        assert_eq!(pairs, vec![("root".to_string(), "root".to_string())]);
     }
 
     #[test]
@@ -62,6 +71,7 @@ mod tests {
                 username: "miner".into(),
                 password: "secret".into(),
             }),
+            fast_poll: false,
         };
         let pairs = options.luci_credential_pairs();
         assert_eq!(pairs[0], ("miner".to_string(), "secret".to_string()));
