@@ -31,13 +31,13 @@ pub fn array_items<'a>(value: &'a Value, key: &str) -> Option<&'a Vec<Value>> {
 
 /// CGMiner JSON often puts metadata in STATS[0] and live metrics in STATS[1+].
 pub fn merge_stats_objects(value: &Value) -> Option<Value> {
-    let items = array_items(value, "STATS")?;
     let mut merged = serde_json::Map::new();
 
-    for item in items {
-        let Some(obj) = item.as_object() else {
-            continue;
-        };
+    if let Some(items) = array_items(value, "STATS") {
+        for item in items {
+            merge_object_into(&mut merged, item);
+        }
+    } else if let Some(obj) = value.get("STATS").and_then(|v| v.as_object()) {
         for (key, val) in obj {
             if val.is_null() {
                 continue;
@@ -46,6 +46,124 @@ pub fn merge_stats_objects(value: &Value) -> Option<Value> {
         }
     }
 
+    if let Some(obj) = value.as_object() {
+        for key in [
+            "Type",
+            "Miner",
+            "BMMiner",
+            "CompileTime",
+            "GHS 5s",
+            "GHS av",
+            "MHS 5s",
+            "MHS av",
+            "miner_count",
+            "total_rateideal",
+            "Elapsed",
+            "Temperature",
+            "temp_max",
+        ] {
+            if let Some(val) = obj.get(key) {
+                if !val.is_null() {
+                    merged.insert(key.to_string(), val.clone());
+                }
+            }
+        }
+    }
+
+    if merged.is_empty() {
+        None
+    } else {
+        Some(Value::Object(merged))
+    }
+}
+
+fn merge_object_into(merged: &mut serde_json::Map<String, Value>, item: &Value) {
+    let Some(obj) = item.as_object() else {
+        return;
+    };
+    for (key, val) in obj {
+        if val.is_null() {
+            continue;
+        }
+        merged.insert(key.clone(), val.clone());
+    }
+}
+
+/// Extract one or more JSON documents from miner console text.
+pub fn extract_json_documents(raw: &str) -> Vec<Value> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
+
+    if let Ok(value) = serde_json::from_str(trimmed) {
+        return vec![value];
+    }
+
+    let mut docs = Vec::new();
+    let bytes = raw.as_bytes();
+    let mut index = 0;
+
+    while index < bytes.len() {
+        if bytes[index] != b'{' {
+            index += 1;
+            continue;
+        }
+
+        let start = index;
+        let mut depth = 0usize;
+        let mut in_string = false;
+        let mut escape = false;
+
+        while index < bytes.len() {
+            let byte = bytes[index];
+            if in_string {
+                if escape {
+                    escape = false;
+                } else if byte == b'\\' {
+                    escape = true;
+                } else if byte == b'"' {
+                    in_string = false;
+                }
+            } else {
+                match byte {
+                    b'"' => in_string = true,
+                    b'{' => depth += 1,
+                    b'}' => {
+                        depth = depth.saturating_sub(1);
+                        if depth == 0 {
+                            index += 1;
+                            if let Ok(text) = std::str::from_utf8(&bytes[start..index]) {
+                                if let Ok(value) = serde_json::from_str(text) {
+                                    docs.push(value);
+                                }
+                            }
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            index += 1;
+        }
+
+        if depth != 0 {
+            break;
+        }
+    }
+
+    docs
+}
+
+pub fn merge_stats_from_documents(docs: &[Value]) -> Option<Value> {
+    let mut merged = serde_json::Map::new();
+    for doc in docs {
+        if let Some(stats) = merge_stats_objects(doc) {
+            for (key, val) in stats.as_object()? {
+                merged.insert(key.clone(), val.clone());
+            }
+        }
+    }
     if merged.is_empty() {
         None
     } else {

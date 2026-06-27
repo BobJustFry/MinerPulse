@@ -281,6 +281,7 @@ fn parse_whatsminer_devs(raw: &str, key: &str) -> Vec<BoardStats> {
                 effective_chips: json_u64(dev, "Effective Chips")
                     .or_else(|| json_u64(dev, "effective-chips"))
                     .map(|value| value as u32),
+                ..Default::default()
             }
         })
         .collect()
@@ -429,6 +430,7 @@ pub fn parse_whatsminer_snapshot(
                 chip_temp_avg_c: None,
                 chip_temp_max_c: None,
                 effective_chips: None,
+                ..Default::default()
             })
             .collect();
     }
@@ -479,6 +481,7 @@ pub fn parse_whatsminer_snapshot(
             model,
             firmware,
             driver_id: "whatsminer".to_string(),
+            ..Default::default()
         },
         hashrate,
         thermal,
@@ -494,6 +497,7 @@ pub fn parse_whatsminer_snapshot(
         raw_log,
         status,
         uptime_sec,
+        ..Default::default()
     }
 }
 

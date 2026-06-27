@@ -18,6 +18,8 @@ pub struct MinerIdentity {
     pub model: String,
     pub firmware: String,
     pub driver_id: String,
+    #[serde(default)]
+    pub core_chip: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -61,6 +63,12 @@ pub struct BoardStats {
     pub chip_temp_max_c: Option<f64>,
     #[serde(default)]
     pub effective_chips: Option<u32>,
+    #[serde(default)]
+    pub freq_domains_mhz: Vec<u32>,
+    #[serde(default)]
+    pub freq_bands_mhz: Vec<u32>,
+    #[serde(default)]
+    pub voltage_level: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -70,9 +78,14 @@ pub struct ChipStats {
     #[serde(default)]
     pub freq_mhz: Option<u32>,
     #[serde(default)]
+    /// Per-chip voltage in millivolts (`PVT_V` on Avalon).
     pub voltage: Option<u32>,
+    /// Per-chip CRC error count (`ASICCRC` on Avalon, `crc`/`err` on WhatsMiner).
     #[serde(default)]
     pub errors: Option<u32>,
+    /// Per-chip solution count (`MW` on Avalon).
+    #[serde(default)]
+    pub solutions: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -80,6 +93,8 @@ pub struct BoardChipMap {
     pub slot: u32,
     pub label: String,
     pub chips_per_domain: u32,
+    #[serde(default)]
+    pub matrix_id: Option<String>,
     pub chips: Vec<ChipStats>,
 }
 
@@ -122,6 +137,10 @@ pub struct MinerSnapshot {
     pub raw_log: String,
     pub status: String,
     pub uptime_sec: Option<u64>,
+    #[serde(default)]
+    pub work_mode: Option<u32>,
+    #[serde(default)]
+    pub ecmm: Option<u64>,
 }
 
 impl Default for MinerSnapshot {
@@ -142,6 +161,8 @@ impl Default for MinerSnapshot {
             raw_log: String::new(),
             status: String::new(),
             uptime_sec: None,
+            work_mode: None,
+            ecmm: None,
         }
     }
 }

@@ -20,6 +20,12 @@ pub use entitlements::{EntitlementGate, SubscriptionTier};
 pub use error::{ErrorCode, ErrorResponse, MinerPulseError};
 pub use model::MinerSnapshot;
 pub use import::{import_file_content, ImportResult, MAX_IMPORT_BYTES};
-pub use mpulse::{save_snapshot, MpulseFile, MpulseKind};
+pub use mpulse::{
+    decode_mpulse_bytes, load_mpulse, save_session, save_snapshot, MpulseFile, MpulseFrame,
+    MpulseKind, DEFAULT_POLL_INTERVAL_SEC, DEFAULT_POLL_RATE_HZ, MAX_SESSION_DURATION_SEC,
+    MAX_SESSION_FILE_BYTES, POLL_RATES_HZ, normalize_poll_rate_hz, poll_interval_ms,
+    poll_wait_after_tick,
+};
 pub use rate_limit::RateLimiter;
 pub use tcp::TcpCgminerClient;
+pub use drivers::avalon_commands::send_ascset;

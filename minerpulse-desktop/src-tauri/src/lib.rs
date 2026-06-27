@@ -1,15 +1,17 @@
 use minerpulse_core::drivers::registry::fetch_with_detect;
 use minerpulse_core::{
-    import_file_content, list_scan_subnets as discover_subnets, save_snapshot, scan_network,
-    scan_network_streaming, EntitlementGate, ErrorResponse, MinerPulseError, MinerSnapshot,
-    MpulseFile, RateLimiter, ScanRequest, ScanResult, ScanSubnet, SubscriptionTier,
-    TcpCgminerClient,
+    import_file_content, list_scan_subnets as discover_subnets, load_mpulse, save_session,
+    save_snapshot, scan_network, scan_network_streaming, EntitlementGate, ErrorResponse,
+    MinerPulseError, MinerSnapshot, MpulseFile, RateLimiter, ScanRequest, ScanResult, ScanSubnet,
+    SubscriptionTier, TcpCgminerClient, MAX_SESSION_DURATION_SEC,
+    normalize_poll_rate_hz, poll_interval_ms, poll_wait_after_tick,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 struct ScanSession {
@@ -41,11 +43,49 @@ impl ScanSession {
     }
 }
 
+struct PollSession {
+    cancel: Arc<AtomicBool>,
+    running: Arc<AtomicBool>,
+    recording: Arc<AtomicBool>,
+}
+
+impl PollSession {
+    fn new() -> Self {
+        Self {
+            cancel: Arc::new(AtomicBool::new(false)),
+            running: Arc::new(AtomicBool::new(false)),
+            recording: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    fn try_begin(&self, recording: bool) -> Result<(), ErrorResponse> {
+        if self.running.swap(true, Ordering::SeqCst) {
+            return Err(ErrorResponse {
+                code: minerpulse_core::ErrorCode::InvalidInput,
+                args: None,
+            });
+        }
+        self.cancel.store(false, Ordering::SeqCst);
+        self.recording.store(recording, Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn finish(&self) {
+        self.running.store(false, Ordering::SeqCst);
+        self.recording.store(false, Ordering::SeqCst);
+    }
+
+    fn stop(&self) {
+        self.cancel.store(true, Ordering::Relaxed);
+    }
+}
+
 struct AppState {
     rate_limiter: Mutex<RateLimiter>,
     tier: Mutex<SubscriptionTier>,
     last_snapshot: Mutex<Option<minerpulse_core::MinerSnapshot>>,
     scan: ScanSession,
+    poll: PollSession,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -96,6 +136,17 @@ struct ScanFinishedPayload {
 
 const SCAN_WINDOW_LABEL: &str = "scan";
 const MAIN_WINDOW_LABEL: &str = "main";
+
+fn default_tier() -> SubscriptionTier {
+    #[cfg(debug_assertions)]
+    {
+        SubscriptionTier::Service
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        SubscriptionTier::Free
+    }
+}
 
 fn gate(tier: SubscriptionTier) -> EntitlementGate {
     EntitlementGate::new(tier)
@@ -183,6 +234,236 @@ fn read_miner(
     *state.last_snapshot.lock().unwrap() = Some(snapshot.clone());
 
     Ok(ReadMinerResponse { snapshot })
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct StartPollRequest {
+    ip: String,
+    port: Option<u16>,
+    poll_rate_hz: Option<u32>,
+    record_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct PollSnapshotPayload {
+    snapshot: MinerSnapshot,
+    t_ms: u64,
+    frame_index: u32,
+    recording: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct PollFinishedPayload {
+    reason: String,
+    saved_path: Option<String>,
+    frame_count: u32,
+    error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct PollStatusResponse {
+    running: bool,
+    recording: bool,
+}
+
+#[tauri::command]
+fn get_poll_status(state: State<'_, AppState>) -> PollStatusResponse {
+    PollStatusResponse {
+        running: state.poll.running.load(Ordering::Relaxed),
+        recording: state.poll.recording.load(Ordering::Relaxed),
+    }
+}
+
+#[tauri::command]
+async fn start_poll(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: StartPollRequest,
+) -> Result<(), ErrorResponse> {
+    let tier = *state.tier.lock().unwrap();
+    if !gate(tier).can_poll() {
+        return Err(ErrorResponse {
+            code: minerpulse_core::ErrorCode::NotSupported,
+            args: None,
+        });
+    }
+
+    let recording = request.record_path.is_some();
+    if recording && !gate(tier).can_record_session() {
+        return Err(ErrorResponse {
+            code: minerpulse_core::ErrorCode::NotSupported,
+            args: None,
+        });
+    }
+
+    state.poll.try_begin(recording)?;
+
+    let port = request.port.unwrap_or(4028);
+    let poll_rate_hz = normalize_poll_rate_hz(request.poll_rate_hz);
+    let record_path = request.record_path.map(PathBuf::from);
+    let cancel = Arc::clone(&state.poll.cancel);
+    let app_for_poll = app.clone();
+
+    tauri::async_runtime::spawn(async move {
+        let poll_result = tauri::async_runtime::spawn_blocking(move || {
+            run_poll_loop(
+                &app_for_poll,
+                &request.ip,
+                port,
+                poll_rate_hz,
+                tier,
+                recording,
+                record_path,
+                cancel,
+            )
+        })
+        .await;
+
+        if let Some(state) = app.try_state::<AppState>() {
+            state.poll.finish();
+        }
+
+        if poll_result.is_err() {
+            let _ = app.emit(
+                "poll://finished",
+                PollFinishedPayload {
+                    reason: "error".into(),
+                    saved_path: None,
+                    frame_count: 0,
+                    error: Some("poll_failed".into()),
+                },
+            );
+        }
+    });
+
+    Ok(())
+}
+
+fn run_poll_loop(
+    app: &AppHandle,
+    ip: &str,
+    port: u16,
+    poll_rate_hz: u32,
+    tier: SubscriptionTier,
+    recording: bool,
+    record_path: Option<PathBuf>,
+    cancel: Arc<AtomicBool>,
+) {
+    let client = TcpCgminerClient::default();
+    let started = Instant::now();
+    let max_duration = Duration::from_secs(MAX_SESSION_DURATION_SEC);
+    let interval = Duration::from_millis(poll_interval_ms(poll_rate_hz));
+    let mut frame_index = 0u32;
+    let mut session = if recording {
+        Some(MpulseFile::new_session(
+            ip,
+            "unknown",
+            tier,
+            poll_rate_hz,
+        ))
+    } else {
+        None
+    };
+    let mut finish_reason = "stopped".to_string();
+    let mut finish_error: Option<String> = None;
+    let mut saved_path: Option<String> = None;
+
+    while !cancel.load(Ordering::Relaxed) {
+        if recording && started.elapsed() >= max_duration {
+            finish_reason = "max_duration".into();
+            break;
+        }
+
+        let tick_start = Instant::now();
+
+        match fetch_with_detect(&client, ip, port) {
+            Ok(snapshot) => {
+                let t_ms = started.elapsed().as_millis() as u64;
+                if let Some(session) = session.as_mut() {
+                    if session.driver_id == "unknown" {
+                        session.driver_id = snapshot.identity.driver_id.clone();
+                    }
+                    session.push_recorded_frame(t_ms, snapshot.clone());
+                }
+
+                if let Some(state) = app.try_state::<AppState>() {
+                    *state.last_snapshot.lock().unwrap() = Some(snapshot.clone());
+                }
+
+                let _ = app.emit(
+                    "poll://snapshot",
+                    PollSnapshotPayload {
+                        snapshot,
+                        t_ms,
+                        frame_index,
+                        recording,
+                    },
+                );
+                frame_index += 1;
+            }
+            Err(err) => {
+                finish_error = Some(format!("{:?}", err.code()));
+                finish_reason = "error".into();
+                break;
+            }
+        }
+
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        if recording && started.elapsed() >= max_duration {
+            finish_reason = "max_duration".into();
+            break;
+        }
+
+        if recording && started.elapsed() >= max_duration {
+            finish_reason = "max_duration".into();
+            break;
+        }
+
+        let wait = poll_wait_after_tick(tick_start, interval, Instant::now());
+        let mut slept = Duration::ZERO;
+        while slept < wait {
+            if cancel.load(Ordering::Relaxed) {
+                break;
+            }
+            let step = Duration::from_millis(200).min(wait - slept);
+            std::thread::sleep(step);
+            slept += step;
+        }
+    }
+
+    let frame_count = frame_index;
+    if let (Some(mut session), Some(path)) = (session, record_path) {
+        session.trim_to_max_duration(MAX_SESSION_DURATION_SEC * 1000);
+        if session.frames.is_empty() {
+            finish_error = Some("no_frames".into());
+        } else if let Err(err) = save_session(&path, &session) {
+            finish_error = Some(format!("{:?}", err.code()));
+        } else {
+            saved_path = Some(path.to_string_lossy().to_string());
+        }
+    }
+
+    let _ = app.emit(
+        "poll://finished",
+        PollFinishedPayload {
+            reason: finish_reason,
+            saved_path,
+            frame_count,
+            error: finish_error,
+        },
+    );
+}
+
+#[tauri::command]
+fn stop_poll(state: State<'_, AppState>) {
+    state.poll.stop();
+}
+
+#[tauri::command]
+fn load_session_file(path: String) -> Result<MpulseFile, ErrorResponse> {
+    load_mpulse(PathBuf::from(path).as_path()).map_err(|e| ErrorResponse::from(&e))
 }
 
 #[tauri::command]
@@ -370,8 +651,35 @@ fn parse_import_file(content: String, filename: Option<String>) -> Result<ParseI
 
 #[tauri::command]
 fn import_file_path(path: String) -> Result<ParseImportResponse, ErrorResponse> {
-    let path = PathBuf::from(path);
+    let path = PathBuf::from(&path);
     let meta = std::fs::metadata(&path).map_err(|_| io_error())?;
+
+    if path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("mpulse"))
+    {
+        let file = load_mpulse(&path).map_err(|e| ErrorResponse::from(&e))?;
+        let frame = file
+            .frames
+            .last()
+            .or_else(|| file.frames.first())
+            .ok_or(MinerPulseError::with_code(
+                minerpulse_core::ErrorCode::ParseFailed,
+            ))
+            .map_err(|e| ErrorResponse::from(&e))?;
+
+        return Ok(ParseImportResponse {
+            snapshot: frame.snapshot.clone(),
+            source_label: path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("import.mpulse")
+                .to_string(),
+            miner_ip: Some(file.miner_ip),
+        });
+    }
+
     if meta.len() > minerpulse_core::MAX_IMPORT_BYTES as u64 {
         return Err(ErrorResponse {
             code: minerpulse_core::ErrorCode::InvalidInput,
@@ -406,24 +714,101 @@ struct AppVersionInfo {
     display: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct SendMinerCommandRequest {
+    ip: String,
+    port: Option<u16>,
+    driver_id: String,
+    parameter: String,
+}
+
+#[derive(Debug, Serialize)]
+struct SendMinerCommandResponse {
+    response: String,
+}
+
+#[tauri::command]
+fn send_miner_command(
+    state: State<'_, AppState>,
+    request: SendMinerCommandRequest,
+) -> Result<SendMinerCommandResponse, ErrorResponse> {
+    let tier = *state.tier.lock().unwrap();
+    if !gate(tier).can_poll() {
+        return Err(ErrorResponse {
+            code: minerpulse_core::ErrorCode::NotSupported,
+            args: None,
+        });
+    }
+
+    if request.driver_id != "avalon" {
+        return Err(ErrorResponse {
+            code: minerpulse_core::ErrorCode::NotSupported,
+            args: None,
+        });
+    }
+
+    let port = request.port.unwrap_or(4028);
+    let client = TcpCgminerClient::default();
+    let response = minerpulse_core::send_ascset(&client, &request.ip, port, &request.parameter)
+        .map_err(|e| ErrorResponse::from(&e))?;
+
+    Ok(SendMinerCommandResponse { response })
+}
+
+fn format_app_display(product: &str, version: &str, build: u32) -> String {
+    format!("{product} {version} ({build})")
+}
+
 #[tauri::command]
 fn get_app_version() -> AppVersionInfo {
     let meta = serde_json::from_str::<Value>(env!("MINERPULSE_VERSION_JSON")).unwrap_or_else(|_| {
         serde_json::json!({
             "version": "0.0.0",
             "build": 0,
-            "product": "MinerPulse"
+            "product": "Miner Pulse"
         })
     });
     let version = meta["version"].as_str().unwrap_or("0.0.0").to_string();
     let build = meta["build"].as_u64().unwrap_or(0) as u32;
-    let product = meta["product"].as_str().unwrap_or("MinerPulse").to_string();
+    let product = meta["product"].as_str().unwrap_or("Miner Pulse").to_string();
     AppVersionInfo {
-        display: format!("{version} (build {build})"),
+        display: format_app_display(&product, &version, build),
         version,
         build,
         product,
     }
+}
+
+#[cfg(windows)]
+fn apply_windows_frame(window: &tauri::WebviewWindow, dark: bool) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_BORDER_COLOR};
+
+    let Ok(raw) = window.hwnd() else {
+        return;
+    };
+    let hwnd = HWND(raw.0 as _);
+    // Match --bg-base in app.css (dark #0f1117, light #f5f6f8), BGR for DWM.
+    let border_color: u32 = if dark { 0x0017_110f } else { 0x00f8_f6f5 };
+    unsafe {
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_BORDER_COLOR,
+            &border_color as *const _ as _,
+            std::mem::size_of::<u32>() as u32,
+        );
+    }
+}
+
+#[cfg(not(windows))]
+fn apply_windows_frame(_window: &tauri::WebviewWindow, _dark: bool) {}
+
+#[tauri::command]
+fn sync_window_frame(app: tauri::AppHandle, theme: String) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    apply_windows_frame(&window, theme == "dark");
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -435,14 +820,19 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(AppState {
             rate_limiter: Mutex::new(RateLimiter::new(10)),
-            tier: Mutex::new(SubscriptionTier::Free),
+            tier: Mutex::new(default_tier()),
             last_snapshot: Mutex::new(None),
             scan: ScanSession::new(),
+            poll: PollSession::new(),
         })
         .invoke_handler(tauri::generate_handler![
             get_entitlements,
             set_tier,
             read_miner,
+            start_poll,
+            stop_poll,
+            get_poll_status,
+            load_session_file,
             save_snapshot_file,
             get_app_version,
             list_scan_subnets,
@@ -453,7 +843,29 @@ pub fn run() {
             parse_import_file,
             import_file_path,
             remember_snapshot,
+            send_miner_command,
+            sync_window_frame,
         ])
+        .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                let meta = serde_json::from_str::<serde_json::Value>(env!("MINERPULSE_VERSION_JSON"))
+                    .unwrap_or_else(|_| {
+                        serde_json::json!({
+                            "version": "0.0.0",
+                            "build": 0,
+                            "product": "Miner Pulse"
+                        })
+                    });
+                let version = meta["version"].as_str().unwrap_or("0.0.0");
+                let build = meta["build"].as_u64().unwrap_or(0) as u32;
+                let product = meta["product"].as_str().unwrap_or("Miner Pulse");
+                let title = format_app_display(product, version, build);
+                let _ = window.set_title(&title);
+                let _ = window.set_shadow(false);
+                apply_windows_frame(&window, true);
+            }
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

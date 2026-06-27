@@ -4,6 +4,9 @@ use crate::tcp::TcpCgminerClient;
 
 pub mod antminer;
 pub mod avalon;
+pub mod avalon_cgminer;
+pub mod avalon_chips;
+pub mod avalon_commands;
 pub mod json_util;
 pub mod parse;
 pub mod registry;

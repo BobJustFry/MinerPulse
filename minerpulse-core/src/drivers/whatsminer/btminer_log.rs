@@ -41,6 +41,7 @@ pub fn parse_btminer_log(text: &str) -> Vec<BoardChipMap> {
                 slot: slot.id,
                 label: format!("SM{}", slot.id),
                 chips_per_domain,
+                matrix_id: None,
                 chips: slot.chips,
             }
         })
@@ -96,6 +97,7 @@ fn parse_chip_line(line: &str) -> Option<ChipStats> {
         freq_mhz: None,
         voltage: None,
         errors: None,
+        solutions: None,
     };
 
     for part in line.split_whitespace() {

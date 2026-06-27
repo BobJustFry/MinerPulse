@@ -1,0 +1,9 @@
+{
+  "matrices": [
+    { "id": "Matrix_10x", "label": "Avalon 10xx (114)", "chipCount": 114 },
+    { "id": "Matrix_11x", "label": "Avalon 11xx (120)", "chipCount": 120 },
+    { "id": "Matrix_1326", "label": "Avalon 1326 (114)", "chipCount": 114 },
+    { "id": "Matrix_1346", "label": "Avalon 1346 (120)", "chipCount": 120 },
+    { "id": "Matrix_15x160", "label": "Avalon 15xx (160)", "chipCount": 160 }
+  ]
+}

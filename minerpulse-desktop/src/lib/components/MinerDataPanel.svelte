@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { t, type Locale, type MessageKey } from "$lib/i18n";
-  import MinerChipMatrix from "$lib/components/MinerChipMatrix.svelte";
   import WhatsminerErrorModal from "$lib/components/WhatsminerErrorModal.svelte";
   import {
     formatEfficiency,
@@ -47,6 +46,15 @@
     return snapshot.identity.vendor === "whatsminer";
   }
 
+  function isAvalon() {
+    return snapshot.identity.vendor === "avalon";
+  }
+
+  function formatFreqList(values?: number[]): string {
+    if (!values || values.length === 0) return "—";
+    return values.join(" / ");
+  }
+
   function faultLabel(code: string): string {
     if (!errorCatalog) return code;
     const entry = lookupWhatsminerError(errorCatalog, code);
@@ -84,6 +92,15 @@
       <div class="data-hero-meta">
         {#if snapshot.identity.firmware}
           <span>{msg("data.firmware")}: {snapshot.identity.firmware}</span>
+        {/if}
+        {#if snapshot.identity.core_chip}
+          <span>{msg("data.coreChip")}: {snapshot.identity.core_chip}</span>
+        {/if}
+        {#if snapshot.work_mode != null}
+          <span>{msg("data.workMode")}: {snapshot.work_mode}</span>
+        {/if}
+        {#if snapshot.ecmm != null}
+          <span>{msg("data.ecmm")}: {snapshot.ecmm}</span>
         {/if}
         {#if snapshot.uptime_sec != null}
           <span>{msg("data.uptime")}: {formatUptime(snapshot.uptime_sec)}</span>
@@ -312,15 +329,29 @@
                     <strong>{formatNumber(board.fan_rpm, 0, " RPM")}</strong>
                   </div>
                 {/if}
+                {#if isAvalon() && board.freq_domains_mhz && board.freq_domains_mhz.length > 0}
+                  <div>
+                    <span>{msg("data.freqDomains")}</span>
+                    <strong>{formatFreqList(board.freq_domains_mhz)} MHz</strong>
+                  </div>
+                {/if}
+                {#if isAvalon() && board.freq_bands_mhz && board.freq_bands_mhz.length > 0}
+                  <div>
+                    <span>{msg("data.freqBands")}</span>
+                    <strong>{formatFreqList(board.freq_bands_mhz)} MHz</strong>
+                  </div>
+                {/if}
+                {#if isAvalon() && board.voltage_level != null}
+                  <div>
+                    <span>{msg("data.voltageLevel")}</span>
+                    <strong>{board.voltage_level}</strong>
+                  </div>
+                {/if}
               </div>
             </article>
           {/each}
         </div>
       </section>
-    {/if}
-
-    {#if isWhatsminer() && (snapshot.board_chips?.length ?? 0) > 0}
-      <MinerChipMatrix boards={snapshot.board_chips ?? []} {locale} />
     {/if}
 
     {#if snapshot.pools.length > 0}

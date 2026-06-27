@@ -10,7 +10,8 @@ After each GitHub Release:
 
 1. Upload signed installer (`.exe`) and signature (`.sig`) from `target/release/bundle/nsis/`.
 2. Update `update.json`: `version`, `build`, `pub_date`, `platforms.windows-x86_64.url`, `signature`.
-3. Commit and push (bump `VERSION.json` build via `node scripts/bump-build.mjs`).
+3. Ensure `VERSION.json` build was bumped after code changes (`node scripts/bump-build.mjs`).
+4. Commit and push `update.json` (and release artifacts metadata as needed).
 
 ## Signing
 

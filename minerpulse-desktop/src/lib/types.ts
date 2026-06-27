@@ -1,7 +1,7 @@
 export type Theme = "light" | "dark";
 export type Density = "compact" | "comfortable";
 export type Locale = "ru" | "en" | "zh-CN";
-export type TabId = "data" | "console" | "pools" | "charts" | "commands";
+export type TabId = "data" | "chips" | "console" | "pools" | "charts" | "commands";
 export type SubscriptionTier = "free" | "client" | "service";
 
 export interface Entitlements {
@@ -20,6 +20,7 @@ export interface MinerSnapshot {
     model: string;
     firmware: string;
     driver_id: string;
+    core_chip?: string | null;
   };
   hashrate: {
     current_ghs: number;
@@ -44,6 +45,9 @@ export interface MinerSnapshot {
     chip_temp_avg_c?: number | null;
     chip_temp_max_c?: number | null;
     effective_chips?: number | null;
+    freq_domains_mhz?: number[];
+    freq_bands_mhz?: number[];
+    voltage_level?: number | null;
   }>;
   board_chips?: BoardChipMap[];
   faults?: MinerFault[];
@@ -60,18 +64,22 @@ export interface MinerSnapshot {
   raw_log: string;
   status: string;
   uptime_sec?: number | null;
+  work_mode?: number | null;
+  ecmm?: number | null;
 }
 
 export interface BoardChipMap {
   slot: number;
   label: string;
   chips_per_domain: number;
+  matrix_id?: string | null;
   chips: Array<{
     index: number;
     temp_c: number;
     freq_mhz?: number | null;
     voltage?: number | null;
     errors?: number | null;
+    solutions?: number | null;
   }>;
 }
 

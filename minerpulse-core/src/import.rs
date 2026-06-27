@@ -1,5 +1,6 @@
 use crate::drivers::antminer::{parse_antminer_snapshot, split_antminer_log, AntminerDriver};
 use crate::drivers::avalon::{parse_avalon_estats_log, parse_estats, AvalonDriver};
+use crate::drivers::avalon_cgminer::{is_avalon_cgminer_dump, parse_avalon_cgminer_dump};
 use crate::drivers::whatsminer::{classify_whatsminer, parse_whatsminer_snapshot};
 use crate::drivers::MinerDriver;
 use crate::error::MinerPulseError;
@@ -38,10 +39,30 @@ pub fn import_file_content(content: &str, filename: Option<&str>) -> Result<Impo
         ));
     }
 
-    if trimmed.starts_with('{') {
-        if trimmed.contains("--- pools ---") || trimmed.contains("--- summary ---") {
+    if is_avalon_cgminer_dump(trimmed) {
+        if let Some(snapshot) = parse_avalon_cgminer_dump(trimmed) {
+            return Ok(ImportResult {
+                snapshot,
+                source_label: label,
+                miner_ip: None,
+            });
+        }
+    }
+
+    if trimmed.starts_with('{') || trimmed.starts_with("{'") {
+        if trimmed.contains("--- summary ---")
+            || trimmed.contains("--- pools ---")
+            || trimmed.contains("--- devs ---")
+            || trimmed.contains("--- stats ---")
+            || trimmed.contains("\"Type\":\"Antminer")
+            || trimmed.contains("\"Type\": \"Antminer")
+        {
             let (stats, summary, pools, devs) = split_antminer_log(trimmed);
-            if AntminerDriver::detect(&stats) {
+            if AntminerDriver::detect(&stats)
+                || AntminerDriver::detect(&summary)
+                || stats.contains("Antminer")
+                || summary.contains("Antminer")
+            {
                 return Ok(ImportResult {
                     snapshot: parse_antminer_snapshot(&stats, &summary, &pools, &devs),
                     source_label: label,
@@ -125,12 +146,14 @@ fn import_json(trimmed: &str, label: &str) -> Result<ImportResult, MinerPulseErr
         });
     }
 
-    if classify_whatsminer(trimmed).is_some() {
-        return Ok(ImportResult {
-            snapshot: parse_whatsminer_snapshot(trimmed, "", "", "", "", "", ""),
-            source_label: label.to_string(),
-            miner_ip: None,
-        });
+    if is_avalon_cgminer_dump(trimmed) {
+        if let Some(snapshot) = parse_avalon_cgminer_dump(trimmed) {
+            return Ok(ImportResult {
+                snapshot,
+                source_label: label.to_string(),
+                miner_ip: None,
+            });
+        }
     }
 
     Err(MinerPulseError::with_code(
@@ -188,5 +211,31 @@ mod tests {
         assert_eq!(result.snapshot.boards.len(), 2);
         assert_eq!(result.snapshot.fans.rpm.len(), 4);
         assert!(!result.snapshot.pools.is_empty());
+    }
+
+    #[test]
+    fn imports_avalon_1326_cgminer_dump() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../OldProject/txt/1326.txt");
+        if !path.exists() {
+            return;
+        }
+        let content = fs::read_to_string(path).expect("read 1326 sample");
+        let result = import_file_content(&content, Some("1326.txt")).expect("import 1326");
+        assert!(result.snapshot.identity.model.contains("1326"));
+        assert_eq!(result.snapshot.boards.len(), 3);
+        assert_eq!(result.snapshot.board_chips[0].matrix_id.as_deref(), Some("Matrix_1326"));
+    }
+
+    #[test]
+    fn imports_avalon_1346_cgminer_dump() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../OldProject/txt/1346.txt");
+        if !path.exists() {
+            return;
+        }
+        let content = fs::read_to_string(path).expect("read 1346 sample");
+        let result = import_file_content(&content, Some("1346.txt")).expect("import 1346");
+        assert!(result.snapshot.identity.model.contains("1346"));
+        assert_eq!(result.snapshot.boards.len(), 3);
+        assert_eq!(result.snapshot.board_chips[0].matrix_id.as_deref(), Some("Matrix_1346"));
     }
 }

@@ -1,3 +1,41 @@
+export type HashrateUnit = "GH/s" | "TH/s" | "PH/s";
+
+export function hashrateChartScale(maxGhs: number): { unit: HashrateUnit; divisor: number } {
+  const abs = Math.abs(maxGhs);
+  if (abs >= 1_000_000) return { unit: "PH/s", divisor: 1_000_000 };
+  if (abs >= 1000) return { unit: "TH/s", divisor: 1000 };
+  return { unit: "GH/s", divisor: 1 };
+}
+
+export function formatHashrateAxis(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 100) return value.toFixed(0);
+  if (abs >= 10) return value.toFixed(1);
+  return value.toFixed(2);
+}
+
+export function pickSnapshotHashrateGhs(hashrate: {
+  avg5s_ghs: number;
+  current_ghs: number;
+  avg_ghs: number;
+  per_board_ghs: number[];
+}): number {
+  const candidates: number[] = [];
+  for (const value of [hashrate.avg5s_ghs, hashrate.current_ghs, hashrate.avg_ghs]) {
+    if (Number.isFinite(value) && value > 0) {
+      candidates.push(value);
+    }
+  }
+  const boardSum = hashrate.per_board_ghs.reduce((sum, value) => {
+    return Number.isFinite(value) && value > 0 ? sum + value : sum;
+  }, 0);
+  if (boardSum > 0) {
+    candidates.push(boardSum);
+  }
+  if (candidates.length === 0) return 0;
+  return Math.max(...candidates);
+}
+
 export function formatHashrate(ghs: number | null | undefined): string {
   if (ghs == null || Number.isNaN(ghs)) return "—";
   const abs = Math.abs(ghs);

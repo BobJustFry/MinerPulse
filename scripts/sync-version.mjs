@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const versionFile = join(root, "VERSION.json");
 const meta = JSON.parse(readFileSync(versionFile, "utf8"));
-const display = `${meta.version} (build ${meta.build})`;
+const display = `${meta.product} ${meta.version} (${meta.build})`;
 
 const pkgPath = join(root, "minerpulse-desktop", "package.json");
 const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
@@ -17,7 +17,7 @@ const tauri = JSON.parse(readFileSync(tauriPath, "utf8"));
 tauri.version = meta.version;
 if (!tauri.app) tauri.app = {};
 tauri.app.windows ??= [{}];
-tauri.app.windows[0].title = `${meta.product} ${display}`;
+tauri.app.windows[0].title = display;
 writeFileSync(tauriPath, `${JSON.stringify(tauri, null, 2)}\n`);
 
 const coreToml = join(root, "minerpulse-core", "Cargo.toml");
@@ -25,4 +25,4 @@ let toml = readFileSync(coreToml, "utf8");
 toml = toml.replace(/^version = ".*"/m, `version = "${meta.version}"`);
 writeFileSync(coreToml, toml);
 
-console.log(`Synced ${meta.product} ${display}`);
+console.log(`Synced ${display}`);

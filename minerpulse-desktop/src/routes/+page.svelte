@@ -1,18 +1,42 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
-  import { save, ask, open } from "@tauri-apps/plugin-dialog";
-  import { check } from "@tauri-apps/plugin-updater";
-  import { relaunch } from "@tauri-apps/plugin-process";
+  import { save, open } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
+  import AboutModal from "$lib/components/AboutModal.svelte";
+  import WindowCaption from "$lib/components/WindowCaption.svelte";
   import { locales, t, type Locale, type MessageKey } from "$lib/i18n";
   import { openScanWindow } from "$lib/openScanWindow";
+  import MinerChipMatrix from "$lib/components/MinerChipMatrix.svelte";
   import MinerDataPanel from "$lib/components/MinerDataPanel.svelte";
+  import MinerCommandsPanel from "$lib/components/MinerCommandsPanel.svelte";
   import MinerPoolsPanel from "$lib/components/MinerPoolsPanel.svelte";
+  import MinerChartsPanel from "$lib/components/MinerChartsPanel.svelte";
+  import {
+    appendChartPoint,
+    chartPointsFromFrames,
+    pointFromSnapshot,
+    type ChartPoint,
+  } from "$lib/chartHistory";
   import {
     type ParseImportResponse,
   } from "$lib/importFile";
-  import { setupNativeFileDrop } from "$lib/setupNativeFileDrop";
+  import { setupFileDrop } from "$lib/setupFileDrop";
+  import {
+    DEFAULT_POLL_RATE_HZ,
+    getPollStatus,
+    loadSessionFile,
+    isPollRateHz,
+    POLL_RATES_HZ,
+    startPoll,
+    stopPoll,
+    type PollFinishedEvent,
+    type PollRateHz,
+    type PollSnapshotEvent,
+  } from "$lib/pollSession";
+  import { SessionPlayer, type PlaybackSpeed } from "$lib/sessionPlayer";
+  import SessionPlayerBar from "$lib/components/SessionPlayerBar.svelte";
+  import type { ChartsLayout } from "$lib/components/MinerChartsPanel";
   import type {
     Entitlements,
     MinerSnapshot,
@@ -32,9 +56,37 @@
   let busy = $state(false);
   let statusText = $state("");
   let snapshot = $state<MinerSnapshot | null>(null);
-  let appVersion = $state("1.0.0 (build 1)");
+  let appVersion = $state("Miner Pulse 1.0.1 (25)");
+  let appVersionNumber = $state("1.0.1");
+  let appBuild = $state(25);
+  let appProduct = $state("Miner Pulse");
+  let aboutOpen = $state(false);
   let connectionLoaded = $state(false);
   let dropActive = $state(false);
+  let polling = $state(false);
+  let recording = $state(false);
+  let connectionLocked = $state(false);
+  let pollFrame = $state(0);
+  let sessionLoaded = $state(false);
+  let sessionFileName = $state("");
+  let playbackActive = $state(false);
+  let playerSpeed = $state<PlaybackSpeed>(1);
+  let playerFrameIndex = $state(0);
+  let playerFrameTotal = $state(0);
+  let playerCurrentMs = $state(0);
+  let playerDurationMs = $state(0);
+  let sessionPlayer: SessionPlayer | null = null;
+  let chartPoints = $state<ChartPoint[]>([]);
+  let chartCursorMs = $state<number | null>(null);
+  let chartsLive = $state(false);
+  let chartsLayout = $state<ChartsLayout>("tile");
+  let pollRateHz = $state<PollRateHz>(DEFAULT_POLL_RATE_HZ);
+  type ReadActionMode = "read" | "poll" | "record";
+  let readActionMode = $state<ReadActionMode>("read");
+  let actionMenuOpen = $state(false);
+  type OpenFileMode = "session" | "log";
+  let openFileMode = $state<OpenFileMode>("log");
+  let openFileMenuOpen = $state(false);
   let entitlements = $state<Entitlements>({
     tier: "free",
     can_poll: false,
@@ -45,8 +97,51 @@
     min_read_interval_sec: 10,
   });
 
-  const tabs: TabId[] = ["data", "console", "pools", "charts", "commands"];
+  const tabs: TabId[] = ["data", "chips", "console", "pools", "charts", "commands"];
   const CONNECTION_KEY = "minerpulse.connection";
+
+  const chartsUnlocked = $derived(
+    entitlements.can_show_charts || polling || recording || sessionLoaded,
+  );
+  const visibleTabs = $derived.by((): TabId[] =>
+    tabs.filter((tab) => {
+      if (tab === "charts") return chartsUnlocked;
+      if (tab === "commands") return entitlements.can_poll;
+      return true;
+    }),
+  );
+  const chartsLiveNow = $derived(chartsLive || polling || recording);
+  const readActionLabel = $derived(
+    readActionMode === "read"
+      ? msg("toolbar.read")
+      : readActionMode === "poll"
+        ? msg("toolbar.poll")
+        : msg("toolbar.record"),
+  );
+  function readActionModeOptions(): Array<{ id: ReadActionMode; label: string }> {
+    const options: Array<{ id: ReadActionMode; label: string }> = [
+      { id: "read", label: msg("toolbar.read") },
+      { id: "poll", label: msg("toolbar.poll") },
+    ];
+    if (entitlements.can_record_session) {
+      options.push({ id: "record", label: msg("toolbar.record") });
+    }
+    return options;
+  }
+
+  const openFileLabel = $derived(
+    openFileMode === "session" ? msg("toolbar.openSession") : msg("toolbar.openLog"),
+  );
+
+  function openFileModeOptions(): Array<{ id: OpenFileMode; label: string }> {
+    const options: Array<{ id: OpenFileMode; label: string }> = [
+      { id: "log", label: msg("toolbar.openLog") },
+    ];
+    if (entitlements.can_play) {
+      options.unshift({ id: "session", label: msg("toolbar.openSession") });
+    }
+    return options;
+  }
 
   function msg(key: MessageKey, args?: Record<string, string | number>) {
     return t(locale, key, args);
@@ -58,7 +153,15 @@
     document.documentElement.lang = locale === "zh-CN" ? "zh-CN" : locale;
     localStorage.setItem(
       "minerpulse.ui",
-      JSON.stringify({ theme, density, locale }),
+      JSON.stringify({
+        theme,
+        density,
+        locale,
+        chartsLayout,
+        pollRateHz,
+        readActionMode,
+        openFileMode,
+      }),
     );
   }
 
@@ -81,6 +184,7 @@
   function tabLabel(tab: TabId) {
     const map: Record<TabId, MessageKey> = {
       data: "tabs.data",
+      chips: "tabs.chips",
       console: "tabs.console",
       pools: "tabs.pools",
       charts: "tabs.charts",
@@ -112,6 +216,7 @@
   }
 
   async function openScan() {
+    if (connectionLocked) return;
     statusText = msg("scan.opening");
     try {
       await openScanWindow();
@@ -121,7 +226,22 @@
     }
   }
 
+  function clearCharts() {
+    chartPoints = [];
+    chartCursorMs = null;
+    chartsLive = false;
+  }
+
+  function pushChartPoint(nextSnapshot: MinerSnapshot, t_ms: number) {
+    chartPoints = appendChartPoint(
+      chartPoints,
+      pointFromSnapshot(nextSnapshot, t_ms),
+    );
+  }
+
   async function readMiner() {
+    if (polling || connectionLocked) return;
+    connectionLocked = true;
     busy = true;
     statusText = msg("status.reading");
     try {
@@ -129,9 +249,232 @@
         request: { ip, port: Number(port) || 4028 },
       });
       snapshot = response.snapshot;
+      clearCharts();
+      pushChartPoint(response.snapshot, 0);
       statusText = `${snapshot.identity.model} · ${snapshot.status}`;
     } catch (err) {
       snapshot = null;
+      statusText = formatError(err);
+    } finally {
+      busy = false;
+      connectionLocked = false;
+    }
+  }
+
+  function syncPlayerState(state: {
+    index: number;
+    total: number;
+    current_ms: number;
+    duration_ms: number;
+    playing: boolean;
+    speed: PlaybackSpeed;
+  }) {
+    playerFrameIndex = state.index;
+    playerFrameTotal = state.total;
+    playerCurrentMs = state.current_ms;
+    playerDurationMs = state.duration_ms;
+    playbackActive = state.playing;
+    playerSpeed = state.speed;
+  }
+
+  function stopPlayback() {
+    sessionPlayer?.unload();
+    sessionLoaded = false;
+    sessionFileName = "";
+    playbackActive = false;
+    playerFrameIndex = 0;
+    playerFrameTotal = 0;
+    playerCurrentMs = 0;
+    playerDurationMs = 0;
+    playerSpeed = 1;
+    chartCursorMs = null;
+    chartsLive = false;
+  }
+
+  function initSessionPlayer() {
+    sessionPlayer = new SessionPlayer(
+      (frame, index, total) => {
+        snapshot = frame.snapshot;
+        chartCursorMs = frame.t_ms;
+        if (playbackActive) {
+          statusText = msg("status.playing", {
+            current: index + 1,
+            total,
+          });
+        }
+      },
+      () => {
+        playbackActive = false;
+        statusText = msg("status.playbackEnded");
+        syncPlayerState(sessionPlayer!.getState());
+      },
+      (state) => {
+        syncPlayerState(state);
+      },
+    );
+  }
+
+  function playerPlay() {
+    sessionPlayer?.play(playerFrameIndex);
+  }
+
+  function playerPause() {
+    sessionPlayer?.pause();
+  }
+
+  function playerStop() {
+    sessionPlayer?.stop();
+    statusText = msg("status.sessionLoaded", { count: playerFrameTotal });
+  }
+
+  function playerSeek(progress: number) {
+    sessionPlayer?.seekToProgress(progress);
+  }
+
+  function playerSetSpeed(speed: PlaybackSpeed) {
+    sessionPlayer?.setSpeed(speed);
+  }
+
+  async function startPolling(record: boolean) {
+    if (polling || connectionLocked) return;
+    connectionLocked = true;
+    stopPlayback();
+    clearCharts();
+
+    let recordPath: string | null = null;
+    if (record) {
+      if (!entitlements.can_record_session) {
+        connectionLocked = false;
+        return;
+      }
+      const path = await save({
+        defaultPath: `minerpulse-${Date.now()}.mpulse`,
+        filters: [{ name: "MinerPulse", extensions: ["mpulse"] }],
+      });
+      if (!path || Array.isArray(path)) {
+        connectionLocked = false;
+        return;
+      }
+      recordPath = path;
+    }
+
+    busy = true;
+    try {
+      await startPoll({
+        ip,
+        port: Number(port) || 4028,
+        recordPath,
+        pollRateHz,
+      });
+      polling = true;
+      recording = record;
+      pollFrame = 0;
+      chartsLive = true;
+      statusText = record
+        ? msg("status.recording", { frame: 0 })
+        : msg("status.polling", { frame: 0 });
+    } catch (err) {
+      connectionLocked = false;
+      statusText = formatError(err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function stopPolling() {
+    if (!polling) return;
+    await stopPoll();
+  }
+
+  function runReadAction() {
+    if (busy || polling || connectionLocked) return;
+    if (readActionMode === "read") {
+      void readMiner();
+      return;
+    }
+    if (readActionMode === "poll") {
+      void startPolling(false);
+      return;
+    }
+    void startPolling(true);
+  }
+
+  function setReadActionMode(next: ReadActionMode) {
+    if (next === "record" && !entitlements.can_record_session) return;
+    readActionMode = next;
+    actionMenuOpen = false;
+  }
+
+  function toggleActionMenu() {
+    if (connectionLocked) return;
+    openFileMenuOpen = false;
+    actionMenuOpen = !actionMenuOpen;
+  }
+
+  function toggleOpenFileMenu() {
+    if (busy || polling) return;
+    actionMenuOpen = false;
+    openFileMenuOpen = !openFileMenuOpen;
+  }
+
+  function setOpenFileMode(next: OpenFileMode) {
+    if (next === "session" && !entitlements.can_play) return;
+    openFileMode = next;
+    openFileMenuOpen = false;
+  }
+
+  function runOpenFileAction() {
+    if (busy || polling) return;
+    if (openFileMode === "session") {
+      if (!entitlements.can_play) return;
+      void openSessionFile();
+      return;
+    }
+    void importFromFile();
+  }
+
+  async function openSessionFile() {
+    const path = await open({
+      title: msg("toolbar.openSession"),
+      multiple: false,
+      filters: [{ name: "MinerPulse", extensions: ["mpulse"] }],
+    });
+    if (!path || Array.isArray(path)) return;
+
+    busy = true;
+    try {
+      const file = await loadSessionFile(path);
+      if (file.kind !== "session" || file.frames.length === 0) {
+        const frame = file.frames[0];
+        if (frame) {
+          snapshot = frame.snapshot;
+          clearCharts();
+          pushChartPoint(frame.snapshot, 0);
+          await invoke("remember_snapshot", { snapshot: frame.snapshot });
+          if (file.miner_ip) {
+            ip = file.miner_ip;
+            saveConnection();
+          }
+        }
+        stopPlayback();
+        return;
+      }
+
+      if (!sessionPlayer) initSessionPlayer();
+      sessionPlayer!.load(file.frames);
+      sessionLoaded = true;
+      sessionFileName = path.split(/[/\\]/).pop() ?? path;
+      snapshot = file.frames[0].snapshot;
+      chartPoints = chartPointsFromFrames(file.frames);
+      chartCursorMs = file.frames[0].t_ms;
+      chartsLive = false;
+      syncPlayerState(sessionPlayer!.getState());
+      if (file.miner_ip) {
+        ip = file.miner_ip;
+        saveConnection();
+      }
+      statusText = msg("status.sessionLoaded", { count: file.frames.length });
+    } catch (err) {
       statusText = formatError(err);
     } finally {
       busy = false;
@@ -177,23 +520,8 @@
     statusText = msg("status.ready");
   }
 
-  async function checkForUpdates() {
-    busy = true;
-    statusText = msg("status.updating");
-    try {
-      const update = await check();
-      if (!update) {
-        statusText = msg("status.upToDate");
-        return;
-      }
-      statusText = msg("status.updateAvailable", { version: update.version });
-      await update.downloadAndInstall();
-      await relaunch();
-    } catch (err) {
-      statusText = String(err);
-    } finally {
-      busy = false;
-    }
+  function openAbout() {
+    aboutOpen = true;
   }
 
   async function cycleTier() {
@@ -219,11 +547,9 @@
     if (!path || Array.isArray(path)) return;
 
     busy = true;
-    statusText = msg("import.opening");
     try {
       const result = await invoke<ParseImportResponse>("import_file_path", { path });
-      const fileName = path.split(/[/\\]/).pop() ?? path;
-      await applyImportedSnapshot(result, fileName);
+      await applyImportedSnapshot(result);
     } catch (err) {
       statusText = formatError(err);
     } finally {
@@ -231,20 +557,7 @@
     }
   }
 
-  async function applyImportedSnapshot(result: ParseImportResponse, fileName: string) {
-    const confirmed = await ask(
-      msg("import.openPrompt", {
-        name: fileName,
-        model: result.snapshot.identity.model,
-      }),
-      {
-        title: msg("import.title"),
-        kind: "info",
-      },
-    );
-
-    if (!confirmed) return;
-
+  async function applyImportedSnapshot(result: ParseImportResponse) {
     snapshot = result.snapshot;
     await invoke("remember_snapshot", { snapshot: result.snapshot });
 
@@ -252,20 +565,15 @@
       ip = result.miner_ip;
       saveConnection();
     }
-
-    activeTab = "data";
-    statusText = msg("import.opened", { name: fileName });
-  }
-
-  function tabDisabled(tab: TabId): boolean {
-    if (tab === "charts") return !entitlements.can_show_charts;
-    if (tab === "commands") return !entitlements.can_poll;
-    return false;
   }
 
   onMount(() => {
     let unlistenMiner: (() => void) | undefined;
     let unlistenDrop: (() => void) | undefined;
+    let unlistenPollSnapshot: (() => void) | undefined;
+    let unlistenPollFinished: (() => void) | undefined;
+
+    initSessionPlayer();
 
     void (async () => {
       const saved = localStorage.getItem("minerpulse.ui");
@@ -275,6 +583,20 @@
           theme = parsed.theme ?? theme;
           density = parsed.density ?? density;
           locale = parsed.locale ?? locale;
+          chartsLayout = parsed.chartsLayout === "list" ? "list" : "tile";
+          if (isPollRateHz(parsed.pollRateHz)) {
+            pollRateHz = parsed.pollRateHz;
+          }
+          if (
+            parsed.readActionMode === "read" ||
+            parsed.readActionMode === "poll" ||
+            parsed.readActionMode === "record"
+          ) {
+            readActionMode = parsed.readActionMode;
+          }
+          if (parsed.openFileMode === "session" || parsed.openFileMode === "log") {
+            openFileMode = parsed.openFileMode;
+          }
         } catch {
           /* ignore */
         }
@@ -284,8 +606,13 @@
       connectionLoaded = true;
       await refreshEntitlements();
       try {
-        const v = await invoke<{ display: string }>("get_app_version");
+        const v = await invoke<{ display: string; version: string; build: number; product: string }>(
+          "get_app_version",
+        );
         appVersion = v.display;
+        appVersionNumber = v.version;
+        appBuild = v.build;
+        appProduct = v.product;
       } catch {
         /* ignore in web preview */
       }
@@ -296,41 +623,82 @@
         port: number;
         model: string;
       }>("miner-selected", (event) => {
+        if (connectionLocked) return;
         ip = event.payload.ip;
         port = String(event.payload.port);
         statusText = `${event.payload.model} · ${event.payload.ip}`;
         saveConnection();
       });
 
-      unlistenDrop = await setupNativeFileDrop({
+      unlistenDrop = setupFileDrop({
         onHover: () => {
           dropActive = true;
         },
         onLeave: () => {
           dropActive = false;
         },
-        onDrop: async (result, fileName) => {
+        onDrop: async (result) => {
           dropActive = false;
-          await applyImportedSnapshot(result, fileName);
+          try {
+            await applyImportedSnapshot(result);
+          } catch (err) {
+            statusText = formatError(err);
+          }
         },
         onError: (err) => {
           dropActive = false;
-          if (String(err).includes("InvalidInput") || String(err).includes("INVALID_INPUT")) {
-            statusText = msg("import.tooLarge");
-            return;
-          }
           statusText = formatError(err);
         },
         onTooLarge: () => {
           dropActive = false;
           statusText = msg("import.tooLarge");
         },
-      }).catch(() => undefined);
+      });
+
+      unlistenPollSnapshot = await listen<PollSnapshotEvent>("poll://snapshot", (event) => {
+        snapshot = event.payload.snapshot;
+        pollFrame = event.payload.frame_index + 1;
+        pushChartPoint(event.payload.snapshot, event.payload.t_ms);
+        chartCursorMs = event.payload.t_ms;
+        statusText = event.payload.recording
+          ? msg("status.recording", { frame: pollFrame })
+          : msg("status.polling", { frame: pollFrame });
+      });
+
+      unlistenPollFinished = await listen<PollFinishedEvent>("poll://finished", (event) => {
+        polling = false;
+        recording = false;
+        connectionLocked = false;
+        busy = false;
+        chartsLive = false;
+        if (event.payload.saved_path) {
+          statusText = msg("status.sessionSaved", { path: event.payload.saved_path });
+        } else if (event.payload.error) {
+          statusText = event.payload.error;
+        } else {
+          statusText = msg("status.pollStopped", { count: event.payload.frame_count });
+        }
+      });
+
+      try {
+        const pollStatus = await getPollStatus();
+        polling = pollStatus.running;
+        recording = pollStatus.recording;
+        if (pollStatus.running) {
+          connectionLocked = true;
+          chartsLive = true;
+        }
+      } catch {
+        /* ignore in web preview */
+      }
     })();
 
     return () => {
       unlistenMiner?.();
       unlistenDrop?.();
+      unlistenPollSnapshot?.();
+      unlistenPollFinished?.();
+      sessionPlayer?.pause();
     };
   });
 
@@ -340,9 +708,53 @@
     port;
     saveConnection();
   });
+
+  $effect(() => {
+    if (!connectionLoaded) return;
+    chartsLayout;
+    pollRateHz;
+    readActionMode;
+    openFileMode;
+    applyUiPrefs();
+  });
+
+  $effect(() => {
+    if (readActionMode === "record" && !entitlements.can_record_session) {
+      readActionMode = "read";
+    }
+  });
+
+  $effect(() => {
+    if (!visibleTabs.includes(activeTab)) {
+      activeTab = visibleTabs[0] ?? "data";
+    }
+  });
+
+  $effect(() => {
+    if (openFileMode === "session" && !entitlements.can_play) {
+      openFileMode = "log";
+    }
+  });
+
+  $effect(() => {
+    if (!actionMenuOpen && !openFileMenuOpen) return;
+    const onDocumentClick = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (actionMenuOpen && !target.closest(".action-control")) {
+        actionMenuOpen = false;
+      }
+      if (openFileMenuOpen && !target.closest(".open-file-control")) {
+        openFileMenuOpen = false;
+      }
+    };
+    document.addEventListener("click", onDocumentClick);
+    return () => document.removeEventListener("click", onDocumentClick);
+  });
 </script>
 
 <div class="app-shell" class:drop-active={dropActive}>
+  <WindowCaption {locale} {theme} product={appProduct} version={appVersionNumber} build={appBuild} />
+
   {#if dropActive}
     <div class="drop-overlay" aria-hidden="true">
       <div class="drop-overlay-card">
@@ -352,45 +764,151 @@
     </div>
   {/if}
   <header class="toolbar">
-    <div class="brand">
-      <div class="brand-mark"></div>
-      <span>{msg("app.title")}</span>
-    </div>
-
-    <div class="field ip-field">
+    <div class="field host-field">
       <label for="ip">{msg("toolbar.ip")}</label>
-      <input id="ip" bind:value={ip} />
-      <button class="btn" disabled={busy} onclick={openScan}>
+      <div class="host-inputs">
+        <input id="ip" bind:value={ip} disabled={connectionLocked} />
+        <span class="host-sep" aria-hidden="true">:</span>
+        <input
+          id="port"
+          class="port"
+          bind:value={port}
+          disabled={connectionLocked}
+          aria-label={msg("toolbar.port")}
+        />
+      </div>
+      <button class="btn" disabled={connectionLocked} onclick={openScan}>
         {msg("toolbar.scan")}
       </button>
     </div>
-    <div class="field">
-      <label for="port">{msg("toolbar.port")}</label>
-      <input id="port" class="port" bind:value={port} />
-    </div>
 
     {#if entitlements.can_poll}
-      <button class="btn primary" disabled={busy}>{msg("toolbar.start")}</button>
-      <button class="btn" disabled>{msg("toolbar.stop")}</button>
+      {#if polling}
+        <button class="btn danger" disabled={busy} onclick={stopPolling}>
+          {msg("toolbar.stop")}
+        </button>
+      {:else}
+        {#if readActionMode !== "read"}
+          <div class="field poll-rate-field">
+            <label for="poll-rate">{msg("toolbar.pollRate")}</label>
+            <select
+              id="poll-rate"
+              class="btn poll-rate-select"
+              bind:value={pollRateHz}
+              disabled={connectionLocked}
+            >
+              {#each POLL_RATES_HZ as rate (rate)}
+                <option value={rate}>{msg("toolbar.pollRateOption", { rate })}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
+        <div class="action-control" class:open={actionMenuOpen}>
+          <div class="split-action">
+            <button
+              type="button"
+              class="split-action-main"
+              disabled={busy || connectionLocked}
+              onclick={runReadAction}
+            >
+              {readActionLabel}
+            </button>
+            <button
+              type="button"
+              class="split-action-toggle"
+              disabled={connectionLocked}
+              aria-expanded={actionMenuOpen}
+              aria-label={msg("toolbar.actionMode")}
+              onclick={(event) => {
+                event.stopPropagation();
+                toggleActionMenu();
+              }}
+            >
+              <span class="split-action-chevron" aria-hidden="true"></span>
+            </button>
+          </div>
+          {#if actionMenuOpen}
+            <div class="action-menu" role="menu">
+              {#each readActionModeOptions() as mode (mode.id)}
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  class="action-menu-item"
+                  class:active={readActionMode === mode.id}
+                  aria-checked={readActionMode === mode.id}
+                  onclick={(event) => {
+                    event.stopPropagation();
+                    setReadActionMode(mode.id);
+                  }}
+                >
+                  {mode.label}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
     {:else}
-      <button class="btn primary" disabled={busy} onclick={readMiner}>
+      <button
+        class="btn primary"
+        disabled={busy || polling || connectionLocked}
+        onclick={readMiner}
+      >
         {msg("toolbar.read")}
       </button>
     {/if}
 
-    <button class="btn" disabled={busy} onclick={importFromFile} title={msg("import.dropHint")}>
-      {msg("toolbar.importLog")}
-    </button>
+    <div class="open-file-control action-control" class:open={openFileMenuOpen}>
+      <div class="split-action">
+        <button
+          type="button"
+          class="split-action-main"
+          disabled={busy || polling}
+          title={msg("import.dropHint")}
+          onclick={runOpenFileAction}
+        >
+          {openFileLabel}
+        </button>
+        <button
+          type="button"
+          class="split-action-toggle"
+          disabled={busy || polling}
+          aria-expanded={openFileMenuOpen}
+          aria-label={msg("toolbar.openFileMode")}
+          onclick={(event) => {
+            event.stopPropagation();
+            toggleOpenFileMenu();
+          }}
+        >
+          <span class="split-action-chevron" aria-hidden="true"></span>
+        </button>
+      </div>
+      {#if openFileMenuOpen}
+        <div class="action-menu" role="menu">
+          {#each openFileModeOptions() as mode (mode.id)}
+            <button
+              type="button"
+              role="menuitemradio"
+              class="action-menu-item"
+              class:active={openFileMode === mode.id}
+              aria-checked={openFileMode === mode.id}
+              onclick={(event) => {
+                event.stopPropagation();
+                setOpenFileMode(mode.id);
+              }}
+            >
+              {mode.label}
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
 
     <button class="btn" disabled={!snapshot || busy} onclick={saveSnapshot}>
       {msg("toolbar.save")}
     </button>
 
     <div class="spacer"></div>
-
-    <button class="btn ghost" disabled={busy} onclick={checkForUpdates}>
-      {msg("toolbar.update")}
-    </button>
 
     <button class="btn ghost" onclick={toggleTheme}>
       {theme === "light" ? msg("toolbar.themeDark") : msg("toolbar.themeLight")}
@@ -419,14 +937,35 @@
     >
       {tierLabel(entitlements.tier)}
     </button>
+
+    <button class="btn ghost" onclick={openAbout}>
+      {msg("toolbar.about")}
+    </button>
   </header>
 
+  <SessionPlayerBar
+    {locale}
+    visible={sessionLoaded && playerFrameTotal > 0}
+    playing={playbackActive}
+    speed={playerSpeed}
+    frameIndex={playerFrameIndex}
+    frameTotal={playerFrameTotal}
+    currentMs={playerCurrentMs}
+    durationMs={playerDurationMs}
+    fileLabel={sessionFileName}
+    onPlay={playerPlay}
+    onPause={playerPause}
+    onStop={playerStop}
+    onClose={stopPlayback}
+    onSeek={playerSeek}
+    onSpeed={playerSetSpeed}
+  />
+
   <nav class="tabs">
-    {#each tabs as tab}
+    {#each visibleTabs as tab}
       <button
         class="tab"
         class:active={activeTab === tab}
-        disabled={tabDisabled(tab)}
         onclick={() => (activeTab = tab)}
       >
         {tabLabel(tab)}
@@ -434,10 +973,28 @@
     {/each}
   </nav>
 
-  <main class="content">
+  <main
+    class="content"
+    class:content-charts-list={activeTab === "charts" &&
+      chartsLayout === "list" &&
+      chartsUnlocked &&
+      chartPoints.length > 0}
+  >
     {#if activeTab === "data"}
       {#if snapshot}
         <MinerDataPanel {snapshot} {locale} />
+      {:else}
+        <div class="locked-panel">{msg("status.noData")}</div>
+      {/if}
+    {:else if activeTab === "chips"}
+      {#if snapshot && (snapshot.board_chips?.length ?? 0) > 0}
+        <MinerChipMatrix
+          boards={snapshot.board_chips ?? []}
+          vendor={snapshot.identity.vendor}
+          {locale}
+        />
+      {:else if snapshot}
+        <div class="locked-panel">{msg("chips.empty")}</div>
       {:else}
         <div class="locked-panel">{msg("status.noData")}</div>
       {/if}
@@ -450,16 +1007,44 @@
         <div class="locked-panel">{msg("pools.empty")}</div>
       {/if}
     {:else if activeTab === "charts"}
-      <div class="locked-panel">{msg("charts.locked")}</div>
+      <MinerChartsPanel
+        points={chartPoints}
+        cursorMs={chartCursorMs}
+        live={chartsLiveNow}
+        bind:layout={chartsLayout}
+        {locale}
+      />
     {:else if activeTab === "commands"}
-      <div class="locked-panel">{msg("commands.locked")}</div>
+      {#if snapshot}
+        <MinerCommandsPanel
+          {snapshot}
+          {ip}
+          {port}
+          {locale}
+          onStatus={(text) => {
+            statusText = text;
+          }}
+        />
+      {:else}
+        <div class="locked-panel">{msg("status.noData")}</div>
+      {/if}
     {/if}
   </main>
 
   <footer class="statusbar">
-    <span class="status-dot" class:busy={busy}></span>
+    <span class="status-dot" class:busy={busy || polling || playbackActive}></span>
     <span>{statusText || msg("status.ready")}</span>
     <span class="spacer"></span>
-    <span>{appVersion}</span>
+    <button type="button" class="status-version" onclick={openAbout} title={msg("toolbar.about")}>
+      {appVersion}
+    </button>
   </footer>
 </div>
+
+<AboutModal
+  bind:open={aboutOpen}
+  {locale}
+  version={appVersionNumber}
+  build={appBuild}
+  product={appProduct}
+/>

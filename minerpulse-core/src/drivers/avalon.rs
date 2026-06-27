@@ -1,3 +1,5 @@
+use super::avalon_cgminer::{is_avalon_cgminer_dump, parse_avalon_cgminer_dump};
+use super::avalon_chips::{parse_avalon_board_chips, parse_bracket_u32s};
 use super::parse::{get_parameter, get_parameter_bracket, parse_f64, parse_i32, parse_u64};
 use super::MinerDriver;
 use crate::error::MinerPulseError;
@@ -18,7 +20,7 @@ impl MinerDriver for AvalonDriver {
     where
         Self: Sized,
     {
-        if is_avalon_estats_log(stats_response) {
+        if is_avalon_estats_log(stats_response) || is_avalon_cgminer_dump(stats_response) {
             return true;
         }
         if let Some(id) = get_parameter(stats_response, "ID") {
@@ -36,18 +38,41 @@ impl MinerDriver for AvalonDriver {
         host: &str,
         port: u16,
     ) -> Result<MinerSnapshot, MinerPulseError> {
-        let raw = client.send_receive(host, port, "estats+lcd", "", false)?;
         let pools_raw = client
             .send_receive(host, port, "pools", "", true)
             .or_else(|_| client.send_receive(host, port, "pools", "", false))
             .unwrap_or_default();
+
+        let raw = client.send_receive(host, port, "estats+lcd", "", false)?;
+        if is_avalon_estats_log(&raw) {
+            return Ok(parse_estats(&raw, &pools_raw));
+        }
+
+        let stats = client
+            .send_receive(host, port, "stats", "", true)
+            .or_else(|_| client.send_receive(host, port, "stats", "", false))
+            .unwrap_or_default();
+        if is_avalon_cgminer_dump(&stats) {
+            if let Some(mut snapshot) = parse_avalon_cgminer_dump(&stats) {
+                if snapshot.pools.is_empty() && !pools_raw.is_empty() {
+                    snapshot.pools = parse_avalon_pools(&pools_raw);
+                    snapshot.raw_log.push_str("\n--- pools ---\n");
+                    snapshot.raw_log.push_str(&pools_raw);
+                }
+                return Ok(snapshot);
+            }
+        }
 
         Ok(parse_estats(&raw, &pools_raw))
     }
 }
 
 fn is_avalon_estats_log(raw: &str) -> bool {
-    raw.contains("CMD=estats") || raw.contains("MM ID0=") || raw.contains("ID=AVA")
+    raw.contains("CMD=estats")
+        || raw.contains("MM ID0=")
+        || raw.contains("'MM ID0':")
+        || raw.contains("\"MM ID0\":")
+        || raw.contains("ID=AVA")
 }
 
 fn flatten_log(raw: &str) -> String {
@@ -68,6 +93,65 @@ fn parse_bracket_floats(text: &str, key: &str) -> Vec<f64> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn parse_ataopts_voltage_level(raw: &str) -> Option<u32> {
+    let marker = "--avalon10-voltage-level";
+    let rest = raw.split(marker).nth(1)?;
+    rest.split_whitespace()
+        .next()
+        .and_then(|part| parse_u64(part).map(|v| v as u32))
+}
+
+fn avalon_board_tuning(text: &str, slot: usize) -> (Vec<u32>, Vec<u32>, Option<u32>) {
+    let freq_domains = parse_bracket_u32s(text, &format!("SF{slot}["));
+    let freq_bands = parse_bracket_u32s(text, &format!("ATABD{slot}["));
+    let voltage_level = get_parameter_bracket(text, &format!("ATAOPTS{slot}["))
+        .and_then(|raw| parse_ataopts_voltage_level(&raw));
+    (freq_domains, freq_bands, voltage_level)
+}
+
+fn build_avalon_boards(
+    flattened: &str,
+    board_count: usize,
+    hashrate: &HashrateStats,
+    thermal: &ThermalStats,
+    fans: &FanStats,
+    fan_count_matches_boards: bool,
+) -> Vec<BoardStats> {
+    if board_count == 0 {
+        return Vec::new();
+    }
+
+    (0..board_count)
+        .map(|index| {
+            let (freq_domains, freq_bands, voltage_level) = avalon_board_tuning(flattened, index);
+            BoardStats {
+                label: format!("Board {}", index + 1),
+                hashrate_ghs: hashrate.per_board_ghs.get(index).copied(),
+                temp_c: thermal
+                    .per_board_max_c
+                    .get(index)
+                    .copied()
+                    .or_else(|| {
+                        thermal
+                            .per_chip_c
+                            .get(index)
+                            .map(|value| *value as f64)
+                    }),
+                fan_rpm: if fan_count_matches_boards {
+                    fans.rpm.get(index).copied()
+                } else {
+                    None
+                },
+                status: String::new(),
+                freq_domains_mhz: freq_domains,
+                freq_bands_mhz: freq_bands,
+                voltage_level,
+                ..Default::default()
+            }
+        })
+        .collect()
 }
 
 fn avalon_model_from_firmware(firmware: &str) -> String {
@@ -176,40 +260,35 @@ pub fn parse_avalon_estats_log(raw: &str) -> MinerSnapshot {
         .and_then(|s| parse_u64(&s))
         .or_else(|| get_parameter(&flattened, "Hardware Errors").and_then(|s| parse_u64(&s)));
 
+    let core_chip = get_parameter_bracket(&flattened, "Core[");
+    let work_mode = get_parameter_bracket(&flattened, "WORKMODE[")
+        .and_then(|s| parse_u64(&s))
+        .map(|v| v as u32);
+    let ecmm = get_parameter_bracket(&flattened, "ECMM[")
+        .and_then(|s| parse_u64(&s));
+
+    let board_chips = parse_avalon_board_chips(
+        &flattened,
+        &firmware,
+        core_chip.as_deref(),
+    );
+
     let board_count = hashrate
         .per_board_ghs
         .len()
         .max(thermal.per_board_max_c.len())
-        .max(thermal.per_chip_c.len());
+        .max(thermal.per_chip_c.len())
+        .max(board_chips.len());
     let fan_count_matches_boards = !fans.rpm.is_empty() && fans.rpm.len() == board_count;
 
-    let boards = if board_count == 0 {
-        Vec::new()
-    } else {
-        (0..board_count)
-            .map(|index| BoardStats {
-                label: format!("Board {}", index + 1),
-                hashrate_ghs: hashrate.per_board_ghs.get(index).copied(),
-                temp_c: thermal
-                    .per_board_max_c
-                    .get(index)
-                    .copied()
-                    .or_else(|| {
-                        thermal
-                            .per_chip_c
-                            .get(index)
-                            .map(|value| *value as f64)
-                    }),
-                fan_rpm: if fan_count_matches_boards {
-                    fans.rpm.get(index).copied()
-                } else {
-                    None
-                },
-                status: String::new(),
-                ..Default::default()
-            })
-            .collect()
-    };
+    let boards = build_avalon_boards(
+        &flattened,
+        board_count,
+        &hashrate,
+        &thermal,
+        &fans,
+        fan_count_matches_boards,
+    );
 
     let pools = parse_avalon_pools_from_lcd(raw);
 
@@ -219,6 +298,7 @@ pub fn parse_avalon_estats_log(raw: &str) -> MinerSnapshot {
             model,
             firmware: firmware.clone(),
             driver_id: "avalon".to_string(),
+            core_chip: core_chip.clone(),
         },
         hashrate,
         thermal,
@@ -232,6 +312,9 @@ pub fn parse_avalon_estats_log(raw: &str) -> MinerSnapshot {
         raw_log: raw.to_string(),
         status,
         uptime_sec,
+        work_mode,
+        ecmm,
+        board_chips,
         ..Default::default()
     }
 }
@@ -369,6 +452,7 @@ pub fn parse_estats(raw: &str, pools_raw: &str) -> MinerSnapshot {
             model,
             firmware: firmware.clone(),
             driver_id: "avalon".to_string(),
+            ..Default::default()
         },
         hashrate,
         thermal,
@@ -422,5 +506,30 @@ User=worker1"#;
         assert_eq!(snap.hw_errors, Some(14));
         assert_eq!(snap.pools.len(), 1);
         assert_eq!(snap.status, "In Work");
+    }
+
+    #[test]
+    fn parses_avalon_chip_map_from_estats_log() {
+        let sample = "MM ID0=Ver[1126Pro-S-64-test] Core[A3201] WORKMODE[1] ECMM[4] \
+                      SF0[496 516 536 556] ATABD0[496 516 536 556] \
+                      ATAOPTS0[--avalon10-freq 496:516:536:556 --avalon10-voltage-level 48 ] \
+                      PVT_T0[66 71 87] PVT_V0[326 332 329] MW0[46 52 11] ASICCRC0[0 1 0] \
+                      PVT_T1[68 71 69] PVT_V1[327 335 342] MW1[41 37 56] ASICCRC1[0 0 2]";
+        let snap = parse_avalon_estats_log(sample);
+        assert_eq!(snap.identity.core_chip.as_deref(), Some("A3201"));
+        assert_eq!(snap.work_mode, Some(1));
+        assert_eq!(snap.ecmm, Some(4));
+        assert_eq!(snap.board_chips.len(), 2);
+        assert_eq!(snap.boards.len(), 2);
+        assert_eq!(snap.boards[0].freq_domains_mhz, vec![496, 516, 536, 556]);
+        assert_eq!(snap.boards[0].voltage_level, Some(48));
+        assert_eq!(snap.board_chips[0].matrix_id.as_deref(), Some("Matrix_11x"));
+        assert_eq!(snap.board_chips[0].chips[1].errors, Some(1));
+    }
+
+    #[test]
+    fn parses_ataopts_voltage_level() {
+        let raw = "--avalon10-freq 464:484:504:524 --avalon10-voltage-level 69 ";
+        assert_eq!(parse_ataopts_voltage_level(raw), Some(69));
     }
 }

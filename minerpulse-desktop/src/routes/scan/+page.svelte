@@ -151,6 +151,13 @@
     return map[vendor] ?? vendor;
   }
 
+  const KNOWN_SCAN_VENDORS = new Set(["avalon", "antminer", "whatsminer"]);
+
+  function isKnownMiner(miner: DiscoveredMiner): boolean {
+    if (miner.supported) return true;
+    return KNOWN_SCAN_VENDORS.has(miner.vendor.toLowerCase());
+  }
+
   function ipSortKey(ip: string): number[] {
     return ip.split(".").map((part) => Number(part) || 0);
   }
@@ -372,14 +379,16 @@
           <button
             type="button"
             class="scan-item"
-            class:unsupported={!miner.supported}
+            class:unsupported={!isKnownMiner(miner)}
             onclick={() => pickMiner(miner)}
           >
             <span class="scan-item-ip">{miner.ip}</span>
             <span class="scan-item-model">
               {miner.model || vendorLabel(miner.vendor)}
             </span>
-            {#if !miner.supported}
+            {#if isKnownMiner(miner)}
+              <span class="scan-item-badge scan-item-badge-select">{msg("scan.select")}</span>
+            {:else}
               <span class="scan-item-badge">{msg("scan.preview")}</span>
             {/if}
           </button>
