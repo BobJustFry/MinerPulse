@@ -37,6 +37,7 @@ impl MinerDriver for AvalonDriver {
         client: &TcpCgminerClient,
         host: &str,
         port: u16,
+        _options: &crate::fetch_options::FetchOptions,
     ) -> Result<MinerSnapshot, MinerPulseError> {
         let pools_raw = client
             .send_receive(host, port, "pools", "", true)

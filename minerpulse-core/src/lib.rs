@@ -1,8 +1,9 @@
-pub mod import;
 pub mod discovery;
 pub mod drivers;
 pub mod entitlements;
 pub mod error;
+pub mod fetch_options;
+pub mod import;
 pub mod model;
 pub mod mpulse;
 pub mod rate_limit;
@@ -18,6 +19,7 @@ pub use drivers::registry::{
 };
 pub use entitlements::{EntitlementGate, SubscriptionTier};
 pub use error::{ErrorCode, ErrorResponse, MinerPulseError};
+pub use fetch_options::{FetchOptions, WhatsminerLuciAuth};
 pub use model::MinerSnapshot;
 pub use import::{import_file_content, ImportResult, MAX_IMPORT_BYTES};
 pub use mpulse::{

@@ -3,6 +3,7 @@ use super::avalon::AvalonDriver;
 use super::whatsminer::WhatsminerDriver;
 use super::MinerDriver;
 use crate::error::MinerPulseError;
+use crate::fetch_options::FetchOptions;
 use crate::model::{MinerSnapshot, MinerVendor};
 use crate::tcp::TcpCgminerClient;
 
@@ -76,6 +77,7 @@ pub fn fetch_with_detect(
     client: &TcpCgminerClient,
     host: &str,
     port: u16,
+    options: &FetchOptions,
 ) -> Result<MinerSnapshot, MinerPulseError> {
     let mut last_stats = String::new();
 
@@ -86,7 +88,7 @@ pub fn fetch_with_detect(
             }
             last_stats = stats.clone();
             if let Some(driver) = detect_driver(&stats) {
-                return driver.fetch_snapshot(client, host, port);
+                return driver.fetch_snapshot(client, host, port, options);
             }
         }
     }
@@ -101,9 +103,11 @@ pub fn fetch_with_detect(
         .send_receive(host, port, "devs", "", true)
         .unwrap_or_default();
 
-    if AntminerDriver::detect(&last_stats)
+    if (AntminerDriver::detect(&last_stats)
         || detect_antminer_summary(&summary)
-        || last_stats.contains("Antminer")
+        || last_stats.contains("Antminer"))
+        && crate::drivers::whatsminer::classify_for_discovery(&summary).is_none()
+        && crate::drivers::whatsminer::classify_for_discovery(&last_stats).is_none()
     {
         let stats = if last_stats.is_empty() {
             client
@@ -121,15 +125,15 @@ pub fn fetch_with_detect(
         ));
     }
 
-    if WhatsminerDriver::detect(&summary) {
+    if WhatsminerDriver::detect(&summary) || WhatsminerDriver::detect(&last_stats) {
         let driver = WhatsminerDriver;
-        return driver.fetch_snapshot(client, host, port);
+        return driver.fetch_snapshot(client, host, port, options);
     }
 
     if let Ok(summary) = client.send_payload(host, port, r#"{"cmd":"summary"}"#) {
         if WhatsminerDriver::detect(&summary) {
             let driver = WhatsminerDriver;
-            return driver.fetch_snapshot(client, host, port);
+            return driver.fetch_snapshot(client, host, port, options);
         }
     }
 

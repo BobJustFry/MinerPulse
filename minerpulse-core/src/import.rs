@@ -94,7 +94,7 @@ pub fn import_file_content(content: &str, filename: Option<&str>) -> Result<Impo
 
     if classify_whatsminer(trimmed).is_some() {
         return Ok(ImportResult {
-            snapshot: parse_whatsminer_snapshot(trimmed, "", "", "", "", "", ""),
+            snapshot: parse_whatsminer_snapshot(trimmed, "", "", "", "", "", "", Vec::new()),
             source_label: label,
             miner_ip: None,
         });

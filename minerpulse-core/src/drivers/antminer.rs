@@ -57,6 +57,7 @@ impl MinerDriver for AntminerDriver {
         client: &TcpCgminerClient,
         host: &str,
         port: u16,
+        _options: &crate::fetch_options::FetchOptions,
     ) -> Result<MinerSnapshot, MinerPulseError> {
         let stats = client
             .send_receive(host, port, "stats", "", true)
@@ -216,6 +217,10 @@ fn json_temp_from_dev(dev: &Value) -> Option<f64> {
 }
 
 pub fn detect_antminer_summary(raw: &str) -> bool {
+    if crate::drivers::whatsminer::classify_for_discovery(raw).is_some() {
+        return false;
+    }
+
     let trimmed = raw.trim();
     if !trimmed.starts_with('{') {
         return false;
@@ -237,7 +242,11 @@ pub fn detect_antminer_summary(raw: &str) -> bool {
         return true;
     }
 
-    json_f64(&summary, "GHS 5s").is_some() && json_str(&summary, "Miner Type").is_none()
+    json_f64(&summary, "GHS 5s").is_some()
+        && json_str(&summary, "Miner Type").is_none()
+        && json_str(&summary, "RT HASHRATE").is_none()
+        && json_str(&summary, "AV HASHRATE").is_none()
+        && json_f64(&summary, "MHS 5s").is_none()
 }
 
 pub fn split_antminer_log(raw: &str) -> (String, String, String, String) {

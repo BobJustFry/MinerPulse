@@ -47,6 +47,8 @@
   "toolbar.densityComfortable": "Обычный",
   "toolbar.ip": "IP",
   "toolbar.port": "Порт",
+  "toolbar.whatsminerUser": "LuCI логин",
+  "toolbar.whatsminerPassword": "LuCI пароль",
   "toolbar.scan": "Поиск",
   "toolbar.scanning": "Поиск…",
   "toolbar.pollRate": "Частота",

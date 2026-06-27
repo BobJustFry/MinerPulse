@@ -1,7 +1,7 @@
 use crate::drivers::antminer::{detect_antminer_summary, AntminerDriver};
 use crate::drivers::registry::{detect_vendor, model_from_stats};
 use crate::drivers::MinerDriver;
-use crate::drivers::whatsminer::classify_whatsminer;
+use crate::drivers::whatsminer::{classify_for_discovery, classify_whatsminer};
 use crate::model::MinerVendor;
 use crate::tcp::TcpCgminerClient;
 use rayon::prelude::*;
@@ -227,18 +227,21 @@ fn default_local_ranges() -> Vec<(Ipv4Addr, Ipv4Addr)> {
 
 fn probe_miner(client: &TcpCgminerClient, ip: &str, port: u16) -> Option<DiscoveredMiner> {
     if let Ok(stats) = client.send_command(ip, port, "stats") {
-        if let Some((vendor, model)) = classify_cgminer_response(&stats) {
+        if let Some((vendor, model)) = classify_probe_response(&stats) {
             return Some(make_discovered(ip, port, vendor, model));
         }
     }
 
     if let Ok(stats) = client.send_receive(ip, port, "stats", "", true) {
-        if let Some((vendor, model)) = classify_cgminer_response(&stats) {
+        if let Some((vendor, model)) = classify_probe_response(&stats) {
             return Some(make_discovered(ip, port, vendor, model));
         }
     }
 
     if let Ok(summary) = client.send_receive(ip, port, "summary", "", true) {
+        if let Some((vendor, model)) = classify_for_discovery(&summary) {
+            return Some(make_discovered(ip, port, vendor, model));
+        }
         if detect_antminer_summary(&summary)
             || AntminerDriver::detect(&summary)
             || summary.contains("Antminer")
@@ -260,6 +263,13 @@ fn probe_miner(client: &TcpCgminerClient, ip: &str, port: u16) -> Option<Discove
     }
 
     None
+}
+
+fn classify_probe_response(response: &str) -> Option<(MinerVendor, String)> {
+    if let Some(result) = classify_for_discovery(response) {
+        return Some(result);
+    }
+    classify_cgminer_response(response)
 }
 
 fn make_discovered(ip: &str, port: u16, vendor: MinerVendor, model: String) -> DiscoveredMiner {
@@ -307,6 +317,14 @@ fn classify_cgminer_json(response: &str) -> Option<(MinerVendor, String)> {
 
     if let Some(kind) = stats.get("Type").and_then(|v| v.as_str()) {
         if kind.contains("Antminer") {
+            if stats
+                .get("ID")
+                .and_then(|v| v.as_str())
+                .map(|id| id.contains("BTM"))
+                .unwrap_or(false)
+            {
+                return None;
+            }
             return Some((MinerVendor::Antminer, kind.to_string()));
         }
     }
@@ -358,7 +376,7 @@ fn ipv4_sort_key(ip: &str) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::drivers::whatsminer::classify_whatsminer;
+    use crate::drivers::whatsminer::{classify_for_discovery, classify_whatsminer};
 
     #[test]
     fn classifies_whatsminer_summary_json() {
@@ -374,6 +392,21 @@ mod tests {
         let (vendor, model) = classify_cgminer_json(sample).unwrap();
         assert_eq!(vendor, MinerVendor::Antminer);
         assert_eq!(model, "Antminer L7");
+    }
+
+    #[test]
+    fn classifies_whatsminer_btm_stats_as_whatsminer_not_antminer() {
+        let sample = r#"{"STATUS":[{"STATUS":"S","Msg":"CGMiner stats"}],"STATS":[{"BMMiner":"2.12","Miner":"81.0-1.0.0","Type":"Antminer L7"},{"STATS":3,"ID":"BTM_SOC3","GHS 5s":9529.45,"GHS av":9301.18}]}"#;
+        let (vendor, model) = classify_for_discovery(sample).unwrap();
+        assert_eq!(vendor, MinerVendor::Whatsminer);
+        assert!(!model.is_empty());
+    }
+
+    #[test]
+    fn classifies_whatsminer_rt_hashrate_summary() {
+        let sample = r#"{"SUMMARY":[{"Elapsed":105715,"GHS 5s":9529.45,"GHS av":9301.18,"RT HASHRATE":"9529.46 MH/s"}]}"#;
+        let (vendor, _) = classify_for_discovery(sample).unwrap();
+        assert_eq!(vendor, MinerVendor::Whatsminer);
     }
 
     #[test]

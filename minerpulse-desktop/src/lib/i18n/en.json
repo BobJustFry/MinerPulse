@@ -47,6 +47,8 @@
   "toolbar.densityComfortable": "Comfortable",
   "toolbar.ip": "IP",
   "toolbar.port": "Port",
+  "toolbar.whatsminerUser": "LuCI user",
+  "toolbar.whatsminerPassword": "LuCI password",
   "toolbar.scan": "Scan",
   "toolbar.scanning": "Scanning…",
   "toolbar.pollRate": "Rate",

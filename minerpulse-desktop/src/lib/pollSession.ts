@@ -33,6 +33,7 @@ export async function startPoll(options: {
   port: number;
   recordPath?: string | null;
   pollRateHz?: PollRateHz;
+  whatsminerAuth?: { username: string; password: string };
 }): Promise<void> {
   await invoke("start_poll", {
     request: {
@@ -40,6 +41,7 @@ export async function startPoll(options: {
       port: options.port,
       poll_rate_hz: options.pollRateHz ?? DEFAULT_POLL_RATE_HZ,
       record_path: options.recordPath ?? null,
+      whatsminer_auth: options.whatsminerAuth ?? null,
     },
   });
 }

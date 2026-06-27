@@ -1,18 +1,20 @@
 mod btminer_log;
 mod errors;
+mod luci;
 
 use super::json_util::{array_items, json_f64, json_str, json_u64};
 use super::MinerDriver;
 use crate::error::MinerPulseError;
+use crate::fetch_options::FetchOptions;
 use crate::model::{
     BoardStats, FanStats, HashrateStats, MinerIdentity, MinerSnapshot, MinerVendor, PoolInfo,
     PowerStats, ThermalStats,
 };
 use crate::tcp::TcpCgminerClient;
-use btminer_log::{parse_btminer_html, parse_btminer_log};
+use btminer_log::parse_btminer_log;
 use errors::parse_error_entries;
+use luci::fetch_btminer_chip_data;
 use serde_json::Value;
-use std::time::Duration;
 
 pub struct WhatsminerDriver;
 
@@ -25,7 +27,7 @@ impl MinerDriver for WhatsminerDriver {
     where
         Self: Sized,
     {
-        classify_whatsminer(response).is_some()
+        classify_for_discovery(response).is_some()
     }
 
     fn fetch_snapshot(
@@ -33,6 +35,7 @@ impl MinerDriver for WhatsminerDriver {
         client: &TcpCgminerClient,
         host: &str,
         port: u16,
+        options: &FetchOptions,
     ) -> Result<MinerSnapshot, MinerPulseError> {
         let summary = client.send_payload(host, port, r#"{"cmd":"summary"}"#)?;
         let pools = client
@@ -55,7 +58,7 @@ impl MinerDriver for WhatsminerDriver {
             )
             .unwrap_or_default();
 
-        let btminer_log = fetch_btminer_api_log(host).unwrap_or_default();
+        let (board_chips, btminer_log) = fetch_btminer_chip_data(host, options);
 
         Ok(parse_whatsminer_snapshot(
             &summary,
@@ -65,6 +68,7 @@ impl MinerDriver for WhatsminerDriver {
             &error_codes,
             &device_info,
             &btminer_log,
+            board_chips,
         ))
     }
 }
@@ -129,32 +133,77 @@ pub fn classify_whatsminer(json: &str) -> Option<(MinerVendor, String)> {
     Some((MinerVendor::Whatsminer, model))
 }
 
-fn fetch_btminer_api_log(host: &str) -> Option<String> {
-    let client = reqwest::blocking::Client::builder()
-        .danger_accept_invalid_certs(true)
-        .timeout(Duration::from_secs(5))
-        .build()
-        .ok()?;
+/// Discovery/read path: WhatsMiner often speaks cgminer JSON with compat fields
+/// (`GHS 5s`, fake `Type: Antminer …`, `ID: BTM_SOC*`).
+pub fn classify_for_discovery(response: &str) -> Option<(MinerVendor, String)> {
+    if let Some(result) = classify_whatsminer(response) {
+        return Some(result);
+    }
 
-    for scheme in ["https", "http"] {
-        let url = format!("{scheme}://{host}/cgi-bin/luci/admin/status/btminerapi");
-        let Ok(response) = client.get(&url).send() else {
-            continue;
-        };
-        if !response.status().is_success() {
-            continue;
+    let trimmed = response.trim();
+    if !trimmed.starts_with('{') {
+        return None;
+    }
+
+    let value: Value = serde_json::from_str(trimmed).ok()?;
+
+    if let Some(stats) = value.get("STATS").and_then(|s| s.as_array()) {
+        for item in stats {
+            if let Some(model) = whatsminer_model_from_cgminer_item(item) {
+                return Some((MinerVendor::Whatsminer, model));
+            }
         }
-        let Ok(html) = response.text() else {
-            continue;
-        };
-        if let Some(log) = parse_btminer_html(&html) {
-            if log.contains("slot:") && log.contains("temp:") {
-                return Some(log);
+    }
+
+    if let Some(summary) = value.get("SUMMARY").and_then(|s| s.as_array()) {
+        for item in summary {
+            if whatsminer_summary_markers(item) {
+                let model = json_str(item, "Miner Type")
+                    .unwrap_or("WhatsMiner")
+                    .to_string();
+                return Some((MinerVendor::Whatsminer, model));
             }
         }
     }
 
     None
+}
+
+fn whatsminer_model_from_cgminer_item(item: &Value) -> Option<String> {
+    if json_str(item, "ID")
+        .map(|id| id.contains("BTM"))
+        .unwrap_or(false)
+    {
+        return Some(
+            json_str(item, "Miner Type")
+                .or_else(|| json_str(item, "Type"))
+                .unwrap_or("WhatsMiner")
+                .to_string(),
+        );
+    }
+
+    if json_f64(item, "MHS 5s").is_some()
+        || json_f64(item, "MHS av").is_some()
+        || json_f64(item, "MHS 1m").is_some()
+    {
+        return Some(
+            json_str(item, "Miner Type")
+                .unwrap_or("WhatsMiner")
+                .to_string(),
+        );
+    }
+
+    None
+}
+
+fn whatsminer_summary_markers(item: &Value) -> bool {
+    json_f64(item, "MHS 5s").is_some()
+        || json_f64(item, "MHS av").is_some()
+        || json_str(item, "RT HASHRATE").is_some()
+        || json_str(item, "AV HASHRATE").is_some()
+        || json_str(item, "THEORY HASHRATE").is_some()
+        || json_str(item, "hash-realtime").is_some()
+        || json_str(item, "hash-average").is_some()
 }
 
 fn mhs_to_ghs(mhs: f64) -> f64 {
@@ -295,6 +344,7 @@ pub fn parse_whatsminer_snapshot(
     error_codes_raw: &str,
     device_info_raw: &str,
     btminer_log_raw: &str,
+    board_chips: Vec<crate::model::BoardChipMap>,
 ) -> MinerSnapshot {
     let value: Value = serde_json::from_str(summary_raw.trim()).unwrap_or(Value::Null);
     let summary = value
@@ -440,10 +490,10 @@ pub fn parse_whatsminer_snapshot(
     faults.sort_by(|a, b| a.code.cmp(&b.code));
     faults.dedup_by(|a, b| a.code == b.code);
 
-    let board_chips = if !btminer_log_raw.is_empty() {
+    let board_chips = if board_chips.is_empty() && !btminer_log_raw.is_empty() {
         parse_btminer_log(btminer_log_raw)
     } else {
-        Vec::new()
+        board_chips
     };
 
     if !board_chips.is_empty() {
@@ -522,7 +572,7 @@ mod tests {
     #[test]
     fn converts_mhs_to_ghs() {
         let sample = r#"{"SUMMARY":[{"Miner Type":"M50","MHS 5s":70668114.52,"MHS av":70000000.0,"Power":3500}]}"#;
-        let snap = parse_whatsminer_snapshot(sample, "", "", "", "", "", "");
+        let snap = parse_whatsminer_snapshot(sample, "", "", "", "", "", "", Vec::new());
         assert!((snap.hashrate.avg5s_ghs - 70668.11452).abs() < 0.01);
         assert_eq!(snap.power.watts, Some(3500.0));
     }
@@ -531,7 +581,7 @@ mod tests {
     fn parses_edevs_and_faults() {
         let edevs = r#"{"msg":{"edevs":[{"slot":0,"hash-average":33.9,"chip-temp-min":84.9,"chip-temp-avg":92.2,"chip-temp-max":97.4,"effective-chips":70}]}}"#;
         let errors = r#"{"Msg":{"error_code":[{"530":"2024-01-01 12:00:00"}]}}"#;
-        let snap = parse_whatsminer_snapshot("", "", "", edevs, errors, "", "");
+        let snap = parse_whatsminer_snapshot("", "", "", edevs, errors, "", "", Vec::new());
         assert_eq!(snap.boards.len(), 1);
         assert_eq!(snap.faults.len(), 1);
         assert_eq!(snap.faults[0].code, "530");
