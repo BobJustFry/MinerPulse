@@ -1,12 +1,12 @@
 {
   "version": "1.0.1",
-  "build": 25,
-  "notes": "Miner Pulse 1.0.1 (25) — dashboard, chip matrix, charts, poll/record sessions, about, donate.",
-  "pub_date": "2026-06-27T10:58:57Z",
+  "build": 32,
+  "notes": "Miner Pulse 1.0.1 (32) — WhatsMiner scan fix, security hardening, licensing docs.",
+  "pub_date": "2026-06-27T11:22:35Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRFRJVEVSc1JJY3V4WWxIRnRpRU43VnowYnZJaHd1WGwrOThpaUlLMElWZlRzbE9BcUdkYWs5cXZiZXBJRVo3UWl1aXBQTHpiM3NQYlB4UStVTUtCZUFZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNTU3OTM2CWZpbGU6TWluZXJQdWxzZV8xLjAuMV94NjQtc2V0dXAuZXhlCnptNG5ydVdBZXVlUThRRC9xdDJJTXJNVXFuOEpwTjB1QXJLbTg4MlIxT3dycEFxakM0WGhCY2xFcExLc3dTMFBHZUFhNk1ReC83VnYvRG1jaUVvc0JRPT0K",
-      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build25/MinerPulse_1.0.1_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRFc5TURxOXA0c3lmUzRMWmw1SHIyYU8vZ0ZHaEZrVDVwY1VqZExkQ040RWFIT2IvUW1KQmRLTWFuV2ttOFR4M1dMOVlRV3BaWnhIc3o3elFuRXNUWEFrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNTU5MzUxCWZpbGU6TWluZXJQdWxzZV8xLjAuMV94NjQtc2V0dXAuZXhlClN1RVdjVmh1b1JlNEI1NkEyNGxPZnhlZmxQVnhqOHdCcnFRV1JhVkdjdmsvazVTUEJORlBVSHEwNVhidFVKQVB5c00vc2w0MGRKU05WNWtoQWZKUUNBPT0K",
+      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build32/MinerPulse_1.0.1_x64-setup.exe"
     }
   }
 }
