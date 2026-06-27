@@ -1,21 +1,35 @@
 # Repository structure and source protection
 
+## Licensing (read first)
+
+- **[LICENSE](LICENSE)** — legal terms (English)
+- **[LICENSING.md](LICENSING.md)** — plain-language summary (Russian)
+
+**Forking, copying, and plagiarism are prohibited without written permission from the owner.**
+
 ## What is public
 
-This repository contains the **MinerPulse client shell** (Tauri UI, open Rust driver scaffolding,
-update manifest, documentation). It is public for transparency, issue tracking, and signed updates.
+This repository contains the **Miner Pulse client** (Tauri UI, Rust drivers, update manifest, documentation). It is public for transparency, issue tracking, and signed updates.
 
-## What cannot be blocked on GitHub
+**Public source ≠ open source.** No license is granted except as stated in [LICENSE](LICENSE).
 
-**A public repository can always be forked.** GitHub does not provide a setting to disable forks
-while keeping the repo public. Forking copies visible history; it does not grant license to use
-your trademarks or bypass server-side subscription checks.
+## Forking on GitHub
 
-## Protection strategy (recommended)
+GitHub may show a **Fork** button on public repositories. That is a **platform feature**, not permission from the copyright holder.
+
+| What GitHub allows technically | What the license allows legally |
+|--------------------------------|----------------------------------|
+| Anyone can click Fork | Only with **written permission** from the owner |
+| Fork copies git history | Fork **does not** grant use, redistribution, or rebranding rights |
+
+Unauthorized forks, mirrors, republished code, or derivative products may be reported and removed (DMCA and applicable law).
+
+## Protection strategy
 
 | Layer | Measure |
 |-------|---------|
-| Legal | [LICENSE](LICENSE) — proprietary, all rights reserved |
+| Legal | [LICENSE](LICENSE) + [LICENSING.md](LICENSING.md) — proprietary, all rights reserved |
+| Metadata | `package.json` / manifests marked proprietary — not MIT/GPL |
 | Business logic | Subscription entitlements validated **only on server** (JWT) |
 | Updates | Signed packages only (`tauri-plugin-updater` + private signing key) |
 | Secrets | Never commit `.tauri/*.key`, API keys, Stripe secrets |
@@ -35,8 +49,10 @@ your trademarks or bypass server-side subscription checks.
 - Private signing key — `.tauri/minerpulse.key` (gitignored)
 - `minerpulse-api` / `minerpulse-admin` — planned; may live in separate repos
 
-## If you need stronger protection
+## If you need stronger technical protection
 
-1. Make the repo **private** and publish **releases only** (binaries + update.json via public CDN/raw URL).
+1. Make the repo **private** and publish **releases only** (binaries + update.json via public raw URL).
 2. Keep `minerpulse-core` proprietary drivers in a **private submodule**.
 3. Deliver critical parsing via **server-side** hash-map and entitlement APIs only.
+
+For fork or commercial licensing, contact the owner via [LICENSING.md](LICENSING.md).

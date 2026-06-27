@@ -3,6 +3,8 @@ name = "minerpulse-core"
 version = "1.0.1"
 edition = "2021"
 description = "MinerPulse core: miner drivers, TCP, snapshots, logs"
+license = "LicenseRef-Proprietary"
+publish = false
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

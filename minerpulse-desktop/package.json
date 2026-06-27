@@ -14,7 +14,7 @@
     "version:sync": "node ../scripts/sync-version.mjs",
     "version:bump": "node ../scripts/bump-build.mjs"
   },
-  "license": "MIT",
+  "license": "UNLICENSED",
   "dependencies": {
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",

@@ -1,13 +1,57 @@
-# Proprietary License
+# Proprietary Software License
 
-Copyright (c) 2026 MinerPulse / BobJustFry. All rights reserved.
+Copyright (c) 2026 Bobrov Andrey / Miner Pulse (BobJustFry). All rights reserved.
 
-This software and associated documentation files (the "Software") are proprietary
-and confidential. Unauthorized copying, modification, distribution, or use of the
-Software, in whole or in part, is strictly prohibited without prior written permission
-from the copyright holder.
+## 1. No license granted
 
-The public GitHub repository does not grant a license to use MinerPulse commercially
-or to redistribute compiled binaries except official releases published by the owner.
+Except as explicitly authorized in writing by the copyright holder, **no rights**
+are granted to use, copy, modify, merge, publish, distribute, sublicense, rent,
+lease, or sell copies of this Software, in whole or in part.
 
-For licensing inquiries, contact the repository owner.
+Viewing this public repository **does not** grant any license.
+
+## 2. Forking and derivative works
+
+Creating GitHub forks, mirrors, clones for redistribution, rebranded builds, or
+**derivative works** based on this Software is **prohibited without prior written
+permission** from the copyright holder.
+
+The public visibility of this repository and the technical “Fork” button on GitHub
+**do not** constitute permission to fork, copy, reuse, or redistribute the code.
+
+## 3. Plagiarism and misappropriation
+
+Copying, republishing, or presenting this Software—or substantial portions of its
+source code, architecture, UI, assets, documentation, or branding—as your own
+product or under another name is **strictly prohibited**.
+
+## 4. Permitted use
+
+- **End users** may install and use **official signed releases** published by the
+  copyright holder (GitHub Releases and the signed update manifest).
+- **Source code** may be viewed for transparency and to report issues via this
+  repository’s issue tracker.
+- **Any other use** (including building from source, internal deployment, or
+  commercial use) requires **written permission**.
+
+## 5. Trademarks
+
+“Miner Pulse”, “MinerPulse”, associated logos, and product naming are proprietary.
+Unauthorized use is prohibited.
+
+## 6. Third-party components
+
+Third-party open-source dependencies retain their respective licenses. This license
+applies to Miner Pulse project code and assets owned by the copyright holder.
+
+## 7. Enforcement
+
+Violations may result in DMCA takedown requests, account reports, and other legal
+remedies available under applicable law.
+
+## Contact
+
+- GitHub: https://github.com/BobJustFry/MinerPulse  
+- Telegram: https://t.me/miner_pulse  
+
+For licensing, fork permission, or commercial inquiries, contact the repository owner.

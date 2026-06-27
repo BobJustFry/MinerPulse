@@ -3,6 +3,8 @@ name = "minerpulse-desktop"
 version = "0.1.0"
 description = "MinerPulse — ASIC miner monitor"
 authors = ["MinerPulse"]
+license = "LicenseRef-Proprietary"
+publish = false
 edition = "2021"
 
 [lib]

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Licensing & fork permission
+    url: https://github.com/BobJustFry/MinerPulse/blob/main/LICENSING.md
+    about: Fork, copy, commercial use — only with written permission from the owner.
+  - name: Telegram community
+    url: https://t.me/miner_pulse
+    about: Questions and support (not for licensing requests).

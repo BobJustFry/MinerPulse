@@ -18,10 +18,17 @@
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/license-Proprietary-red" alt="Proprietary license" />
+  <img src="https://img.shields.io/badge/forking-By%20permission%20only-orange" alt="Forking by permission only" />
   <img src="https://img.shields.io/github/v/release/BobJustFry/MinerPulse?label=version" alt="Release" />
   <img src="https://img.shields.io/badge/platform-Windows-blue" alt="Windows" />
   <img src="https://img.shields.io/badge/stack-Tauri%20%2B%20Rust%20%2B%20Svelte-646cff" alt="Stack" />
 </p>
+
+---
+
+> **Лицензия:** проприетарное ПО. **Форк, копирование и плагиат запрещены** без письменного разрешения правообладателя.  
+> Подробно: **[LICENSING.md](LICENSING.md)** · [LICENSE](LICENSE)
 
 ---
 
@@ -119,7 +126,20 @@ npm run dev:app
 | Версия `X.Y.Z` | `VERSION.json` | Меняется **только с одобрения владельца** |
 | Сборка `BBB` | `VERSION.json` | `node scripts/bump-build.mjs` после каждого изменения |
 
-Подробнее: [.cursor/rules/minerpulse-strict.mdc](.cursor/rules/minerpulse-strict.mdc) · [REPOSITORY.md](REPOSITORY.md) · [LICENSE](LICENSE)
+Подробнее: [.cursor/rules/minerpulse-strict.mdc](.cursor/rules/minerpulse-strict.mdc) · [REPOSITORY.md](REPOSITORY.md) · [LICENSING.md](LICENSING.md) · [LICENSE](LICENSE)
+
+## Лицензия и использование
+
+Miner Pulse — **проприетарный продукт** (© Bobrov Andrey / BobJustFry). Все права защищены.
+
+| Разрешено | Запрещено без письменного согласия |
+|-----------|-------------------------------------|
+| Официальные [Releases](https://github.com/BobJustFry/MinerPulse/releases) | Форк и зеркала репозитория |
+| Просмотр кода, Issues | Копирование кода, UI, логотипов |
+| | Плагиат и выдача за свой продукт |
+| | Сборка и распространение из исходников |
+
+Кнопка «Fork» на GitHub **не является разрешением** — см. [LICENSING.md](LICENSING.md).
 
 ## Структура репозитория
 
@@ -139,4 +159,4 @@ scripts/               bump build / sync version
 
 ---
 
-<p align="center"><sub>Miner Pulse · proprietary · see <a href="LICENSE">LICENSE</a></sub></p>
+<p align="center"><sub>Miner Pulse · © Bobrov Andrey · proprietary · <a href="LICENSING.md">LICENSING</a> · <a href="LICENSE">LICENSE</a></sub></p>
