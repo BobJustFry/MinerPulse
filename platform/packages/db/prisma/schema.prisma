@@ -26,6 +26,11 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+}
+
 model User {
   id           String         @id @default(cuid())
   email        String         @unique
@@ -41,8 +46,10 @@ model User {
 
 model AdminUser {
   id           String     @id @default(cuid())
-  email        String     @unique
+  username     String     @unique
+  email        String?    @unique
   passwordHash String
+  role         AdminRole  @default(ADMIN)
   createdAt    DateTime   @default(now())
   auditLogs    AuditLog[]
 }

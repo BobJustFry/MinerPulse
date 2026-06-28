@@ -18,6 +18,9 @@ admin.use("*", async (c, next) => {
       where: { id: String(payload.sub) },
     });
     if (!adminUser) return c.json({ error: "unauthorized" }, 401);
+    if (adminUser.role !== "SUPER_ADMIN" && adminUser.role !== "ADMIN") {
+      return c.json({ error: "forbidden" }, 403);
+    }
     c.set("admin", adminUser);
     await next();
   } catch {
@@ -160,7 +163,7 @@ admin.get("/audit", async (c) => {
   const logs = await prisma.auditLog.findMany({
     orderBy: { createdAt: "desc" },
     take: 200,
-    include: { admin: { select: { email: true } } },
+    include: { admin: { select: { username: true, email: true } } },
   });
   return c.json({ logs });
 });

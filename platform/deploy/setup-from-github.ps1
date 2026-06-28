@@ -5,7 +5,7 @@
 
 .USAGE
   1. copy deploy\deploy.config.example -> deploy\deploy.config
-  2. Set GITHUB_REPO, GITHUB_TOKEN (private), VPS_HOST, MPULSE_BOOTSTRAP_ADMIN_EMAIL
+  2. Set GITHUB_REPO, GITHUB_TOKEN (private), VPS_HOST
   3. powershell -ExecutionPolicy Bypass -File deploy\setup-from-github.ps1
 #>
 param(
@@ -61,9 +61,6 @@ $sshKey = Get-Cfg $cfg "SSH_KEY"
 
 if (-not $vpsHost) { throw "VPS_HOST is required" }
 if (-not $githubRepo) { throw "GITHUB_REPO is required (e.g. https://github.com/you/MinerPulse.git)" }
-if (-not (Get-Cfg $cfg "MPULSE_BOOTSTRAP_ADMIN_EMAIL")) {
-  throw "MPULSE_BOOTSTRAP_ADMIN_EMAIL is required"
-}
 
 $sshTarget = "${vpsUser}@${vpsHost}"
 $sshArgs = @("-o", "ConnectTimeout=20", "-o", "StrictHostKeyChecking=accept-new")

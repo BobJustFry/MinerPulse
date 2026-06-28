@@ -62,7 +62,7 @@ async function loadSubsForm() {
 async function loadAudit() {
   const { logs } = await api("/v1/admin/audit");
   document.getElementById("content").innerHTML = `<table><tr><th>When</th><th>Admin</th><th>Action</th><th>Entity</th></tr>${logs
-    .map((l) => `<tr><td>${l.createdAt}</td><td>${l.admin.email}</td><td>${l.action}</td><td>${l.entity}</td></tr>`)
+    .map((l) => `<tr><td>${l.createdAt}</td><td>${l.admin.username ?? l.admin.email ?? "-"}</td><td>${l.action}</td><td>${l.entity}</td></tr>`)
     .join("")}</table>`;
 }
 
@@ -81,7 +81,7 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
   const fd = new FormData(e.target);
   const data = await api("/v1/admin/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email: fd.get("email"), password: fd.get("password") }),
+    body: JSON.stringify({ username: fd.get("username"), password: fd.get("password") }),
   });
   token = data.access_token;
   localStorage.setItem("mpulse_admin_token", token);

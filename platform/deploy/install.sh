@@ -26,7 +26,7 @@ if [[ "${MPULSE_NONINTERACTIVE:-}" == "1" ]]; then
   HTTPS_PORT="${MPULSE_HTTPS_PORT:-443}"
   ADMIN_IP_ALLOWLIST="${MPULSE_ADMIN_IP_ALLOWLIST:-}"
   LICENSE_OFFLINE_GRACE_DAYS="${MPULSE_LICENSE_OFFLINE_GRACE_DAYS:-14}"
-  BOOTSTRAP_ADMIN_EMAIL="${MPULSE_BOOTSTRAP_ADMIN_EMAIL:-}"
+  BOOTSTRAP_ADMIN_USERNAME="${MPULSE_BOOTSTRAP_ADMIN_USERNAME:-mpulse-admin}"
   BOOTSTRAP_ADMIN_PASSWORD="${MPULSE_BOOTSTRAP_ADMIN_PASSWORD:-}"
   POSTGRES_PASSWORD="${MPULSE_POSTGRES_PASSWORD:-}"
   if [[ -z "$BOOTSTRAP_ADMIN_PASSWORD" ]]; then
@@ -34,10 +34,6 @@ if [[ "${MPULSE_NONINTERACTIVE:-}" == "1" ]]; then
   fi
   if [[ -z "$POSTGRES_PASSWORD" ]]; then
     POSTGRES_PASSWORD="$(gen_password)"
-  fi
-  if [[ -z "$BOOTSTRAP_ADMIN_EMAIL" ]]; then
-    echo "MPULSE_BOOTSTRAP_ADMIN_EMAIL is required in non-interactive mode." >&2
-    exit 1
   fi
   echo "[*] Non-interactive install: mode=${DEPLOY_MODE}, domain=${BASE_DOMAIN}"
 else
@@ -56,8 +52,8 @@ else
   prompt HTTPS_PORT "HTTPS port (host -> Caddy :443)" "$DEFAULT_HTTPS"
   prompt ADMIN_IP_ALLOWLIST "Admin IP allowlist (CIDR, optional)" ""
   prompt LICENSE_OFFLINE_GRACE_DAYS "Offline grace days" "14"
-  prompt BOOTSTRAP_ADMIN_EMAIL "Bootstrap admin email" ""
-  prompt_secret BOOTSTRAP_ADMIN_PASSWORD "Bootstrap admin password (empty = auto)"
+  prompt BOOTSTRAP_ADMIN_USERNAME "Super admin username" "mpulse-admin"
+  prompt_secret BOOTSTRAP_ADMIN_PASSWORD "Super admin password (empty = auto-generate)"
 
   if [[ -z "$BOOTSTRAP_ADMIN_PASSWORD" ]]; then
     BOOTSTRAP_ADMIN_PASSWORD="$(gen_password)"
@@ -141,7 +137,7 @@ POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 JWT_PRIVATE_KEY=${JWT_PRIVATE_KEY}
 JWT_PUBLIC_KEY=${JWT_PUBLIC_KEY}
 LICENSE_OFFLINE_GRACE_DAYS=${LICENSE_OFFLINE_GRACE_DAYS}
-BOOTSTRAP_ADMIN_EMAIL=${BOOTSTRAP_ADMIN_EMAIL}
+BOOTSTRAP_ADMIN_USERNAME=${BOOTSTRAP_ADMIN_USERNAME}
 BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_ADMIN_PASSWORD}
 EOF
 
@@ -191,15 +187,22 @@ for i in $(seq 1 30); do
   sleep 2
 done
 
+ADMIN_URL="https://admin.${BASE_DOMAIN}${PUBLIC_URL_HTTPS_SUFFIX}"
+
 CREDS_FILE="$ROOT_DIR/deploy/generated/credentials.txt"
 mkdir -p "$(dirname "$CREDS_FILE")"
 cat >"$CREDS_FILE" <<EOF
-Web:   https://${BASE_DOMAIN}${PUBLIC_URL_HTTPS_SUFFIX}
-API:   https://api.${BASE_DOMAIN}${PUBLIC_URL_HTTPS_SUFFIX}
-Admin: https://admin.${BASE_DOMAIN}${PUBLIC_URL_HTTPS_SUFFIX}
+=== Miner Pulse Platform ===
+Web:    https://${BASE_DOMAIN}${PUBLIC_URL_HTTPS_SUFFIX}
+API:    https://api.${BASE_DOMAIN}${PUBLIC_URL_HTTPS_SUFFIX}
+Admin:  ${ADMIN_URL}
+
+=== Super admin (full access) ===
+URL:      ${ADMIN_URL}
+Username: ${BOOTSTRAP_ADMIN_USERNAME}
+Password: ${BOOTSTRAP_ADMIN_PASSWORD}
+
 Deploy mode: ${DEPLOY_MODE}
-Admin email: ${BOOTSTRAP_ADMIN_EMAIL}
-Admin password: ${BOOTSTRAP_ADMIN_PASSWORD}
 Postgres password: ${POSTGRES_PASSWORD}
 JWT public key: ${ROOT_DIR}/secrets/jwt_public.pem
 EOF
@@ -208,15 +211,19 @@ chmod 600 "$CREDS_FILE"
 cat <<EOF
 
 === Miner Pulse Platform ready ===
+
 Web:   https://${BASE_DOMAIN}${PUBLIC_URL_HTTPS_SUFFIX}
 API:   https://api.${BASE_DOMAIN}${PUBLIC_URL_HTTPS_SUFFIX}
-Admin: https://admin.${BASE_DOMAIN}${PUBLIC_URL_HTTPS_SUFFIX}
+Admin: ${ADMIN_URL}
+
+=== Super admin login ===
+  URL:      ${ADMIN_URL}
+  Username: ${BOOTSTRAP_ADMIN_USERNAME}
+  Password: ${BOOTSTRAP_ADMIN_PASSWORD}
+
+(Password also saved in .env and deploy/generated/credentials.txt)
 
 Deploy mode: ${DEPLOY_MODE}
-Host ports:  HTTP ${HTTP_PORT} -> Caddy :80, HTTPS ${HTTPS_PORT} -> Caddy :443
-
-Admin email:    ${BOOTSTRAP_ADMIN_EMAIL}
-Admin password: ${BOOTSTRAP_ADMIN_PASSWORD}
 Postgres pass:  ${POSTGRES_PASSWORD}
 
 JWT public key: ${ROOT_DIR}/secrets/jwt_public.pem

@@ -25,11 +25,16 @@ export type LicenseClaims = {
   tier: Tier;
   plan_id?: string;
   device_id?: string;
+  admin_role?: string;
 };
 
 export async function signAccessToken(claims: LicenseClaims, expiresInSec = 3600) {
   const { privateKey: key } = await loadKeys();
-  return new SignJWT({ tier: claims.tier, plan_id: claims.plan_id, device_id: claims.device_id })
+  const payload: Record<string, string> = { tier: claims.tier };
+  if (claims.plan_id) payload.plan_id = claims.plan_id;
+  if (claims.device_id) payload.device_id = claims.device_id;
+  if (claims.admin_role) payload.admin_role = claims.admin_role;
+  return new SignJWT(payload)
     .setProtectedHeader({ alg: "RS256" })
     .setSubject(claims.sub)
     .setIssuedAt()

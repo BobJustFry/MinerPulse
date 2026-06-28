@@ -1,20 +1,24 @@
-import { PrismaClient, Tier } from "@prisma/client";
+import { AdminRole, PrismaClient, Tier } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
+const DEFAULT_SUPER_ADMIN_USERNAME = "mpulse-admin";
+
 async function main() {
-  const adminEmail = process.env.BOOTSTRAP_ADMIN_EMAIL;
+  const username = process.env.BOOTSTRAP_ADMIN_USERNAME?.trim() || DEFAULT_SUPER_ADMIN_USERNAME;
   const adminPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD;
 
-  if (adminEmail && adminPassword) {
+  if (adminPassword) {
     const passwordHash = await bcrypt.hash(adminPassword, 12);
     await prisma.adminUser.upsert({
-      where: { email: adminEmail.toLowerCase() },
-      update: { passwordHash },
-      create: { email: adminEmail.toLowerCase(), passwordHash },
+      where: { username },
+      update: { passwordHash, role: AdminRole.SUPER_ADMIN },
+      create: { username, passwordHash, role: AdminRole.SUPER_ADMIN },
     });
-    console.log(`Admin user ready: ${adminEmail}`);
+    console.log(`Super admin ready: ${username}`);
+  } else {
+    console.warn("BOOTSTRAP_ADMIN_PASSWORD not set — super admin not created");
   }
 
   const plans = [

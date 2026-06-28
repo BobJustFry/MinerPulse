@@ -18,7 +18,6 @@ load_deploy_config "$CONFIG"
 
 : "${VPS_HOST:?VPS_HOST required}"
 : "${GITHUB_REPO:?GITHUB_REPO required}"
-: "${MPULSE_BOOTSTRAP_ADMIN_EMAIL:?MPULSE_BOOTSTRAP_ADMIN_EMAIL required}"
 
 VPS_USER="${VPS_USER:-root}"
 SSH_KEY="${SSH_KEY:-}"

@@ -1,2 +1,2 @@
-export { PrismaClient, Tier, SubscriptionStatus, PaymentStatus } from "@prisma/client";
+export { PrismaClient, Tier, SubscriptionStatus, PaymentStatus, AdminRole } from "@prisma/client";
 export type { User, AdminUser, Plan, Subscription, Device, ActivationCode, AuditLog } from "@prisma/client";
