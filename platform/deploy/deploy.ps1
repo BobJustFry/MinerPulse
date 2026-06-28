@@ -45,9 +45,8 @@ function Get-Cfg {
 }
 
 function Invoke-Ssh {
-  param([string[]]$BaseArgs, [string]$RemoteCommand)
-  $args = @() + $BaseArgs + @($RemoteCommand)
-  & ssh @args
+  param([string[]]$BaseArgs, [string]$Target, [string]$RemoteCommand)
+  & ssh @BaseArgs $Target $RemoteCommand
   if ($LASTEXITCODE -ne 0) { throw "ssh failed (exit $LASTEXITCODE)" }
 }
 
@@ -99,9 +98,9 @@ if (-not $SkipUpload) {
   }
 
   Write-Host "[2/4] Uploading to VPS..." -ForegroundColor Yellow
-  Invoke-Ssh $sshArgs "mkdir -p '$remoteDir'"
+  Invoke-Ssh $sshArgs $sshTarget "mkdir -p '$remoteDir'"
   Invoke-Scp $scpArgs $tarPath "${sshTarget}:${remoteDir}/${tarName}"
-  Invoke-Ssh $sshArgs @"
+  Invoke-Ssh $sshArgs $sshTarget @"
 set -e
 cd '$remoteDir'
 tar -xzf '$tarName'
@@ -133,7 +132,7 @@ cd '$remoteDir'
 bash deploy/install.sh
 "@ -join "`n"
 
-  Invoke-Ssh $sshArgs $remoteInstall
+  Invoke-Ssh $sshArgs $sshTarget $remoteInstall
 } else {
   Write-Host "[skip] Install" -ForegroundColor DarkGray
 }
@@ -152,7 +151,7 @@ set -e
 cd '$remoteDir'
 bash deploy/integrate-external-proxy.sh
 "@ -join "`n"
-  Invoke-Ssh $sshArgs $remoteIntegrate
+  Invoke-Ssh $sshArgs $sshTarget $remoteIntegrate
 } else {
   Write-Host "[4/4] Proxy integration skipped (set AUTO_INTEGRATE_PROXY=1 or -IntegrateProxy)" -ForegroundColor DarkGray
 }

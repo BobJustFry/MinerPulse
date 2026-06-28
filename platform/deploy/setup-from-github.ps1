@@ -42,8 +42,8 @@ function Get-Cfg {
 }
 
 function Invoke-Ssh {
-  param([string[]]$BaseArgs, [string]$RemoteCommand)
-  & ssh @($BaseArgs + $RemoteCommand)
+  param([string[]]$BaseArgs, [string]$Target, [string]$RemoteCommand)
+  & ssh @BaseArgs $Target $RemoteCommand
   if ($LASTEXITCODE -ne 0) { throw "ssh failed (exit $LASTEXITCODE)" }
 }
 
@@ -102,12 +102,12 @@ try {
   Pop-Location
 }
 
-Invoke-Ssh $sshArgs "rm -rf '$remoteBootstrapDir' && mkdir -p '$remoteBootstrapDir'"
+Invoke-Ssh $sshArgs $sshTarget "rm -rf '$remoteBootstrapDir' && mkdir -p '$remoteBootstrapDir'"
 Invoke-Scp $scpArgs $bundleTar "${sshTarget}:${remoteBootstrapDir}/bootstrap.tgz"
 Invoke-Scp $scpArgs $ConfigFile "${sshTarget}:${remoteBootstrapDir}/deploy.config"
 Remove-Item $bundleTar -Force -ErrorAction SilentlyContinue
 
-Invoke-Ssh $sshArgs @"
+Invoke-Ssh $sshArgs $sshTarget @"
 set -e
 cd '$remoteBootstrapDir'
 tar -xzf bootstrap.tgz
