@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Miner Pulse — подписка</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <h1>Miner Pulse</h1>
+      <p>Мониторинг ASIC-майнеров. Подписка Client / Service.</p>
+    </header>
+
+    <section id="plans" class="card">
+      <h2>Тарифы</h2>
+      <div id="plans-list" class="grid"></div>
+    </section>
+
+    <section class="card auth">
+      <h2>Личный кабинет</h2>
+      <div id="auth-forms">
+        <form id="login-form">
+          <input type="email" name="email" placeholder="Email" required />
+          <input type="password" name="password" placeholder="Пароль" required />
+          <button type="submit">Войти</button>
+        </form>
+        <form id="register-form">
+          <input type="email" name="email" placeholder="Email" required />
+          <input type="password" name="password" placeholder="Пароль (мин. 8)" minlength="8" required />
+          <button type="submit">Регистрация</button>
+        </form>
+      </div>
+      <div id="dashboard" hidden>
+        <p id="user-email"></p>
+        <p id="subscription-info"></p>
+        <button id="gen-code" type="button">Код для приложения</button>
+        <pre id="activation-code"></pre>
+        <button id="logout" type="button">Выйти</button>
+      </div>
+    </section>
+  </main>
+  <script>
+    window.MPULSE_API = "__PUBLIC_API_URL__";
+  </script>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -19,12 +19,16 @@ const forbiddenPaths = [
   /^Documents\//,
   /^OldProject\//,
   /^\.cursor\//,
+  /^platform\/deploy\/deploy\.config$/,
+  /^platform\/secrets\//,
+  /^platform\/deploy\/generated\//,
 ];
 
 const skipPatternScan = new Set(["scripts/check-secrets.mjs"]);
 
 const patterns = [
   { name: "GitHub PAT", re: /ghp_[A-Za-z0-9]{20,}/ },
+  { name: "GitHub OAuth token", re: /gho_[A-Za-z0-9]{20,}/ },
   { name: "GitHub fine-grained PAT", re: /github_pat_[A-Za-z0-9_]{20,}/ },
   { name: "OpenSSH private key", re: /-----BEGIN OPENSSH PRIVATE KEY-----/ },
   { name: "RSA private key", re: /-----BEGIN RSA PRIVATE KEY-----/ },

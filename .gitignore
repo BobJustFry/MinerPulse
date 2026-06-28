@@ -32,6 +32,11 @@ OldProject/
 **/.vs/
 *.log
 
-# OS
-**/.DS_Store
-Thumbs.db
+# Platform runtime (generated on VPS / locally)
+platform/.env
+platform/Caddyfile
+platform/deploy/deploy.config
+platform/deploy/generated/
+platform/secrets/
+platform/apps/api/dist/
+

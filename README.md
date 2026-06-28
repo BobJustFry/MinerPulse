@@ -136,10 +136,13 @@ Miner Pulse — **проприетарный продукт** (© Bobrov Andrey 
 ```
 minerpulse-core/       Rust: драйверы, TCP, снимки, импорт
 minerpulse-desktop/    Tauri + Svelte UI
+platform/              Подписки: API, web, admin, deploy (Docker)
 docs/screenshots/      Скриншоты для README
 releases/              update.json — манифест авто-обновления
 scripts/               bump build / sync version
 ```
+
+Подробнее о деплое платформы подписок: **[platform/README.md](platform/README.md)**.
 
 ## Контакты
 

@@ -1,0 +1,18 @@
+{
+  "name": "@minerpulse/platform",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "db:generate": "npm run generate -w @minerpulse/db",
+    "db:migrate": "npm run migrate -w @minerpulse/db",
+    "db:seed": "npm run seed -w @minerpulse/db",
+    "dev:api": "npm run dev -w @minerpulse/api",
+    "build": "npm run build -ws --if-present"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

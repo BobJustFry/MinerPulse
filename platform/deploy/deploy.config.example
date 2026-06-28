@@ -1,0 +1,33 @@
+# Copy to platform/deploy/deploy.config and fill in values.
+# setup-from-github.ps1 reads this file (never commit deploy.config).
+
+# --- GitHub (MinerPulse monorepo) ---
+GITHUB_REPO=https://github.com/YOUR_USER/MinerPulse.git
+GITHUB_BRANCH=main
+# Personal access token (repo scope) for private repos; leave empty for public repo
+GITHUB_TOKEN=
+
+# --- VPS ---
+VPS_HOST=82.23.249.197
+VPS_USER=root
+SSH_KEY=
+# Git clone target on VPS (full MinerPulse repo)
+REMOTE_DIR=/opt/minerpulse
+# Subdirectory with docker-compose and deploy scripts
+PLATFORM_SUBDIR=platform
+
+MPULSE_BASE_DOMAIN=mpulse.bob4.fun
+MPULSE_LETSENCRYPT_EMAIL=admin@bob4.fun
+MPULSE_DEPLOY_MODE=external-proxy
+MPULSE_ADMIN_IP_ALLOWLIST=
+MPULSE_LICENSE_OFFLINE_GRACE_DAYS=14
+
+MPULSE_BOOTSTRAP_ADMIN_EMAIL=admin@bob4.fun
+MPULSE_BOOTSTRAP_ADMIN_PASSWORD=
+MPULSE_POSTGRES_PASSWORD=
+
+SHARED_AI_DIR=/opt/sharedai
+SHARED_AI_CADDYFILE=
+SHARED_AI_COMPOSE_FILE=
+SHARED_AI_CADDY_SERVICE=caddy
+AUTO_INTEGRATE_PROXY=0

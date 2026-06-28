@@ -1,0 +1,10 @@
+:root { color-scheme: dark; font-family: Segoe UI, system-ui, sans-serif; }
+body { margin: 0; background: #0f1117; color: #e8eaed; }
+.shell { max-width: 920px; margin: 0 auto; padding: 24px; }
+.hero { text-align: center; margin-bottom: 24px; }
+.card { background: #1a1d26; border: 1px solid #2d3348; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.plan { border: 1px solid #2d3348; border-radius: 8px; padding: 12px; }
+input, button { display: block; width: 100%; margin: 8px 0; padding: 10px; border-radius: 8px; border: 1px solid #2d3348; background: #242836; color: inherit; }
+button { cursor: pointer; background: #0066cc; border-color: #0066cc; }
+pre { background: #0f1117; padding: 12px; border-radius: 8px; overflow: auto; }
