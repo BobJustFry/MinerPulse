@@ -25,6 +25,7 @@ find_caddyfile() {
     "${SHARED_AI_DIR}/caddy/Caddyfile"
     "${SHARED_AI_DIR}/config/Caddyfile"
     "${SHARED_AI_DIR}/reverse-proxy/Caddyfile"
+    "/opt/sharedai/infra/caddy/Caddyfile"
     "${SHARED_AI_DIR}/data/caddy/Caddyfile"
     "${SHARED_AI_DIR}/caddy/Caddyfile"
   )

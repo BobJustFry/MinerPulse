@@ -144,19 +144,22 @@ EOF
 export BASE_DOMAIN DEPLOY_MODE ADMIN_IP_BLOCK HTTP_TO_HTTPS_REDIRECT
 render_templates "$ROOT_DIR"
 
-if [[ "$DEPLOY_MODE" == "external-proxy" ]]; then
+  if [[ "$DEPLOY_MODE" == "external-proxy" ]]; then
   cat >"$ROOT_DIR/docker-compose.override.yml" <<'YAML'
 services:
   api:
     ports:
-      - "127.0.0.1:3001:3001"
+      - "3001:3001"
   web:
     ports:
-      - "127.0.0.1:3000:3000"
+      - "3000:3000"
   admin:
     ports:
-      - "127.0.0.1:3002:3002"
+      - "3002:3002"
 YAML
+  HOST_UPSTREAM="$(ip -4 route show default 2>/dev/null | awk '{print $3}')"
+  HOST_UPSTREAM="${HOST_UPSTREAM:-172.17.0.1}"
+  export HOST_UPSTREAM
 fi
 
 if command -v ufw >/dev/null 2>&1; then

@@ -55,8 +55,9 @@ PY
   if [[ "${DEPLOY_MODE}" == "external-proxy" ]]; then
     cp "$root/deploy/templates/external-proxy-snippet.txt" "$root/deploy/generated/host-proxy.conf"
     sed -i "s|{{BASE_DOMAIN}}|${BASE_DOMAIN}|g" "$root/deploy/generated/host-proxy.conf"
-    sed -i "s|{{WEB_UPSTREAM}}|127.0.0.1:3000|g" "$root/deploy/generated/host-proxy.conf"
-    sed -i "s|{{API_UPSTREAM}}|127.0.0.1:3001|g" "$root/deploy/generated/host-proxy.conf"
-    sed -i "s|{{ADMIN_UPSTREAM}}|127.0.0.1:3002|g" "$root/deploy/generated/host-proxy.conf"
+    local upstream="${HOST_UPSTREAM:-172.17.0.1}"
+    sed -i "s|{{WEB_UPSTREAM}}|${upstream}:3000|g" "$root/deploy/generated/host-proxy.conf"
+    sed -i "s|{{API_UPSTREAM}}|${upstream}:3001|g" "$root/deploy/generated/host-proxy.conf"
+    sed -i "s|{{ADMIN_UPSTREAM}}|${upstream}:3002|g" "$root/deploy/generated/host-proxy.conf"
   fi
 }
