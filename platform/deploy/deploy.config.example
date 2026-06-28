@@ -1,5 +1,4 @@
-# Copy to platform/deploy/deploy.config and fill in values.
-# setup-from-github.ps1 reads this file (never commit deploy.config).
+# Copy to deploy/deploy.config — or run: deploy/configure.ps1 (Windows) / deploy/configure.sh (Linux)
 
 # --- GitHub (MinerPulse monorepo) ---
 GITHUB_REPO=https://github.com/YOUR_USER/MinerPulse.git

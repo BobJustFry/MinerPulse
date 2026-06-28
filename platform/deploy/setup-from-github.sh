@@ -8,7 +8,7 @@ CONFIG="${1:-$ROOT_DIR/deploy/deploy.config}"
 ACTION="${2:-install}"
 
 if [[ ! -f "$CONFIG" ]]; then
-  echo "Copy deploy/deploy.config.example -> deploy/deploy.config" >&2
+  echo "deploy.config not found — run: bash deploy/configure.sh" >&2
   exit 1
 fi
 

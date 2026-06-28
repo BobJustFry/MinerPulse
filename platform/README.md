@@ -25,28 +25,27 @@ On VPS the whole repo is cloned (e.g. `/opt/minerpulse`), Docker runs from `plat
 
 ## Deploy from GitHub
 
-### 1. Configure
+### 1. Configure (wizard — nothing to copy by hand)
 
 ```powershell
 cd P:\Projects\MinerPulse\platform
-copy deploy\deploy.config.example deploy\deploy.config
-notepad deploy\deploy.config
+powershell -ExecutionPolicy Bypass -File deploy\configure.ps1
 ```
 
-Set `GITHUB_REPO` to your **MinerPulse** repo, `GITHUB_TOKEN` (private), `VPS_HOST`. Super admin defaults to `mpulse-admin` (password auto-generated).
+Asks for VPS IP, domain, deploy mode, GitHub token (from `gh` if logged in).  
+Creates `deploy/deploy.config` locally (not in git).
 
-For SharedAI on 80/443:
+On VPS: `bash deploy/configure.sh`
 
-- `MPULSE_DEPLOY_MODE=external-proxy`
-- `AUTO_INTEGRATE_PROXY=1` + `SHARED_AI_DIR=/opt/sharedai` (optional)
-
-### 2. One-command setup on VPS
+### 2. Deploy to VPS
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File deploy\setup-from-github.ps1
 ```
 
-Clones/pulls MinerPulse → runs `platform/deploy/install.sh` → Docker stack in `/opt/minerpulse/platform`.
+(Wizard runs automatically if `deploy.config` is missing.)
+
+Clones/pulls MinerPulse → runs `platform/deploy/install.sh` → Docker in `/opt/minerpulse/platform`.
 
 Update:
 

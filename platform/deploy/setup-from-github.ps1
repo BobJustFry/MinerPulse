@@ -4,9 +4,9 @@
   Deploy MinerPulse platform/ to VPS: clone/pull monorepo from GitHub, install.
 
 .USAGE
-  1. copy deploy\deploy.config.example -> deploy\deploy.config
-  2. Set GITHUB_REPO, GITHUB_TOKEN (private), VPS_HOST
-  3. powershell -ExecutionPolicy Bypass -File deploy\setup-from-github.ps1
+  1. powershell -ExecutionPolicy Bypass -File deploy\configure.ps1
+  2. powershell -ExecutionPolicy Bypass -File deploy\setup-from-github.ps1
+  (configure runs automatically if deploy.config is missing)
 #>
 param(
   [string]$ConfigFile = "",
@@ -18,6 +18,14 @@ param(
 $ErrorActionPreference = "Stop"
 $DeployDir = $PSScriptRoot
 if (-not $ConfigFile) { $ConfigFile = Join-Path $DeployDir "deploy.config" }
+
+if (-not (Test-Path $ConfigFile)) {
+  Write-Host "deploy.config not found — starting wizard..." -ForegroundColor Yellow
+  & (Join-Path $DeployDir "configure.ps1")
+  if (-not (Test-Path $ConfigFile)) {
+    throw "deploy.config was not created. Run: deploy\configure.ps1"
+  }
+}
 
 function Read-DeployConfig {
   param([string]$Path)
