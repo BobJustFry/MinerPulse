@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { check } from "@tauri-apps/plugin-updater";
-  import { relaunch } from "@tauri-apps/plugin-process";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { t, type Locale, type MessageKey } from "$lib/i18n";
+  import UpdateProgressModal from "$lib/components/UpdateProgressModal.svelte";
 
   const GITHUB_URL = "https://github.com/BobJustFry/MinerPulse";
   const TELEGRAM_URL = "https://t.me/miner_pulse";
@@ -23,9 +22,7 @@
     product: string;
   } = $props();
 
-  let checking = $state(false);
-  let updateStatus = $state("");
-  let updateError = $state(false);
+  let updateProgressOpen = $state(false);
   let donateCopied = $state(false);
   let donateCopyTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -44,7 +41,7 @@
   }
 
   function onKeydown(event: KeyboardEvent) {
-    if (event.key === "Escape" && !checking) {
+    if (event.key === "Escape" && !updateProgressOpen) {
       close();
     }
   }
@@ -70,32 +67,12 @@
     }
   }
 
-  async function checkForUpdates() {
-    checking = true;
-    updateError = false;
-    updateStatus = msg("about.checking");
-    try {
-      const update = await check();
-      if (!update) {
-        updateStatus = msg("status.upToDate");
-        return;
-      }
-      updateStatus = msg("status.updateAvailable", { version: update.version });
-      await update.downloadAndInstall();
-      await relaunch();
-    } catch (err) {
-      updateError = true;
-      updateStatus = msg("about.updateError", { detail: String(err) });
-    } finally {
-      checking = false;
-    }
+  function startUpdateCheck() {
+    updateProgressOpen = true;
   }
 
   $effect(() => {
     if (!open) {
-      updateStatus = "";
-      updateError = false;
-      checking = false;
       donateCopied = false;
       clearTimeout(donateCopyTimer);
     }
@@ -115,7 +92,7 @@
         <button
           type="button"
           class="modal-close"
-          disabled={checking}
+          disabled={updateProgressOpen}
           onclick={close}
           aria-label={msg("about.close")}
         >
@@ -150,22 +127,60 @@
           <div class="about-donate-title">{msg("about.donate.title")}</div>
           <p class="about-donate-hint">{msg("about.donate.hint")}</p>
           <div class="about-donate-network">{DONATE_NETWORK}</div>
-          <code class="about-donate-wallet">{DONATE_WALLET}</code>
-          <button type="button" class="about-donate-copy" onclick={copyDonateAddress}>
-            {donateCopied ? msg("about.donate.copied") : msg("about.donate.copy")}
-          </button>
+          <div class="about-donate-wallet-row">
+            <code class="about-donate-wallet">{DONATE_WALLET}</code>
+            <button
+              type="button"
+              class="about-donate-copy-btn"
+              class:about-donate-copy-btn-done={donateCopied}
+              onclick={copyDonateAddress}
+              aria-label={donateCopied ? msg("about.donate.copied") : msg("about.donate.copy")}
+              title={donateCopied ? msg("about.donate.copied") : msg("about.donate.copy")}
+            >
+              {#if donateCopied}
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    d="M3.5 8.5 6.5 11.5 12.5 4.5"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              {:else}
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <rect
+                    x="5.5"
+                    y="5.5"
+                    width="7"
+                    height="7"
+                    rx="1"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.2"
+                  />
+                  <path
+                    d="M4.5 10.5V4.5a1 1 0 0 1 1-1h6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.2"
+                    stroke-linecap="round"
+                  />
+                </svg>
+              {/if}
+            </button>
+          </div>
         </section>
 
         <div class="about-actions">
-          <button type="button" class="btn primary" disabled={checking} onclick={checkForUpdates}>
-            {checking ? msg("about.checking") : msg("about.checkUpdates")}
+          <button type="button" class="btn primary" disabled={updateProgressOpen} onclick={startUpdateCheck}>
+            {msg("about.checkUpdates")}
           </button>
         </div>
-
-        {#if updateStatus}
-          <p class="about-update-status" class:about-update-status-error={updateError}>{updateStatus}</p>
-        {/if}
       </div>
     </div>
   </div>
 {/if}
+
+<UpdateProgressModal bind:open={updateProgressOpen} {locale} productVersion={version} />

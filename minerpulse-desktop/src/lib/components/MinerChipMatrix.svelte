@@ -112,6 +112,19 @@
     return usesMatrixLayout(board) ? matrixGrid(board) : domainGrid(board);
   }
 
+  function hasCrcFault(cell: ChipCell): boolean {
+    return cell.errors != null && cell.errors > 0;
+  }
+
+  /** WhatsMiner `errors` are PLL/splash counts — hide on temp/voltage views. */
+  function showChipErrorOverlay(cell: ChipCell): boolean {
+    if (!hasCrcFault(cell) || displayMetric === "crc") return false;
+    if (boardsStacked && (displayMetric === "temp" || displayMetric === "voltage")) {
+      return false;
+    }
+    return true;
+  }
+
   function chipTitle(cell: ChipCell): string {
     if (cell.empty) return "";
     const parts = [`C${cell.index}: ${cell.temp}°C`];
@@ -121,14 +134,13 @@
     if (cell.solutions != null) {
       parts.push(`${msg("data.chipSolutions")}: ${formatChipMetric(cell.solutions)}`);
     }
-    if (cell.errors != null) {
+    if (
+      cell.errors != null &&
+      !(boardsStacked && (displayMetric === "temp" || displayMetric === "voltage"))
+    ) {
       parts.push(`${msg("data.chipCrc")}: ${formatChipMetric(cell.errors)}`);
     }
     return parts.join("\n");
-  }
-
-  function hasCrcFault(cell: ChipCell): boolean {
-    return cell.errors != null && cell.errors > 0;
   }
 
   async function loadBoardMatrices(nextBoards: BoardChipMap[]) {
@@ -230,13 +242,13 @@
                   {:else}
                     <div
                       class="chip-cell"
-                      class:chip-cell-fault={hasCrcFault(cell)}
+                      class:chip-cell-fault={showChipErrorOverlay(cell)}
                       style={`background:${chipCellBackground(cell, displayMetric, metricRange)}`}
                       title={chipTitle(cell)}
                     >
                       <span class="chip-cell-id">C{cell.index}</span>
                       <span class="chip-cell-value">{chipCellDisplayValue(cell, displayMetric, voltageUnit)}</span>
-                      {#if hasCrcFault(cell) && displayMetric !== "crc"}
+                      {#if showChipErrorOverlay(cell)}
                         <span class="chip-cell-badge">{cell.errors}</span>
                       {/if}
                     </div>
