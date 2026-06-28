@@ -66,11 +66,13 @@ if (-not (Get-Cfg $cfg "MPULSE_BOOTSTRAP_ADMIN_EMAIL")) {
 }
 
 $sshTarget = "${vpsUser}@${vpsHost}"
-$sshArgs = @()
-$scpArgs = @()
+$sshArgs = @("-o", "ConnectTimeout=20", "-o", "StrictHostKeyChecking=accept-new")
+$scpArgs = @("-o", "ConnectTimeout=20", "-o", "StrictHostKeyChecking=accept-new")
 if ($sshKey) {
   $sshArgs += @("-i", $sshKey, "-o", "BatchMode=yes")
-  $scpArgs += @("-i", $sshKey)
+  $scpArgs += @("-i", $sshKey, "-o", "BatchMode=yes")
+} else {
+  Write-Host "[!] SSH_KEY not set in deploy.config — using default key/agent (password auth may hang)." -ForegroundColor Yellow
 }
 
 Write-Host "=== MinerPulse GitHub deploy -> ${sshTarget} (${Action}) ===" -ForegroundColor Cyan
