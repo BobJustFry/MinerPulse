@@ -1,6 +1,7 @@
 #!/bin/sh
 set -e
 cd /app/packages/db
+npx prisma generate
 npx prisma migrate deploy
 npx tsx prisma/seed.ts || true
 cd /app/apps/api

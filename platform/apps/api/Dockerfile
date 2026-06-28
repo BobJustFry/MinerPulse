@@ -16,6 +16,8 @@ COPY package.json package-lock.json* ./
 COPY packages/db/package.json packages/db/
 COPY apps/api/package.json apps/api/
 RUN npm install --omit=dev --workspace=@minerpulse/db --workspace=@minerpulse/api
+COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=build /app/node_modules/@prisma/client ./node_modules/@prisma/client
 COPY --from=build /app/packages/db packages/db
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY packages/db/prisma packages/db/prisma
