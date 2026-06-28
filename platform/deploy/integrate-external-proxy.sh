@@ -25,6 +25,8 @@ find_caddyfile() {
     "${SHARED_AI_DIR}/caddy/Caddyfile"
     "${SHARED_AI_DIR}/config/Caddyfile"
     "${SHARED_AI_DIR}/reverse-proxy/Caddyfile"
+    "${SHARED_AI_DIR}/data/caddy/Caddyfile"
+    "${SHARED_AI_DIR}/caddy/Caddyfile"
   )
   local path
   for path in "${candidates[@]}"; do
@@ -33,11 +35,44 @@ find_caddyfile() {
       return 0
     fi
   done
+  find_caddyfile_via_docker && return 0
+  return 1
+}
+
+find_caddyfile_via_docker() {
+  local cid line src dest
+  for cid in $(docker ps --filter "publish=443" --format '{{.ID}}'); do
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      src="${line%% -> *}"
+      dest="${line##* -> }"
+      if [[ "$dest" == "/etc/caddy/Caddyfile" && -f "$src" ]]; then
+        echo "$src"
+        return 0
+      fi
+    done < <(docker inspect "$cid" --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}')
+  done
+  for cid in $(docker ps --filter "ancestor=caddy" --format '{{.ID}}'); do
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      src="${line%% -> *}"
+      dest="${line##* -> }"
+      if [[ "$dest" == "/etc/caddy/Caddyfile" && -f "$src" ]]; then
+        echo "$src"
+        return 0
+      fi
+    done < <(docker inspect "$cid" --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}')
+  done
   return 1
 }
 
 CADDYFILE="$(find_caddyfile)" || {
-  echo "Caddyfile not found under ${SHARED_AI_DIR}. Set SHARED_AI_CADDYFILE in deploy.config." >&2
+  echo "Caddyfile not found under ${SHARED_AI_DIR} or via Docker." >&2
+  echo "Manual fix:" >&2
+  echo "  1) cat ${SNIPPET}" >&2
+  echo "  2) Append to your host Caddyfile (container on :443)" >&2
+  echo "  3) docker exec <caddy> caddy reload --config /etc/caddy/Caddyfile" >&2
+  echo "Find mount: docker ps ; docker inspect <name> --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{println}}{{end}}'" >&2
   exit 1
 }
 
