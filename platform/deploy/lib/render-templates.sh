@@ -18,7 +18,7 @@ render_templates() {
   local root="$1"
   ENV_RENDER_FILE="$root/deploy/generated/render.env"
   mkdir -p "$root/deploy/generated" "$root/secrets"
-  render_file "$root/deploy/templates/.env.tpl" "$root/.env"
+  render_file "$root/deploy/templates/env.tpl" "$root/.env"
   render_file "$root/deploy/templates/Caddyfile.tpl" "$root/Caddyfile"
   if [[ -n "${ADMIN_IP_BLOCK:-}" ]]; then
     export ADMIN_IP_BLOCK

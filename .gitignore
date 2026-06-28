@@ -3,6 +3,8 @@
 .env
 .env.*
 !.env.example
+!**/.env.tpl
+!**/env.tpl
 
 # Credentials and certificates
 *.pem
