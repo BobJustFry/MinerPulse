@@ -94,8 +94,11 @@ sync_repo() {
 persist_config() {
   if [[ -n "$CONFIG_FILE" && -f "$CONFIG_FILE" ]]; then
     mkdir -p "$PLATFORM_DIR/deploy"
-    cp "$CONFIG_FILE" "$PLATFORM_DIR/deploy/deploy.config"
-    chmod 600 "$PLATFORM_DIR/deploy/deploy.config"
+    local dest="$PLATFORM_DIR/deploy/deploy.config"
+    if [[ "$CONFIG_FILE" != "$dest" ]]; then
+      cp "$CONFIG_FILE" "$dest"
+    fi
+    chmod 600 "$dest"
   fi
 }
 
