@@ -5,6 +5,7 @@ export type DeviceInput = {
   os?: string;
   os_version?: string;
   app_version?: string;
+  app_build?: number;
 };
 
 export class DeviceLimitError extends Error {
@@ -14,11 +15,21 @@ export class DeviceLimitError extends Error {
 export function parseDeviceFields(body: Record<string, unknown>): DeviceInput | null {
   const hwid = String(body.hwid ?? body.device_fingerprint ?? "").trim();
   if (hwid.length < 8) return null;
+
+  let appBuild: number | undefined;
+  if (body.app_build != null && body.app_build !== "") {
+    const parsed = Number(body.app_build);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      appBuild = Math.trunc(parsed);
+    }
+  }
+
   return {
     hwid,
     os: body.os ? String(body.os) : undefined,
     os_version: body.os_version ? String(body.os_version) : undefined,
     app_version: body.app_version ? String(body.app_version) : undefined,
+    app_build: appBuild,
   };
 }
 
@@ -45,6 +56,7 @@ export async function upsertUserDevice(
       os: device.os,
       osVersion: device.os_version,
       appVersion: device.app_version,
+      appBuild: device.app_build,
     },
     create: {
       userId,
@@ -52,6 +64,7 @@ export async function upsertUserDevice(
       os: device.os,
       osVersion: device.os_version,
       appVersion: device.app_version,
+      appBuild: device.app_build,
     },
   });
 }

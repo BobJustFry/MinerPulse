@@ -38,6 +38,7 @@
   } from "$lib/pollSession";
   import { SessionPlayer, type PlaybackSpeed } from "$lib/sessionPlayer";
   import SessionPlayerBar from "$lib/components/SessionPlayerBar.svelte";
+  import { isSnapshotEmpty } from "$lib/snapshotUtils";
   import type { ChartsLayout } from "$lib/components/MinerChartsPanel";
   import type {
     Entitlements,
@@ -64,6 +65,9 @@
   let whatsminerAuthPrompted = $state(false);
   let pendingAuthRetry = $state<(() => Promise<void>) | null>(null);
   let busy = $state(false);
+  let reading = $state(false);
+  let readCooldownSec = $state(0);
+  let readCooldownTimer: ReturnType<typeof setInterval> | null = null;
   let statusText = $state("");
   let snapshot = $state<MinerSnapshot | null>(null);
   let appVersion = $state("Miner Pulse 1.0.1 (26)");
@@ -122,6 +126,12 @@
     }),
   );
   const chartsLiveNow = $derived(chartsLive || polling || recording);
+  const readCooldownActive = $derived(
+    !entitlements.can_poll && readCooldownSec > 0,
+  );
+  const readActionDisabled = $derived(
+    reading || polling || connectionLocked || readCooldownActive,
+  );
   const readActionLabel = $derived(
     readActionMode === "read"
       ? msg("toolbar.read")
@@ -270,6 +280,34 @@
     return String(err);
   }
 
+  function snapshotStatusText(data: MinerSnapshot): string {
+    return `${data.identity.model} · ${data.status}`;
+  }
+
+  function startReadCooldown(sec?: number) {
+    const duration = Math.max(1, sec ?? entitlements.min_read_interval_sec);
+    readCooldownSec = duration;
+    if (readCooldownTimer) clearInterval(readCooldownTimer);
+    readCooldownTimer = setInterval(() => {
+      if (readCooldownSec <= 1) {
+        readCooldownSec = 0;
+        if (readCooldownTimer) {
+          clearInterval(readCooldownTimer);
+          readCooldownTimer = null;
+        }
+      } else {
+        readCooldownSec -= 1;
+      }
+    }, 1000);
+  }
+
+  function handleReadRateLimit(err: unknown) {
+    const e = err as ErrorResponse;
+    if (e?.code === "RATE_LIMIT") {
+      startReadCooldown(Number(e.args?.sec ?? entitlements.min_read_interval_sec));
+    }
+  }
+
   async function refreshEntitlements() {
     entitlements = await invoke<Entitlements>("get_entitlements");
   }
@@ -299,10 +337,16 @@
   }
 
   async function readMiner() {
-    if (polling || connectionLocked) return;
+    if (polling || connectionLocked || reading) return;
+    if (readCooldownActive) return;
+
+    const hadSnapshot = snapshot !== null;
+    reading = true;
     connectionLocked = true;
-    busy = true;
-    statusText = msg("status.reading");
+    if (!hadSnapshot) {
+      statusText = msg("status.reading");
+    }
+
     try {
       const response = await invoke<{ snapshot: MinerSnapshot }>("read_miner", {
         request: {
@@ -311,19 +355,29 @@
           whatsminer_auth: whatsminerAuthPayload(),
         },
       });
+
+      if (isSnapshotEmpty(response.snapshot)) {
+        statusText = msg("status.readEmpty");
+        return;
+      }
+
       snapshot = response.snapshot;
       clearCharts();
       pushChartPoint(response.snapshot, 0);
-      statusText = `${snapshot.identity.model} · ${snapshot.status}`;
+      statusText = snapshotStatusText(response.snapshot);
+
+      if (!entitlements.can_poll) {
+        startReadCooldown();
+      }
+
       if (shouldPromptWhatsminerAuth(response.snapshot)) {
         promptWhatsminerAuth();
-        return;
       }
     } catch (err) {
-      snapshot = null;
+      handleReadRateLimit(err);
       statusText = formatError(err);
     } finally {
-      busy = false;
+      reading = false;
       connectionLocked = false;
     }
   }
@@ -492,11 +546,13 @@
   }
 
   function runReadAction() {
-    if (busy || polling || connectionLocked) return;
+    if (polling || connectionLocked) return;
     if (readActionMode === "read") {
+      if (reading || readCooldownActive) return;
       void readMiner();
       return;
     }
+    if (busy) return;
     if (readActionMode === "poll") {
       void startPolling(false);
       return;
@@ -818,6 +874,7 @@
       unlistenPollSnapshot?.();
       unlistenPollFinished?.();
       sessionPlayer?.pause();
+      if (readCooldownTimer) clearInterval(readCooldownTimer);
     };
   });
 
@@ -935,10 +992,13 @@
           <div class="split-action">
             <button
               type="button"
-              class="split-action-main"
-              disabled={busy || connectionLocked}
+              class="split-action-main btn-with-spinner"
+              disabled={(readActionMode === "read" ? readActionDisabled : busy || connectionLocked)}
               onclick={runReadAction}
             >
+              {#if reading && readActionMode === "read"}
+                <span class="btn-spinner" aria-hidden="true"></span>
+              {/if}
               {readActionLabel}
             </button>
             <button
@@ -978,10 +1038,14 @@
       {/if}
     {:else}
       <button
-        class="btn primary"
-        disabled={busy || polling || connectionLocked}
+        class="btn primary btn-with-spinner"
+        disabled={readActionDisabled}
+        title={readCooldownActive ? msg("status.readCooldown", { sec: readCooldownSec }) : undefined}
         onclick={readMiner}
       >
+        {#if reading}
+          <span class="btn-spinner" aria-hidden="true"></span>
+        {/if}
         {msg("toolbar.read")}
       </button>
     {/if}

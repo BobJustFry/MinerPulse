@@ -38,6 +38,7 @@ const loginSchema = z.object({
   os: z.string().min(1).optional(),
   os_version: z.string().min(1).optional(),
   app_version: z.string().optional(),
+  app_build: z.coerce.number().int().positive().optional(),
 });
 
 async function issueUserTokens(

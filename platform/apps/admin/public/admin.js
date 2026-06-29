@@ -89,7 +89,7 @@ function showUserForm(id = null, user = null) {
       ? `<div class="device-list">
           <h4>Устройства</h4>
           <table>
-            <tr><th>HWID</th><th>ОС</th><th>Версия ОС</th><th>Приложение</th><th>Последний вход</th></tr>
+            <tr><th>HWID</th><th>ОС</th><th>Версия ОС</th><th>Версия</th><th>Билд</th><th>Последний вход</th></tr>
             ${user.devices
               .map(
                 (d) => `<tr>
@@ -97,6 +97,7 @@ function showUserForm(id = null, user = null) {
                   <td>${esc(d.os ?? "—")}</td>
                   <td>${esc(d.osVersion ?? "—")}</td>
                   <td>${esc(d.appVersion ?? "—")}</td>
+                  <td>${esc(d.appBuild ?? "—")}</td>
                   <td>${esc(d.lastSeenAt ? new Date(d.lastSeenAt).toLocaleString("ru-RU") : "—")}</td>
                 </tr>`,
               )

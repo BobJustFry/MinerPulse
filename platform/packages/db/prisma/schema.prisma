@@ -95,6 +95,7 @@ model Device {
   os          String?
   osVersion   String?  @map("os_version")
   appVersion  String?  @map("app_version")
+  appBuild    Int?     @map("app_build")
   label       String?
   lastSeenAt  DateTime @default(now())
   createdAt   DateTime @default(now())

@@ -114,6 +114,8 @@
   "status.updating": "Downloading update…",
   "status.ready": "Ready",
   "status.reading": "Reading…",
+  "status.readEmpty": "Miner did not respond or returned empty data",
+  "status.readCooldown": "Read available in {sec}s",
   "status.scanning": "Scanning network…",
   "status.scanningRange": "Scanning {range}…",
   "status.scanDone": "Found {count} of {scanned} addresses",

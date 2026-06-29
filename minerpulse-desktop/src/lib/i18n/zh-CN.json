@@ -114,6 +114,8 @@
   "status.updating": "正在下载更新…",
   "status.ready": "就绪",
   "status.reading": "读取中…",
+  "status.readEmpty": "矿机无响应或数据为空",
+  "status.readCooldown": "{sec} 秒后可读取",
   "status.scanning": "正在扫描网络…",
   "status.scanningRange": "正在扫描 {range}…",
   "status.scanDone": "在 {scanned} 个地址中找到 {count} 台",

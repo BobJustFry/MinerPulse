@@ -20,6 +20,7 @@ const deviceBodySchema = z
     os: z.string().min(1).optional(),
     os_version: z.string().min(1).optional(),
     app_version: z.string().optional(),
+    app_build: z.coerce.number().int().positive().optional(),
   })
   .refine((data) => Boolean(data.hwid || data.device_fingerprint), {
     message: "hwid_required",
@@ -131,6 +132,7 @@ license.post("/refresh", async (c) => {
       os: deviceInput.os,
       osVersion: deviceInput.os_version,
       appVersion: deviceInput.app_version,
+      appBuild: deviceInput.app_build,
     },
   });
 

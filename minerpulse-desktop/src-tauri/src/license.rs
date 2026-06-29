@@ -142,14 +142,31 @@ fn ensure_device_identity(store: &mut LicenseStore) {
     store.os_version = current.os_version;
 }
 
-fn device_payload(store: &LicenseStore, app_version: Option<&str>) -> serde_json::Value {
+fn app_meta() -> (String, u32) {
+    let meta: serde_json::Value =
+        serde_json::from_str(env!("MINERPULSE_VERSION_JSON")).unwrap_or(serde_json::json!({}));
+    let version = meta
+        .get("version")
+        .and_then(|v| v.as_str())
+        .unwrap_or("0.0.0")
+        .to_string();
+    let build = meta
+        .get("build")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u32;
+    (version, build)
+}
+
+fn device_payload(store: &LicenseStore, include_app: bool) -> serde_json::Value {
     let mut payload = serde_json::json!({
         "hwid": store.hwid,
         "os": store.os,
         "os_version": store.os_version,
     });
-    if let Some(version) = app_version {
-        payload["app_version"] = serde_json::Value::String(version.to_string());
+    if include_app {
+        let (version, build) = app_meta();
+        payload["app_version"] = serde_json::Value::String(version);
+        payload["app_build"] = serde_json::Value::Number(build.into());
     }
     payload
 }
@@ -256,7 +273,7 @@ impl LicenseState {
                     .refresh_token
                     .clone()
                     .ok_or_else(|| license_err("no_refresh_token"))?,
-                device_payload(&store, Some(env!("CARGO_PKG_VERSION"))),
+                device_payload(&store, true),
             )
         };
 
@@ -298,7 +315,7 @@ impl LicenseState {
         let device = {
             let mut store = self.store.lock().unwrap();
             ensure_device_identity(&mut store);
-            device_payload(&store, Some(env!("CARGO_PKG_VERSION")))
+            device_payload(&store, true)
         };
         let url = format!("{}/v1/license/activate", api_base());
         let mut body = serde_json::Map::new();
@@ -358,7 +375,7 @@ impl LicenseState {
         let device = {
             let mut store = self.store.lock().unwrap();
             ensure_device_identity(&mut store);
-            device_payload(&store, Some(env!("CARGO_PKG_VERSION")))
+            device_payload(&store, true)
         };
         let url = format!("{}/v1/auth/login", api_base());
         let mut body = serde_json::Map::new();

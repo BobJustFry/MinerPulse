@@ -114,6 +114,8 @@
   "status.updating": "Загрузка обновления…",
   "status.ready": "Готов",
   "status.reading": "Чтение…",
+  "status.readEmpty": "Майнер не ответил или данные пустые",
+  "status.readCooldown": "Чтение через {sec} сек",
   "status.scanning": "Сканирование сети…",
   "status.scanningRange": "Сканирование {range}…",
   "status.scanDone": "Найдено {count} из {scanned} адресов",

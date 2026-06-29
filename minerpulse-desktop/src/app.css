@@ -503,6 +503,29 @@ button {
   color: #fff;
 }
 
+.btn-with-spinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: btn-spin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .btn.danger {
   background: var(--danger);
   border-color: var(--danger);
@@ -1697,6 +1720,124 @@ button {
   justify-content: flex-end;
   gap: calc(var(--space) * 1);
   margin-top: calc(var(--space) * 0.5);
+}
+
+.subscription-modal {
+  width: min(440px, calc(100vw - 32px));
+}
+
+.subscription-body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 1.5);
+}
+
+.subscription-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-base);
+}
+
+.subscription-tab {
+  min-height: 34px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.subscription-tab:hover:not(:disabled):not(.active) {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+}
+
+.subscription-tab.active {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.subscription-tab:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.subscription-form .btn.primary,
+.subscription-body > .btn {
+  width: 100%;
+}
+
+.subscription-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.subscription-field input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-base);
+  color: var(--text-primary);
+}
+
+.subscription-field input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+.subscription-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.subscription-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.subscription-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.subscription-status {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-base);
+}
+
+.subscription-status-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.subscription-status p {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.subscription-status-meta {
+  color: var(--text-muted) !important;
+  font-size: 12px;
 }
 
 .brand-button {
