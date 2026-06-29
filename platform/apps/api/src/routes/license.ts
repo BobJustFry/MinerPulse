@@ -13,27 +13,24 @@ import {
 
 const license = new Hono();
 
-const deviceBodySchema = z
-  .object({
-    hwid: z.string().min(8).optional(),
-    device_fingerprint: z.string().min(8).optional(),
-    os: z.string().min(1).optional(),
-    os_version: z.string().min(1).optional(),
-    app_version: z.string().optional(),
-    app_build: z.coerce.number().int().positive().optional(),
-  })
-  .refine((data) => Boolean(data.hwid || data.device_fingerprint), {
-    message: "hwid_required",
-  });
+const deviceFieldsSchema = z.object({
+  hwid: z.string().min(8).optional(),
+  device_fingerprint: z.string().min(8).optional(),
+  os: z.string().min(1).optional(),
+  os_version: z.string().min(1).optional(),
+  app_version: z.string().optional(),
+  app_build: z.coerce.number().int().positive().optional(),
+});
 
 license.post("/activate", async (c) => {
+  const body = await c.req.json();
   const raw = z
     .object({
       code: z.string().min(6),
       app_version: z.string().optional(),
     })
-    .merge(deviceBodySchema)
-    .parse(await c.req.json());
+    .merge(deviceFieldsSchema)
+    .parse(body);
 
   const deviceInput = parseDeviceFields(raw);
   if (!deviceInput) {
@@ -102,10 +99,11 @@ license.post("/activate", async (c) => {
 });
 
 license.post("/refresh", async (c) => {
+  const body = await c.req.json();
   const raw = z
     .object({ refresh_token: z.string().min(20) })
-    .merge(deviceBodySchema)
-    .parse(await c.req.json());
+    .merge(deviceFieldsSchema)
+    .parse(body);
 
   const deviceInput = parseDeviceFields(raw);
   if (!deviceInput) {
