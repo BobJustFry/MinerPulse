@@ -447,17 +447,27 @@ impl LicenseState {
     }
 
     pub fn logout(&self, app: &AppHandle) -> Result<LicenseInfo, ErrorResponse> {
-        let mut store = self.store.lock().unwrap();
-        *store = LicenseStore {
-            hwid: store.hwid.clone(),
-            os: store.os.clone(),
-            os_version: store.os_version.clone(),
-            ..LicenseStore::default()
+        let info = {
+            let mut store = self.store.lock().unwrap();
+            *store = LicenseStore {
+                hwid: store.hwid.clone(),
+                os: store.os.clone(),
+                os_version: store.os_version.clone(),
+                ..LicenseStore::default()
+            };
+            self.save(&store)?;
+            LicenseInfo {
+                tier: SubscriptionTier::Free,
+                plan_name: None,
+                expires_at: None,
+                user_email: None,
+                user_nickname: None,
+                licensed: false,
+            }
         };
-        self.save(&store)?;
         self.apply_tier(app, SubscriptionTier::Free);
         Self::notify_updated(app);
-        Ok(self.info())
+        Ok(info)
     }
 }
 

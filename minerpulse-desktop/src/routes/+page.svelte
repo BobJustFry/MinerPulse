@@ -5,6 +5,8 @@
   import { onMount } from "svelte";
   import AboutModal from "$lib/components/AboutModal.svelte";
   import SubscriptionModal from "$lib/components/SubscriptionModal.svelte";
+  import UpdateAvailableNotice from "$lib/components/UpdateAvailableNotice.svelte";
+  import UpdateProgressModal from "$lib/components/UpdateProgressModal.svelte";
   import WhatsminerAuthModal from "$lib/components/WhatsminerAuthModal.svelte";
   import WindowCaption from "$lib/components/WindowCaption.svelte";
   import { locales, t, type Locale, type MessageKey } from "$lib/i18n";
@@ -39,6 +41,7 @@
   import { SessionPlayer, type PlaybackSpeed } from "$lib/sessionPlayer";
   import SessionPlayerBar from "$lib/components/SessionPlayerBar.svelte";
   import { isSnapshotEmpty } from "$lib/snapshotUtils";
+  import { checkForAppUpdate, UPDATE_CHECK_INTERVAL_MS } from "$lib/updateCheck";
   import type { ChartsLayout } from "$lib/components/MinerChartsPanel";
   import type {
     Entitlements,
@@ -76,6 +79,11 @@
   let appProduct = $state("Miner Pulse");
   let aboutOpen = $state(false);
   let subscriptionOpen = $state(false);
+  let updateAvailable = $state(false);
+  let updateVersionLabel = $state("");
+  let updateNoticeDismissed = $state(false);
+  let updateProgressOpen = $state(false);
+  let updateCheckInFlight = false;
   let connectionLoaded = $state(false);
   let dropActive = $state(false);
   let polling = $state(false);
@@ -685,6 +693,32 @@
     aboutOpen = true;
   }
 
+  async function runBackgroundUpdateCheck() {
+    if (updateCheckInFlight || updateProgressOpen) return;
+    updateCheckInFlight = true;
+    try {
+      const result = await checkForAppUpdate(appVersionNumber);
+      if (result.status === "available") {
+        updateAvailable = true;
+        updateVersionLabel = result.versionLabel;
+        updateNoticeDismissed = false;
+      } else if (result.status === "up_to_date") {
+        updateAvailable = false;
+        updateVersionLabel = "";
+      }
+    } finally {
+      updateCheckInFlight = false;
+    }
+  }
+
+  function startUpdateInstall() {
+    updateProgressOpen = true;
+  }
+
+  function dismissUpdateNotice() {
+    updateNoticeDismissed = true;
+  }
+
   function openSubscription() {
     subscriptionOpen = true;
   }
@@ -738,6 +772,7 @@
     let unlistenPollSnapshot: (() => void) | undefined;
     let unlistenPollFinished: (() => void) | undefined;
     let unlistenLicense: (() => void) | undefined;
+    let updateCheckTimer: ReturnType<typeof setInterval> | undefined;
 
     initSessionPlayer();
 
@@ -787,6 +822,10 @@
       } catch {
         /* ignore in web preview */
       }
+      void runBackgroundUpdateCheck();
+      updateCheckTimer = setInterval(() => {
+        void runBackgroundUpdateCheck();
+      }, UPDATE_CHECK_INTERVAL_MS);
       statusText = msg("status.ready");
 
       unlistenMiner = await listen<{
@@ -880,6 +919,7 @@
       unlistenPollSnapshot?.();
       unlistenPollFinished?.();
       unlistenLicense?.();
+      if (updateCheckTimer) clearInterval(updateCheckTimer);
       sessionPlayer?.pause();
       if (readCooldownTimer) clearInterval(readCooldownTimer);
     };
@@ -1231,17 +1271,41 @@
     {/if}
   </main>
 
+  {#if updateAvailable && !updateNoticeDismissed}
+    <UpdateAvailableNotice
+      {locale}
+      versionLabel={updateVersionLabel}
+      onInstall={startUpdateInstall}
+      onDismiss={dismissUpdateNotice}
+    />
+  {/if}
+
   <footer class="statusbar">
     <span class="status-dot" class:busy={busy || polling || playbackActive}></span>
     <span>{statusText || msg("status.ready")}</span>
     <span class="spacer"></span>
-    <button type="button" class="status-version" onclick={openAbout} title={msg("toolbar.about")}>
+    <button
+      type="button"
+      class="status-version"
+      class:status-version-update={updateAvailable}
+      onclick={openAbout}
+      title={updateAvailable
+        ? msg("updateNotice.message", { version: updateVersionLabel })
+        : msg("toolbar.about")}
+    >
       {appVersion}
     </button>
   </footer>
 
+  <UpdateProgressModal
+    bind:open={updateProgressOpen}
+    {locale}
+    productVersion={appVersionNumber}
+  />
+
   <AboutModal
     bind:open={aboutOpen}
+    bind:updateProgressOpen
     {locale}
     version={appVersionNumber}
     build={appBuild}

@@ -2,6 +2,7 @@
   import { check, type Update } from "@tauri-apps/plugin-updater";
   import { relaunch } from "@tauri-apps/plugin-process";
   import { t, type Locale, type MessageKey } from "$lib/i18n";
+  import { formatUpdateVersion } from "$lib/updateCheck";
 
   type UpdatePhase =
     | "checking"
@@ -57,14 +58,6 @@
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-
-  function formatUpdateVersion(update: Update): string {
-    const build = update.rawJson?.["build"];
-    if (typeof build === "number") {
-      return `${productVersion} (${build})`;
-    }
-    return update.version;
   }
 
   function setStatus(key: MessageKey, args?: Record<string, string | number>) {
@@ -153,7 +146,9 @@
 
       activeUpdate = update;
       phase = "downloading";
-      setStatus("updateProgress.downloading", { version: formatUpdateVersion(update) });
+      setStatus("updateProgress.downloading", {
+        version: formatUpdateVersion(update, productVersion),
+      });
       downloadedBytes = 0;
       totalBytes = 0;
       updateDownloadDetail();

@@ -819,6 +819,52 @@ button {
   color: var(--accent);
 }
 
+.status-version-update {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.update-notice {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space) * 2);
+  min-height: 36px;
+  padding: calc(var(--space) * 1.5) calc(var(--space) * 2);
+  border-top: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface));
+  color: var(--text);
+  font-size: 12px;
+}
+
+.update-notice-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.update-notice-text {
+  flex: 1;
+  margin: 0;
+  min-width: 0;
+}
+
+.update-notice-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.update-notice-install,
+.update-notice-dismiss {
+  min-height: 28px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
 @keyframes pulse {
   0%,
   100% {

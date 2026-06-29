@@ -1,7 +1,6 @@
 <script lang="ts">
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { t, type Locale, type MessageKey } from "$lib/i18n";
-  import UpdateProgressModal from "$lib/components/UpdateProgressModal.svelte";
 
   const GITHUB_URL = "https://github.com/BobJustFry/MinerPulse";
   const TELEGRAM_URL = "https://t.me/miner_pulse";
@@ -10,19 +9,19 @@
 
   let {
     open = $bindable(false),
+    updateProgressOpen = $bindable(false),
     locale,
     version,
     build,
     product,
   }: {
     open?: boolean;
+    updateProgressOpen?: boolean;
     locale: Locale;
     version: string;
     build: number;
     product: string;
   } = $props();
-
-  let updateProgressOpen = $state(false);
   let donateCopied = $state(false);
   let donateCopyTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -182,5 +181,3 @@
     </div>
   </div>
 {/if}
-
-<UpdateProgressModal bind:open={updateProgressOpen} {locale} productVersion={version} />
