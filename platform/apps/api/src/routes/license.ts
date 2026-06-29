@@ -118,25 +118,34 @@ license.post("/refresh", async (c) => {
     return c.json({ error: "invalid_refresh" }, 401);
   }
 
-  const device = await findUserDevice(stored.userId, deviceInput.hwid);
-  if (!device) {
-    return c.json({ error: "device_mismatch" }, 403);
-  }
-
-  await prisma.device.update({
-    where: { id: device.id },
-    data: {
-      lastSeenAt: new Date(),
-      os: deviceInput.os,
-      osVersion: deviceInput.os_version,
-      appVersion: deviceInput.app_version,
-      appBuild: deviceInput.app_build,
-    },
-  });
-
   const sub = await activeSubscription(stored.userId);
   if (!sub) {
     return c.json({ error: "no_active_subscription" }, 403);
+  }
+
+  let device = await findUserDevice(stored.userId, deviceInput.hwid);
+  if (!device) {
+    try {
+      device = await upsertUserDevice(stored.userId, deviceInput, {
+        maxDevices: sub.plan.maxDevices,
+      });
+    } catch (err) {
+      if (err instanceof DeviceLimitError) {
+        return c.json({ error: "device_limit" }, 403);
+      }
+      throw err;
+    }
+  } else {
+    await prisma.device.update({
+      where: { id: device.id },
+      data: {
+        lastSeenAt: new Date(),
+        os: deviceInput.os,
+        osVersion: deviceInput.os_version,
+        appVersion: deviceInput.app_version,
+        appBuild: deviceInput.app_build,
+      },
+    });
   }
 
   const accessToken = await signAccessToken({

@@ -737,6 +737,7 @@
     let unlistenDrop: (() => void) | undefined;
     let unlistenPollSnapshot: (() => void) | undefined;
     let unlistenPollFinished: (() => void) | undefined;
+    let unlistenLicense: (() => void) | undefined;
 
     initSessionPlayer();
 
@@ -769,6 +770,11 @@
       applyUiPrefs();
       loadConnection();
       connectionLoaded = true;
+
+      unlistenLicense = await listen("license://updated", () => {
+        void refreshEntitlements();
+      });
+
       await refreshEntitlements();
       try {
         const v = await invoke<{ display: string; version: string; build: number; product: string }>(
@@ -873,6 +879,7 @@
       unlistenDrop?.();
       unlistenPollSnapshot?.();
       unlistenPollFinished?.();
+      unlistenLicense?.();
       sessionPlayer?.pause();
       if (readCooldownTimer) clearInterval(readCooldownTimer);
     };

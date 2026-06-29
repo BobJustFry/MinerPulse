@@ -5,7 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::AppState;
 
@@ -203,14 +203,24 @@ impl LicenseState {
             LicenseStore::default()
         };
         ensure_device_identity(&mut store);
-        Ok(Self {
+        let this = Self {
             store: Mutex::new(store),
             client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(20))
                 .build()
                 .map_err(|_| license_err("http_client"))?,
             path,
-        })
+        };
+        let tier = {
+            let s = this.store.lock().unwrap();
+            Self::effective_tier(&s)
+        };
+        this.apply_tier(app, tier);
+        Ok(this)
+    }
+
+    fn notify_updated(app: &AppHandle) {
+        let _ = app.emit("license://updated", ());
     }
 
     fn save(&self, store: &LicenseStore) -> Result<(), ErrorResponse> {
@@ -226,12 +236,14 @@ impl LicenseState {
     }
 
     fn effective_tier(store: &LicenseStore) -> SubscriptionTier {
-        if store.last_sync_unix == 0 {
+        if store.refresh_token.is_none() && store.access_token.is_none() {
             return SubscriptionTier::Free;
         }
-        let elapsed_days = (now_unix() - store.last_sync_unix).max(0) / 86400;
-        if elapsed_days as u32 > store.offline_grace_days {
-            return SubscriptionTier::Free;
+        if store.last_sync_unix > 0 {
+            let elapsed_days = (now_unix() - store.last_sync_unix).max(0) / 86400;
+            if elapsed_days as u32 > store.offline_grace_days {
+                return SubscriptionTier::Free;
+            }
         }
         store.tier
     }
@@ -250,31 +262,26 @@ impl LicenseState {
     }
 
     pub async fn sync_on_startup(&self, app: AppHandle) {
-        let refresh = {
+        if let Some(refresh) = {
             let store = self.store.lock().unwrap();
             store.refresh_token.clone()
-        };
-        if refresh.is_some() {
-            let _ = self.refresh_remote(&app).await;
+        } {
+            let _ = self.refresh_remote(&app, refresh).await;
         }
         let tier = {
             let store = self.store.lock().unwrap();
             Self::effective_tier(&store)
         };
         self.apply_tier(&app, tier);
+        Self::notify_updated(&app);
     }
 
-    async fn refresh_remote(&self, app: &AppHandle) -> Result<(), ErrorResponse> {
-        let (refresh, device) = {
+    async fn refresh_remote(&self, app: &AppHandle, refresh: String) -> Result<(), ErrorResponse> {
+
+        let device = {
             let mut store = self.store.lock().unwrap();
             ensure_device_identity(&mut store);
-            (
-                store
-                    .refresh_token
-                    .clone()
-                    .ok_or_else(|| license_err("no_refresh_token"))?,
-                device_payload(&store, true),
-            )
+            device_payload(&store, true)
         };
 
         let url = format!("{}/v1/license/refresh", api_base());
@@ -308,6 +315,7 @@ impl LicenseState {
         let tier = Self::effective_tier(&store);
         self.save(&store)?;
         self.apply_tier(app, tier);
+        Self::notify_updated(app);
         Ok(())
     }
 
@@ -353,16 +361,18 @@ impl LicenseState {
         store.expires_at = body.expires_at;
         store.offline_grace_days = body.offline_grace_days;
         store.last_sync_unix = now_unix();
+        let tier = Self::effective_tier(&store);
         let info = LicenseInfo {
-            tier: store.tier,
+            tier,
             plan_name: store.plan_name.clone(),
             expires_at: store.expires_at.clone(),
             user_email: store.user_email.clone(),
             user_nickname: store.user_nickname.clone(),
-            licensed: store.tier != SubscriptionTier::Free,
+            licensed: tier != SubscriptionTier::Free,
         };
         self.save(&store)?;
-        self.apply_tier(&app, store.tier);
+        self.apply_tier(&app, tier);
+        Self::notify_updated(&app);
         Ok(info)
     }
 
@@ -418,17 +428,21 @@ impl LicenseState {
         store.last_sync_unix = now_unix();
         if !body.subscription_active {
             store.tier = SubscriptionTier::Free;
+            store.plan_name = None;
+            store.expires_at = None;
         }
+        let tier = Self::effective_tier(&store);
         let info = LicenseInfo {
-            tier: store.tier,
+            tier,
             plan_name: store.plan_name.clone(),
             expires_at: store.expires_at.clone(),
             user_email: store.user_email.clone(),
             user_nickname: store.user_nickname.clone(),
-            licensed: store.tier != SubscriptionTier::Free,
+            licensed: tier != SubscriptionTier::Free,
         };
         self.save(&store)?;
-        self.apply_tier(&app, store.tier);
+        self.apply_tier(&app, tier);
+        Self::notify_updated(&app);
         Ok(info)
     }
 
@@ -442,6 +456,7 @@ impl LicenseState {
         };
         self.save(&store)?;
         self.apply_tier(app, SubscriptionTier::Free);
+        Self::notify_updated(app);
         Ok(self.info())
     }
 }
@@ -483,6 +498,13 @@ pub async fn refresh_license(
     app: AppHandle,
     state: State<'_, LicenseState>,
 ) -> Result<LicenseInfo, ErrorResponse> {
-    state.refresh_remote(&app).await?;
+    let refresh = {
+        let store = state.store.lock().unwrap();
+        store
+            .refresh_token
+            .clone()
+            .ok_or_else(|| license_err("no_refresh_token"))?
+    };
+    state.refresh_remote(&app, refresh).await?;
     Ok(state.info())
 }
