@@ -1,12 +1,12 @@
 {
-  "version": "1.0.62",
-  "build": 62,
-  "notes": "Miner Pulse 1.0.1 (62) — free-tier read cooldown, subscription modal fix, device app version/build.",
-  "pub_date": "2026-06-29T06:00:22Z",
+  "version": "1.0.64",
+  "build": 64,
+  "notes": "Miner Pulse 1.0.1 (64) — fix subscription tier after restart, free-tier read UX, subscription modal theme.",
+  "pub_date": "2026-06-29T06:17:16Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRGF5UlBndzRZRWlpRktuTDB4V2luUHRqNDczZWFXOHZYNXNPSTloMnVEZ1JwTTNDR21MVERHdXJwRUUyYU16VVljZzF3Sk4vaTVNRi9NeWxRa3hXSHd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzEyODE3CWZpbGU6TWluZXJQdWxzZV8xLjAuNjJfeDY0LXNldHVwLmV4ZQpGbEhuNXlqUEFWYUlWZCtDSk5kY3Z6MVdHU2htdzJPY1ltTW84MXlMeTFoVXYwYndpM1BTRWI0U0d3YStSaTJTRElLaUpiT05mOVZpT0I5TjNXSXVBdz09Cg==",
-      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build62/MinerPulse_1.0.62_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRGFXY1cyOVRoYWErRHcrdWxFSk9UM3dJYTNRS3l4MmZMejMrdnk0Z01RS0NjeUMxOTFIcWZlVnlwRFpBNW4ySmRpb2lFc3EvUXQ2MzdqZEdQQWdBZ3dZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzEzODMyCWZpbGU6TWluZXJQdWxzZV8xLjAuNjRfeDY0LXNldHVwLmV4ZQpENy9nbUdFNy9WN1RpUGdoaE1EcHN0TDA4ZVBQQmJXQU9PMnpENm43K3oxb1Uxcm9VVDJDWkxyWENqb1QzaGo5VUMxb0VqT0FxL0NKbVFMMjZXVFZBUT09Cg==",
+      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build64/MinerPulse_1.0.64_x64-setup.exe"
     }
   }
 }
