@@ -1,12 +1,12 @@
 {
-  "version": "1.0.59",
-  "build": 59,
-  "notes": "Miner Pulse 1.0.1 (59) — subscription login/activation, WhatsMiner chip status analysis.",
-  "pub_date": "2026-06-29T05:22:20Z",
+  "version": "1.0.60",
+  "build": 60,
+  "notes": "Miner Pulse 1.0.1 (60) — HWID device accounting, web auth modals, subscription login, platform HWID/OS metadata.",
+  "pub_date": "2026-06-29T05:31:34Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRFllWE5UUVZDakdlN1F4SVJXbHJsUjNESnp5Wmc1bnVHUnM2cUFibEVmNEtYWExVbjJPenpSYmlORjRFN3VnQ1o3OUJHZnpkcE4vTWVyQ25DdDR6YXdRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzEwNTM1CWZpbGU6TWluZXJQdWxzZV8xLjAuNTlfeDY0LXNldHVwLmV4ZQpINTZScEYxQlVUZE5kU05icFhRT0twbWxvVGtLaW51T2w5U0pCYVVUT3ZHZkt1MnB5RHpZbjBsemZ1NzNGRnd3YVFJcGI4cEJEOGlCOW5hc1kxVGRCZz09Cg==",
-      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build59/MinerPulse_1.0.59_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRFRoU1hJL3pLZzNKRmtROEJaR1Z4dTkzMk5VMVo0SndrR2o1L3ljaDQ5UGdvQ2c4bFF1OG1UMGZ4aE1ReVU2Q2pMbWZESUtNZDdNWUlzZ0JMczM1SlE4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzExMDg2CWZpbGU6TWluZXJQdWxzZV8xLjAuNjBfeDY0LXNldHVwLmV4ZQorV1dUTytYYU4vYmJrUXJvR3Z4TkQ4MU1TelJGQmFIMnZwTWJIR2xPVDQ3OE45ODB5dHBmN3NuT1pEa3d1Z2RhbzlHdGVVcFVvMmJOQ0dYcEd5VDFBdz09Cg==",
+      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build60/MinerPulse_1.0.60_x64-setup.exe"
     }
   }
 }
