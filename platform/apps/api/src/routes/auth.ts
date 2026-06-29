@@ -6,6 +6,7 @@ import { prisma } from "../lib/prisma.js";
 import { createCaptcha, verifyCaptcha } from "../lib/captcha.js";
 import { hashToken, randomToken, signAccessToken } from "../lib/jwt.js";
 import { activeSubscription } from "../lib/subscription.js";
+import { DeviceLimitError, parseDeviceFields, upsertUserDevice } from "../lib/device.js";
 
 const auth = new Hono();
 
@@ -32,7 +33,11 @@ const registerSchema = z
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
+  hwid: z.string().min(8).optional(),
   device_fingerprint: z.string().min(8).optional(),
+  os: z.string().min(1).optional(),
+  os_version: z.string().min(1).optional(),
+  app_version: z.string().optional(),
 });
 
 async function issueUserTokens(
@@ -105,15 +110,21 @@ auth.post("/login", async (c) => {
     expiresAt = sub.endsAt;
     planId = sub.planId;
 
-    if (body.device_fingerprint) {
-      const device = await prisma.device.upsert({
-        where: {
-          userId_fingerprint: { userId: user.id, fingerprint: body.device_fingerprint },
-        },
-        update: { lastSeenAt: new Date() },
-        create: { userId: user.id, fingerprint: body.device_fingerprint },
-      });
-      deviceId = device.id;
+    if (body.hwid || body.device_fingerprint) {
+      const deviceInput = parseDeviceFields(body);
+      if (deviceInput) {
+        try {
+          const device = await upsertUserDevice(user.id, deviceInput, {
+            maxDevices: sub.plan.maxDevices,
+          });
+          deviceId = device.id;
+        } catch (err) {
+          if (err instanceof DeviceLimitError) {
+            return c.json({ error: "device_limit" }, 403);
+          }
+          throw err;
+        }
+      }
     }
   }
 

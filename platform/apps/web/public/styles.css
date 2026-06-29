@@ -1,5 +1,6 @@
 :root { color-scheme: dark; font-family: Segoe UI, system-ui, sans-serif; }
 body { margin: 0; background: #0f1117; color: #e8eaed; }
+body.modal-open { overflow: hidden; }
 .shell { max-width: 920px; margin: 0 auto; padding: 24px; }
 .hero { text-align: center; margin-bottom: 24px; }
 .card { background: #1a1d26; border: 1px solid #2d3348; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
@@ -20,28 +21,77 @@ body { margin: 0; background: #0f1117; color: #e8eaed; }
   font-size: 0.88em;
 }
 
-.auth-tabs {
+.auth-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 12px;
+  max-width: 420px;
 }
-.auth-tab {
+.auth-action-btn {
   margin: 0;
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: 14px 16px;
+  border-radius: 10px;
   border: 1px solid #2d3348;
   background: #242836;
   color: inherit;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-size: 0.95rem;
 }
-.auth-tab.active {
+.auth-action-btn.primary,
+.auth-action-btn#open-login {
   background: #0066cc;
   border-color: #0066cc;
 }
 
-.auth-panel { margin-top: 4px; }
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.modal[hidden] { display: none; }
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+.modal-card {
+  position: relative;
+  width: min(440px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  background: #1a1d26;
+  border: 1px solid #2d3348;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+.modal-close {
+  width: auto;
+  margin: 0;
+  padding: 4px 10px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
 .auth-message {
   margin: 0 0 12px;
   padding: 10px 12px;
@@ -66,7 +116,23 @@ body { margin: 0; background: #0f1117; color: #e8eaed; }
 }
 
 input, button { display: block; width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #2d3348; background: #242836; color: inherit; box-sizing: border-box; }
-button[type="submit"], #gen-code, #logout { cursor: pointer; background: #0066cc; border-color: #0066cc; margin-top: 4px; }
-.secondary-btn { background: #242836; border-color: #2d3348; margin-top: 8px; }
+.modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 8px;
+}
+.modal-actions button { margin: 0; }
+.primary-btn, button[type="submit"], #gen-code, #logout {
+  cursor: pointer;
+  background: #0066cc;
+  border-color: #0066cc;
+}
+.secondary-btn {
+  background: #242836;
+  border-color: #2d3348;
+  cursor: pointer;
+}
 .captcha-field strong { color: #6eb6ff; }
+.captcha-field .secondary-btn { margin-top: 8px; }
 pre { background: #0f1117; padding: 12px; border-radius: 8px; overflow: auto; }

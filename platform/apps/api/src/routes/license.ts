@@ -3,9 +3,9 @@ import { z } from "zod";
 import { Tier } from "@minerpulse/db";
 import { prisma, getOfflineGraceDays } from "../lib/prisma.js";
 import { activeSubscription } from "../lib/subscription.js";
+import { DeviceLimitError, findUserDevice, parseDeviceFields, upsertUserDevice } from "../lib/device.js";
 import {
   hashToken,
-  randomActivationCode,
   randomToken,
   signAccessToken,
   verifyAccessToken,
@@ -13,17 +13,37 @@ import {
 
 const license = new Hono();
 
+const deviceBodySchema = z
+  .object({
+    hwid: z.string().min(8).optional(),
+    device_fingerprint: z.string().min(8).optional(),
+    os: z.string().min(1).optional(),
+    os_version: z.string().min(1).optional(),
+    app_version: z.string().optional(),
+  })
+  .refine((data) => Boolean(data.hwid || data.device_fingerprint), {
+    message: "hwid_required",
+  });
+
 license.post("/activate", async (c) => {
-  const body = z
+  const raw = z
     .object({
       code: z.string().min(6),
-      device_fingerprint: z.string().min(8),
       app_version: z.string().optional(),
     })
+    .merge(deviceBodySchema)
     .parse(await c.req.json());
 
+  const deviceInput = parseDeviceFields(raw);
+  if (!deviceInput) {
+    return c.json({ error: "hwid_required" }, 400);
+  }
+  if (raw.app_version && !deviceInput.app_version) {
+    deviceInput.app_version = raw.app_version;
+  }
+
   const activation = await prisma.activationCode.findUnique({
-    where: { code: body.code.toUpperCase() },
+    where: { code: raw.code.toUpperCase() },
     include: { user: true },
   });
 
@@ -36,34 +56,17 @@ license.post("/activate", async (c) => {
     return c.json({ error: "no_active_subscription" }, 403);
   }
 
-  const deviceCount = await prisma.device.count({ where: { userId: activation.userId } });
-  const existing = await prisma.device.findUnique({
-    where: {
-      userId_fingerprint: {
-        userId: activation.userId,
-        fingerprint: body.device_fingerprint,
-      },
-    },
-  });
-
-  if (!existing && deviceCount >= sub.plan.maxDevices) {
-    return c.json({ error: "device_limit" }, 403);
+  let device;
+  try {
+    device = await upsertUserDevice(activation.userId, deviceInput, {
+      maxDevices: sub.plan.maxDevices,
+    });
+  } catch (err) {
+    if (err instanceof DeviceLimitError) {
+      return c.json({ error: "device_limit" }, 403);
+    }
+    throw err;
   }
-
-  const device = await prisma.device.upsert({
-    where: {
-      userId_fingerprint: {
-        userId: activation.userId,
-        fingerprint: body.device_fingerprint,
-      },
-    },
-    update: { lastSeenAt: new Date(), label: body.app_version ?? undefined },
-    create: {
-      userId: activation.userId,
-      fingerprint: body.device_fingerprint,
-      label: body.app_version,
-    },
-  });
 
   await prisma.activationCode.update({
     where: { id: activation.id },
@@ -98,24 +101,38 @@ license.post("/activate", async (c) => {
 });
 
 license.post("/refresh", async (c) => {
-  const body = z
-    .object({ refresh_token: z.string().min(20), device_fingerprint: z.string().min(8) })
+  const raw = z
+    .object({ refresh_token: z.string().min(20) })
+    .merge(deviceBodySchema)
     .parse(await c.req.json());
 
+  const deviceInput = parseDeviceFields(raw);
+  if (!deviceInput) {
+    return c.json({ error: "hwid_required" }, 400);
+  }
+
   const stored = await prisma.refreshToken.findUnique({
-    where: { tokenHash: hashToken(body.refresh_token) },
+    where: { tokenHash: hashToken(raw.refresh_token) },
   });
 
   if (!stored || stored.expiresAt < new Date()) {
     return c.json({ error: "invalid_refresh" }, 401);
   }
 
-  const device = await prisma.device.findFirst({
-    where: { userId: stored.userId, fingerprint: body.device_fingerprint },
-  });
+  const device = await findUserDevice(stored.userId, deviceInput.hwid);
   if (!device) {
     return c.json({ error: "device_mismatch" }, 403);
   }
+
+  await prisma.device.update({
+    where: { id: device.id },
+    data: {
+      lastSeenAt: new Date(),
+      os: deviceInput.os,
+      osVersion: deviceInput.os_version,
+      appVersion: deviceInput.app_version,
+    },
+  });
 
   const sub = await activeSubscription(stored.userId);
   if (!sub) {

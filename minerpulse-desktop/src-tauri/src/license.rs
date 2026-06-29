@@ -12,6 +12,13 @@ use crate::AppState;
 const LICENSE_FILE: &str = "license.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct DeviceIdentity {
+    hwid: String,
+    os: String,
+    os_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct LicenseStore {
     access_token: Option<String>,
     refresh_token: Option<String>,
@@ -22,11 +29,15 @@ struct LicenseStore {
     user_nickname: Option<String>,
     last_sync_unix: i64,
     offline_grace_days: u32,
-    device_fingerprint: String,
+    #[serde(alias = "device_fingerprint")]
+    hwid: String,
+    os: String,
+    os_version: String,
 }
 
 impl Default for LicenseStore {
     fn default() -> Self {
+        let device = device_identity();
         Self {
             access_token: None,
             refresh_token: None,
@@ -37,7 +48,9 @@ impl Default for LicenseStore {
             user_nickname: None,
             last_sync_unix: 0,
             offline_grace_days: 14,
-            device_fingerprint: device_fingerprint(),
+            hwid: device.hwid,
+            os: device.os,
+            os_version: device.os_version,
         }
     }
 }
@@ -105,22 +118,40 @@ fn now_unix() -> i64 {
         .unwrap_or(0)
 }
 
-fn device_fingerprint() -> String {
-    let mut parts = Vec::new();
-    #[cfg(windows)]
-    if let Ok(v) = std::env::var("COMPUTERNAME") {
-        parts.push(v);
+fn device_identity() -> DeviceIdentity {
+    let hwid = machine_uid::get().unwrap_or_else(|_| fallback_hwid());
+    let info = os_info::get();
+    DeviceIdentity {
+        hwid,
+        os: info.os_type().to_string(),
+        os_version: info.version().to_string(),
     }
-    #[cfg(not(windows))]
-    if let Ok(v) = std::env::var("HOSTNAME") {
-        parts.push(v);
-    }
-    if let Ok(v) = std::env::var("USERNAME").or_else(|_| std::env::var("USER")) {
-        parts.push(v);
-    }
-    parts.push("minerpulse".to_string());
-    let digest = Sha256::digest(parts.join(":").as_bytes());
+}
+
+fn fallback_hwid() -> String {
+    let digest = Sha256::digest(b"minerpulse-device-fallback");
     hex::encode(digest)
+}
+
+fn ensure_device_identity(store: &mut LicenseStore) {
+    let current = device_identity();
+    if store.hwid.is_empty() {
+        store.hwid = current.hwid;
+    }
+    store.os = current.os;
+    store.os_version = current.os_version;
+}
+
+fn device_payload(store: &LicenseStore, app_version: Option<&str>) -> serde_json::Value {
+    let mut payload = serde_json::json!({
+        "hwid": store.hwid,
+        "os": store.os,
+        "os_version": store.os_version,
+    });
+    if let Some(version) = app_version {
+        payload["app_version"] = serde_json::Value::String(version.to_string());
+    }
+    payload
 }
 
 fn tier_from_api(raw: &str) -> SubscriptionTier {
@@ -154,9 +185,7 @@ impl LicenseState {
         } else {
             LicenseStore::default()
         };
-        if store.device_fingerprint.is_empty() {
-            store.device_fingerprint = device_fingerprint();
-        }
+        ensure_device_identity(&mut store);
         Ok(Self {
             store: Mutex::new(store),
             client: reqwest::Client::builder()
@@ -219,25 +248,30 @@ impl LicenseState {
     }
 
     async fn refresh_remote(&self, app: &AppHandle) -> Result<(), ErrorResponse> {
-        let (refresh, fingerprint) = {
-            let store = self.store.lock().unwrap();
+        let (refresh, device) = {
+            let mut store = self.store.lock().unwrap();
+            ensure_device_identity(&mut store);
             (
                 store
                     .refresh_token
                     .clone()
                     .ok_or_else(|| license_err("no_refresh_token"))?,
-                store.device_fingerprint.clone(),
+                device_payload(&store, Some(env!("CARGO_PKG_VERSION"))),
             )
         };
 
         let url = format!("{}/v1/license/refresh", api_base());
+        let mut body = serde_json::Map::new();
+        body.insert("refresh_token".to_string(), serde_json::Value::String(refresh));
+        if let serde_json::Value::Object(device_obj) = device {
+            for (key, value) in device_obj {
+                body.insert(key, value);
+            }
+        }
         let res = self
             .client
             .post(&url)
-            .json(&serde_json::json!({
-                "refresh_token": refresh,
-                "device_fingerprint": fingerprint,
-            }))
+            .json(&serde_json::Value::Object(body))
             .send()
             .await
             .map_err(|_| license_err("network_error"))?;
@@ -261,20 +295,23 @@ impl LicenseState {
     }
 
     pub async fn activate(&self, app: AppHandle, code: String) -> Result<LicenseInfo, ErrorResponse> {
-        let fingerprint = {
-            let store = self.store.lock().unwrap();
-            store.device_fingerprint.clone()
+        let device = {
+            let mut store = self.store.lock().unwrap();
+            ensure_device_identity(&mut store);
+            device_payload(&store, Some(env!("CARGO_PKG_VERSION")))
         };
-        let version = env!("CARGO_PKG_VERSION").to_string();
         let url = format!("{}/v1/license/activate", api_base());
+        let mut body = serde_json::Map::new();
+        body.insert("code".to_string(), serde_json::Value::String(code.trim().to_string()));
+        if let serde_json::Value::Object(device_obj) = device {
+            for (key, value) in device_obj {
+                body.insert(key, value);
+            }
+        }
         let res = self
             .client
             .post(&url)
-            .json(&serde_json::json!({
-                "code": code.trim(),
-                "device_fingerprint": fingerprint,
-                "app_version": version,
-            }))
+            .json(&serde_json::Value::Object(body))
             .send()
             .await
             .map_err(|_| license_err("network_error"))?;
@@ -318,19 +355,24 @@ impl LicenseState {
         email: String,
         password: String,
     ) -> Result<LicenseInfo, ErrorResponse> {
-        let fingerprint = {
-            let store = self.store.lock().unwrap();
-            store.device_fingerprint.clone()
+        let device = {
+            let mut store = self.store.lock().unwrap();
+            ensure_device_identity(&mut store);
+            device_payload(&store, Some(env!("CARGO_PKG_VERSION")))
         };
         let url = format!("{}/v1/auth/login", api_base());
+        let mut body = serde_json::Map::new();
+        body.insert("email".to_string(), serde_json::Value::String(email.trim().to_string()));
+        body.insert("password".to_string(), serde_json::Value::String(password));
+        if let serde_json::Value::Object(device_obj) = device {
+            for (key, value) in device_obj {
+                body.insert(key, value);
+            }
+        }
         let res = self
             .client
             .post(&url)
-            .json(&serde_json::json!({
-                "email": email.trim(),
-                "password": password,
-                "device_fingerprint": fingerprint,
-            }))
+            .json(&serde_json::Value::Object(body))
             .send()
             .await
             .map_err(|_| license_err("network_error"))?;
@@ -376,7 +418,9 @@ impl LicenseState {
     pub fn logout(&self, app: &AppHandle) -> Result<LicenseInfo, ErrorResponse> {
         let mut store = self.store.lock().unwrap();
         *store = LicenseStore {
-            device_fingerprint: store.device_fingerprint.clone(),
+            hwid: store.hwid.clone(),
+            os: store.os.clone(),
+            os_version: store.os_version.clone(),
             ..LicenseStore::default()
         };
         self.save(&store)?;

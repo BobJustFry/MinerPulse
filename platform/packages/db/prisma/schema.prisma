@@ -91,13 +91,16 @@ model Subscription {
 model Device {
   id          String   @id @default(cuid())
   userId      String
-  fingerprint String
+  hwid        String
+  os          String?
+  osVersion   String?  @map("os_version")
+  appVersion  String?  @map("app_version")
   label       String?
   lastSeenAt  DateTime @default(now())
   createdAt   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, fingerprint])
+  @@unique([userId, hwid])
 }
 
 model ActivationCode {

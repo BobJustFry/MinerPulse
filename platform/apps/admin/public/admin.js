@@ -67,7 +67,10 @@ async function loadUsers() {
     }),
   );
   document.querySelectorAll(".edit-user-btn").forEach((btn) =>
-    btn.addEventListener("click", () => showUserForm(btn.dataset.id, users.find((u) => u.id === btn.dataset.id))),
+    btn.addEventListener("click", async () => {
+      const { user } = await api(`/v1/admin/users/${btn.dataset.id}`);
+      showUserForm(btn.dataset.id, user);
+    }),
   );
   document.querySelectorAll(".del-user-btn").forEach((btn) =>
     btn.addEventListener("click", async () => {
@@ -81,12 +84,35 @@ async function loadUsers() {
 function showUserForm(id = null, user = null) {
   const wrap = document.getElementById("user-form-wrap");
   wrap.hidden = false;
+  const devicesHtml =
+    id && user?.devices?.length
+      ? `<div class="device-list">
+          <h4>Устройства</h4>
+          <table>
+            <tr><th>HWID</th><th>ОС</th><th>Версия ОС</th><th>Приложение</th><th>Последний вход</th></tr>
+            ${user.devices
+              .map(
+                (d) => `<tr>
+                  <td><code>${esc(d.hwid)}</code></td>
+                  <td>${esc(d.os ?? "—")}</td>
+                  <td>${esc(d.osVersion ?? "—")}</td>
+                  <td>${esc(d.appVersion ?? "—")}</td>
+                  <td>${esc(d.lastSeenAt ? new Date(d.lastSeenAt).toLocaleString("ru-RU") : "—")}</td>
+                </tr>`,
+              )
+              .join("")}
+          </table>
+        </div>`
+      : id
+        ? `<p class="muted">Устройств пока нет.</p>`
+        : "";
   wrap.innerHTML = `
     <form id="user-form" class="inline-form">
       <h3>${id ? "Редактировать клиента" : "Новый клиент"}</h3>
       <label>Email<input name="email" type="email" value="${esc(user?.email ?? "")}" required /></label>
       <label>Ник<input name="nickname" pattern="[A-Za-z0-9_]{3,32}" value="${esc(user?.nickname ?? "")}" required /></label>
       <label>Пароль<input name="password" type="password" minlength="8" ${id ? "" : "required"} placeholder="${id ? "оставить пустым — без смены" : ""}" /></label>
+      ${devicesHtml}
       <div class="form-actions">
         <button type="submit">Сохранить</button>
         <button type="button" id="user-form-cancel">Отмена</button>

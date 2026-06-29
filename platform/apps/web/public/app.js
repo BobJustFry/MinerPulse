@@ -15,38 +15,46 @@ function humanError(code) {
 
 let captchaId = null;
 
-function adminPortalUrl() {
-  const host = window.location.hostname;
-  if (host === "localhost" || host === "127.0.0.1") {
-    return "https://admin.mpulse.bob4.fun";
-  }
-  if (host.startsWith("admin.")) {
-    return window.location.origin;
-  }
-  return `${window.location.protocol}//admin.${host}`;
+function openModal(id) {
+  const modal = document.getElementById(id);
+  if (!modal) return;
+  modal.hidden = false;
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  const firstInput = modal.querySelector("input:not([type=hidden])");
+  if (firstInput) firstInput.focus();
 }
 
-function setAuthTab(tab) {
-  document.querySelectorAll(".auth-tab").forEach((btn) => {
-    const active = btn.dataset.tab === tab;
-    btn.classList.toggle("active", active);
-    btn.setAttribute("aria-selected", active ? "true" : "false");
+function closeModal(id) {
+  const modal = document.getElementById(id);
+  if (!modal) return;
+  modal.hidden = true;
+  modal.setAttribute("aria-hidden", "true");
+  if (!document.querySelector(".modal:not([hidden])")) {
+    document.body.classList.remove("modal-open");
+  }
+}
+
+function closeAllModals() {
+  document.querySelectorAll(".modal").forEach((modal) => {
+    modal.hidden = true;
+    modal.setAttribute("aria-hidden", "true");
   });
-  document.getElementById("login-form").hidden = tab !== "login";
-  document.getElementById("login-form").classList.toggle("active", tab === "login");
-  document.getElementById("register-form").hidden = tab !== "register";
-  document.getElementById("register-form").classList.toggle("active", tab === "register");
-  document.getElementById("auth-message").hidden = true;
-  if (tab === "register") {
-    loadCaptcha().catch(console.error);
-  }
+  document.body.classList.remove("modal-open");
 }
 
-function showAuthMessage(text, isError = false) {
-  const el = document.getElementById("auth-message");
+function showModalMessage(modalId, text, isError = false) {
+  const suffix = modalId.replace("-modal", "");
+  const el = document.getElementById(`${suffix}-message`);
+  if (!el) return;
   el.textContent = text;
-  el.hidden = false;
+  el.hidden = !text;
   el.classList.toggle("error", isError);
+}
+
+function clearModalMessages() {
+  showModalMessage("login-modal", "");
+  showModalMessage("register-modal", "");
 }
 
 async function api(path, options = {}) {
@@ -81,7 +89,8 @@ async function loadPlans() {
 }
 
 function showDashboard(user, subscription) {
-  document.getElementById("auth-forms").hidden = true;
+  document.getElementById("auth-actions").hidden = true;
+  closeAllModals();
   document.getElementById("dashboard").hidden = false;
   document.getElementById("user-email").textContent = user.email;
   document.getElementById("user-nickname").textContent = user.nickname ? `@${user.nickname}` : "";
@@ -97,15 +106,24 @@ async function refreshDashboard() {
   showDashboard(me.user, me.subscription);
 }
 
-document.querySelectorAll(".auth-tab").forEach((btn) => {
-  btn.addEventListener("click", () => setAuthTab(btn.dataset.tab));
+document.getElementById("open-login").addEventListener("click", () => {
+  clearModalMessages();
+  openModal("login-modal");
 });
 
-const adminLink = document.getElementById("admin-link");
-if (adminLink) {
-  adminLink.href = adminPortalUrl();
-  adminLink.textContent = adminPortalUrl().replace(/^https?:\/\//, "");
-}
+document.getElementById("open-register").addEventListener("click", () => {
+  clearModalMessages();
+  loadCaptcha().catch(console.error);
+  openModal("register-modal");
+});
+
+document.querySelectorAll("[data-close]").forEach((el) => {
+  el.addEventListener("click", () => closeModal(el.dataset.close));
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeAllModals();
+});
 
 document.getElementById("captcha-refresh")?.addEventListener("click", () => {
   loadCaptcha().catch(console.error);
@@ -121,9 +139,10 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
     });
     localStorage.setItem("mpulse_token", data.access_token);
     localStorage.setItem("mpulse_refresh", data.refresh_token);
+    closeModal("login-modal");
     await refreshDashboard();
   } catch (err) {
-    showAuthMessage(err.message || "Ошибка входа", true);
+    showModalMessage("login-modal", err.message || "Ошибка входа", true);
   }
 });
 
@@ -131,7 +150,7 @@ document.getElementById("register-form").addEventListener("submit", async (e) =>
   e.preventDefault();
   const fd = new FormData(e.target);
   if (fd.get("password") !== fd.get("password_confirm")) {
-    showAuthMessage(ERROR_RU.password_mismatch, true);
+    showModalMessage("register-modal", ERROR_RU.password_mismatch, true);
     return;
   }
   try {
@@ -146,12 +165,13 @@ document.getElementById("register-form").addEventListener("submit", async (e) =>
         captcha_answer: fd.get("captcha_answer"),
       }),
     });
-    setAuthTab("login");
-    showAuthMessage("Аккаунт создан. Войдите с тем же email и паролем.");
+    closeModal("register-modal");
+    e.target.reset();
     document.querySelector("#login-form input[name=email]").value = fd.get("email");
-    document.querySelector("#login-form input[name=password]").focus();
+    openModal("login-modal");
+    showModalMessage("login-modal", "Аккаунт создан. Войдите с тем же email и паролем.");
   } catch (err) {
-    showAuthMessage(err.message || "Ошибка регистрации", true);
+    showModalMessage("register-modal", err.message || "Ошибка регистрации", true);
     loadCaptcha().catch(console.error);
   }
 });

@@ -64,6 +64,7 @@ admin.get("/users/:id", async (c) => {
     where: { id: c.req.param("id") },
     include: {
       subscriptions: { include: { plan: true }, orderBy: { createdAt: "desc" } },
+      devices: { orderBy: { lastSeenAt: "desc" } },
       _count: { select: { devices: true } },
     },
   });
