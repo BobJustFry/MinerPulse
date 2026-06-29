@@ -25,8 +25,14 @@ MPULSE_BOOTSTRAP_ADMIN_USERNAME=mpulse-admin
 MPULSE_BOOTSTRAP_ADMIN_PASSWORD=
 MPULSE_POSTGRES_PASSWORD=
 
+# Host IP for Caddy-in-Docker -> platform on published ports (auto-detected if empty)
+MPULSE_HOST_UPSTREAM=
+# Seconds to wait for DNS A records before Caddy TLS (api/admin subdomains)
+MPULSE_DNS_WAIT_SECONDS=120
+
 SHARED_AI_DIR=/opt/sharedai
 SHARED_AI_CADDYFILE=/opt/sharedai/infra/caddy/Caddyfile
 SHARED_AI_COMPOSE_FILE=
 SHARED_AI_CADDY_SERVICE=caddy
-AUTO_INTEGRATE_PROXY=0
+# 1 = patch SharedAI Caddyfile and restart Caddy after install
+AUTO_INTEGRATE_PROXY=1

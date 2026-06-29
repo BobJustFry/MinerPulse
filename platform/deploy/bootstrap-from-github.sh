@@ -148,10 +148,26 @@ persist_config
 case "$ACTION" in
   install)
     run_install
-    integrate_proxy
     ;;
   update)
     run_update
+    if [[ "${AUTO_INTEGRATE_PROXY:-0}" == "1" && -f "$PLATFORM_DIR/.env" ]]; then
+      deploy_mode="$(grep -E '^DEPLOY_MODE=' "$PLATFORM_DIR/.env" | cut -d= -f2- || true)"
+      if [[ "$deploy_mode" == "external-proxy" ]]; then
+        cd "$PLATFORM_DIR"
+        export_install_env
+        # shellcheck source=deploy/lib/detect-host-upstream.sh
+        source "$PLATFORM_DIR/deploy/lib/detect-host-upstream.sh"
+        # shellcheck source=deploy/lib/render-templates.sh
+        source "$PLATFORM_DIR/deploy/lib/render-templates.sh"
+        export BASE_DOMAIN="${MPULSE_BASE_DOMAIN}"
+        export HOST_UPSTREAM
+        HOST_UPSTREAM="$(detect_host_upstream)"
+        render_external_proxy_snippet "$PLATFORM_DIR"
+        integrate_proxy
+        bash "$PLATFORM_DIR/deploy/verify-external-proxy.sh" || true
+      fi
+    fi
     ;;
   *)
     echo "Unknown action: $ACTION (use: install | update)" >&2

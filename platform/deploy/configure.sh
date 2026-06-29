@@ -114,9 +114,11 @@ echo "--- SharedAI ---"
 if prompt_yn "Auto-add mpulse to existing Caddy?" y; then
   AUTO_INTEGRATE_PROXY=1
   SHARED_AI_DIR="$(prompt "SharedAI directory" "/opt/sharedai")"
+  SHARED_AI_CADDYFILE="$(prompt "Caddyfile path on VPS" "/opt/sharedai/infra/caddy/Caddyfile")"
 else
   AUTO_INTEGRATE_PROXY=0
   SHARED_AI_DIR="/opt/sharedai"
+  SHARED_AI_CADDYFILE=""
 fi
 
 cat >"$OUT" <<EOF
@@ -143,10 +145,12 @@ MPULSE_BOOTSTRAP_ADMIN_PASSWORD=
 MPULSE_POSTGRES_PASSWORD=
 
 SHARED_AI_DIR=${SHARED_AI_DIR}
-SHARED_AI_CADDYFILE=
+SHARED_AI_CADDYFILE=${SHARED_AI_CADDYFILE}
 SHARED_AI_COMPOSE_FILE=
 SHARED_AI_CADDY_SERVICE=caddy
 AUTO_INTEGRATE_PROXY=${AUTO_INTEGRATE_PROXY}
+MPULSE_HOST_UPSTREAM=
+MPULSE_DNS_WAIT_SECONDS=120
 EOF
 
 chmod 600 "$OUT"

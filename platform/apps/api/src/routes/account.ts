@@ -31,7 +31,7 @@ account.get("/me", async (c) => {
     orderBy: { createdAt: "desc" },
   });
   const devices = await prisma.device.findMany({ where: { userId: user.id } });
-  return c.json({ user: { id: user.id, email: user.email }, subscription, devices });
+  return c.json({ user: { id: user.id, email: user.email, nickname: user.nickname }, subscription, devices });
 });
 
 account.post("/activation-code", async (c) => {

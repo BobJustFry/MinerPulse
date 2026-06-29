@@ -14,6 +14,15 @@ export interface Entitlements {
   min_read_interval_sec: number;
 }
 
+export interface LicenseInfo {
+  tier: SubscriptionTier;
+  plan_name?: string | null;
+  expires_at?: string | null;
+  user_email?: string | null;
+  user_nickname?: string | null;
+  licensed: boolean;
+}
+
 export interface MinerSnapshot {
   identity: {
     vendor: string;

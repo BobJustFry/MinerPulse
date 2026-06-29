@@ -7,6 +7,8 @@ use minerpulse_core::{
     MAX_SESSION_DURATION_SEC, normalize_poll_rate_hz, poll_interval_ms, poll_wait_after_tick,
 };
 use minerpulse_core::model::BoardChipMap;
+
+mod license;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
@@ -893,6 +895,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_entitlements,
             set_tier,
+            license::get_license_info,
+            license::activate_license,
+            license::login_license,
+            license::logout_license,
+            license::refresh_license,
             read_miner,
             start_poll,
             stop_poll,
@@ -912,6 +919,16 @@ pub fn run() {
             sync_window_frame,
         ])
         .setup(|app| {
+            let license = license::LicenseState::new(app.handle())
+                .map_err(|e| format!("license init failed: {:?}", e.code))?;
+            app.manage(license);
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let sync_app = app_handle.clone();
+                if let Some(state) = app_handle.try_state::<license::LicenseState>() {
+                    state.sync_on_startup(sync_app).await;
+                }
+            });
             if let Some(window) = app.get_webview_window("main") {
                 let meta = serde_json::from_str::<serde_json::Value>(env!("MINERPULSE_VERSION_JSON"))
                     .unwrap_or_else(|_| {

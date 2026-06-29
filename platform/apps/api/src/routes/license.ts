@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { SubscriptionStatus, Tier } from "@minerpulse/db";
+import { Tier } from "@minerpulse/db";
 import { prisma, getOfflineGraceDays } from "../lib/prisma.js";
+import { activeSubscription } from "../lib/subscription.js";
 import {
   hashToken,
   randomActivationCode,
@@ -11,19 +12,6 @@ import {
 } from "../lib/jwt.js";
 
 const license = new Hono();
-
-async function activeSubscription(userId: string) {
-  const now = new Date();
-  return prisma.subscription.findFirst({
-    where: {
-      userId,
-      status: SubscriptionStatus.ACTIVE,
-      OR: [{ endsAt: null }, { endsAt: { gt: now } }],
-    },
-    include: { plan: true },
-    orderBy: { createdAt: "desc" },
-  });
-}
 
 license.post("/activate", async (c) => {
   const body = z

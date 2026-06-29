@@ -14,6 +14,23 @@ render_file() {
   done <"$ENV_RENDER_FILE"
 }
 
+render_external_proxy_snippet() {
+  local root="$1"
+  local upstream="${HOST_UPSTREAM:?HOST_UPSTREAM required for external-proxy snippet}"
+
+  mkdir -p "$root/deploy/generated"
+  cp "$root/deploy/templates/external-proxy-snippet.txt" "$root/deploy/generated/host-proxy.conf"
+  sed -i "s|{{BASE_DOMAIN}}|${BASE_DOMAIN}|g" "$root/deploy/generated/host-proxy.conf"
+  sed -i "s|{{WEB_UPSTREAM}}|${upstream}|g" "$root/deploy/generated/host-proxy.conf"
+  sed -i "s|{{API_UPSTREAM}}|${upstream}|g" "$root/deploy/generated/host-proxy.conf"
+  sed -i "s|{{ADMIN_UPSTREAM}}|${upstream}|g" "$root/deploy/generated/host-proxy.conf"
+
+  {
+    echo
+    echo "# HOST_UPSTREAM=${upstream} (auto-detected $(date -Iseconds))"
+  } >>"$root/deploy/generated/host-proxy.conf"
+}
+
 render_templates() {
   local root="$1"
   ENV_RENDER_FILE="$root/deploy/generated/render.env"
@@ -50,14 +67,5 @@ text = open(path, encoding="utf-8").read()
 text = text.replace("{{HTTP_TO_HTTPS_REDIRECT}}", "")
 open(path, "w", encoding="utf-8").write(text)
 PY
-  fi
-
-  if [[ "${DEPLOY_MODE}" == "external-proxy" ]]; then
-    cp "$root/deploy/templates/external-proxy-snippet.txt" "$root/deploy/generated/host-proxy.conf"
-    sed -i "s|{{BASE_DOMAIN}}|${BASE_DOMAIN}|g" "$root/deploy/generated/host-proxy.conf"
-    local upstream="${HOST_UPSTREAM:-172.17.0.1}"
-    sed -i "s|{{WEB_UPSTREAM}}|${upstream}:3000|g" "$root/deploy/generated/host-proxy.conf"
-    sed -i "s|{{API_UPSTREAM}}|${upstream}:3001|g" "$root/deploy/generated/host-proxy.conf"
-    sed -i "s|{{ADMIN_UPSTREAM}}|${upstream}:3002|g" "$root/deploy/generated/host-proxy.conf"
   fi
 }

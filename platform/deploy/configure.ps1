@@ -114,8 +114,10 @@ Write-Host ""
 Write-Host "--- SharedAI / reverse proxy ---" -ForegroundColor Yellow
 $integrateProxy = Prompt-YesNo "Auto-add mpulse blocks to existing Caddy on VPS?" $true
 $sharedAiDir = "/opt/sharedai"
+$sharedAiCaddyfile = ""
 if ($integrateProxy) {
   $sharedAiDir = Prompt-Value "SharedAI directory on VPS" "/opt/sharedai"
+  $sharedAiCaddyfile = Prompt-Value "Caddyfile path on VPS" "/opt/sharedai/infra/caddy/Caddyfile"
 }
 
 $autoIntegrate = if ($integrateProxy) { "1" } else { "0" }
@@ -144,10 +146,12 @@ MPULSE_BOOTSTRAP_ADMIN_PASSWORD=
 MPULSE_POSTGRES_PASSWORD=
 
 SHARED_AI_DIR=$sharedAiDir
-SHARED_AI_CADDYFILE=
+SHARED_AI_CADDYFILE=$sharedAiCaddyfile
 SHARED_AI_COMPOSE_FILE=
 SHARED_AI_CADDY_SERVICE=caddy
 AUTO_INTEGRATE_PROXY=$autoIntegrate
+MPULSE_HOST_UPSTREAM=
+MPULSE_DNS_WAIT_SECONDS=120
 "@
 
 Set-Content -Path $OutFile -Value $content -Encoding UTF8 -NoNewline

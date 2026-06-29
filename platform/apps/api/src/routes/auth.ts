@@ -1,46 +1,132 @@
 import bcrypt from "bcryptjs";
 import { Hono } from "hono";
 import { z } from "zod";
-import { prisma } from "../lib/prisma.js";
-import { hashToken, randomToken, signAccessToken } from "../lib/jwt.js";
 import { Tier } from "@minerpulse/db";
+import { prisma } from "../lib/prisma.js";
+import { createCaptcha, verifyCaptcha } from "../lib/captcha.js";
+import { hashToken, randomToken, signAccessToken } from "../lib/jwt.js";
+import { activeSubscription } from "../lib/subscription.js";
 
 const auth = new Hono();
 
-const registerSchema = z.object({
+const nicknameSchema = z
+  .string()
+  .min(3)
+  .max(32)
+  .regex(/^[a-zA-Z0-9_]+$/, "nickname_invalid");
+
+const registerSchema = z
+  .object({
+    email: z.string().email(),
+    nickname: nicknameSchema,
+    password: z.string().min(8),
+    password_confirm: z.string().min(8),
+    captcha_id: z.string().min(8),
+    captcha_answer: z.union([z.string(), z.number()]),
+  })
+  .refine((data) => data.password === data.password_confirm, {
+    message: "password_mismatch",
+    path: ["password_confirm"],
+  });
+
+const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
+  device_fingerprint: z.string().min(8).optional(),
+});
+
+async function issueUserTokens(
+  userId: string,
+  tier: Tier,
+  opts?: { planId?: string; deviceId?: string },
+) {
+  const refresh = randomToken(48);
+  const expiresAt = new Date(Date.now() + 30 * 24 * 3600 * 1000);
+  await prisma.refreshToken.create({
+    data: { userId, deviceId: opts?.deviceId, tokenHash: hashToken(refresh), expiresAt },
+  });
+  const accessToken = await signAccessToken({
+    sub: userId,
+    tier,
+    plan_id: opts?.planId,
+    device_id: opts?.deviceId,
+  });
+  return { accessToken, refresh };
+}
+
+auth.get("/captcha", (c) => {
+  const captcha = createCaptcha();
+  return c.json(captcha);
 });
 
 auth.post("/register", async (c) => {
   const body = registerSchema.parse(await c.req.json());
+  if (!verifyCaptcha(body.captcha_id, body.captcha_answer)) {
+    return c.json({ error: "captcha_failed" }, 400);
+  }
+
   const email = body.email.toLowerCase();
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
+  const nickname = body.nickname.toLowerCase();
+
+  const existingEmail = await prisma.user.findUnique({ where: { email } });
+  if (existingEmail) {
     return c.json({ error: "email_taken" }, 409);
   }
+  const existingNick = await prisma.user.findUnique({ where: { nickname } });
+  if (existingNick) {
+    return c.json({ error: "nickname_taken" }, 409);
+  }
+
   const passwordHash = await bcrypt.hash(body.password, 12);
-  const user = await prisma.user.create({ data: { email, passwordHash } });
-  return c.json({ id: user.id, email: user.email });
+  const user = await prisma.user.create({
+    data: { email, nickname, passwordHash },
+  });
+  return c.json({ id: user.id, email: user.email, nickname: user.nickname });
 });
 
 auth.post("/login", async (c) => {
-  const body = registerSchema.parse(await c.req.json());
+  const body = loginSchema.parse(await c.req.json());
   const email = body.email.toLowerCase();
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user || !(await bcrypt.compare(body.password, user.passwordHash))) {
     return c.json({ error: "invalid_credentials" }, 401);
   }
-  const refresh = randomToken(48);
-  const expiresAt = new Date(Date.now() + 30 * 24 * 3600 * 1000);
-  await prisma.refreshToken.create({
-    data: { userId: user.id, tokenHash: hashToken(refresh), expiresAt },
-  });
-  const accessToken = await signAccessToken({ sub: user.id, tier: Tier.FREE });
+
+  let tier: Tier = Tier.FREE;
+  let planName: string | null = null;
+  let expiresAt: Date | null = null;
+  let planId: string | undefined;
+  let deviceId: string | undefined;
+
+  const sub = await activeSubscription(user.id);
+  if (sub) {
+    tier = sub.plan.tier;
+    planName = sub.plan.name;
+    expiresAt = sub.endsAt;
+    planId = sub.planId;
+
+    if (body.device_fingerprint) {
+      const device = await prisma.device.upsert({
+        where: {
+          userId_fingerprint: { userId: user.id, fingerprint: body.device_fingerprint },
+        },
+        update: { lastSeenAt: new Date() },
+        create: { userId: user.id, fingerprint: body.device_fingerprint },
+      });
+      deviceId = device.id;
+    }
+  }
+
+  const { accessToken, refresh } = await issueUserTokens(user.id, tier, { planId, deviceId });
+
   return c.json({
-    user: { id: user.id, email: user.email },
+    user: { id: user.id, email: user.email, nickname: user.nickname },
     access_token: accessToken,
     refresh_token: refresh,
+    tier,
+    plan_name: planName,
+    expires_at: expiresAt,
+    subscription_active: Boolean(sub),
   });
 });
 

@@ -4,6 +4,7 @@
   import { save, open } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
   import AboutModal from "$lib/components/AboutModal.svelte";
+  import SubscriptionModal from "$lib/components/SubscriptionModal.svelte";
   import WhatsminerAuthModal from "$lib/components/WhatsminerAuthModal.svelte";
   import WindowCaption from "$lib/components/WindowCaption.svelte";
   import { locales, t, type Locale, type MessageKey } from "$lib/i18n";
@@ -70,6 +71,7 @@
   let appBuild = $state(26);
   let appProduct = $state("Miner Pulse");
   let aboutOpen = $state(false);
+  let subscriptionOpen = $state(false);
   let connectionLoaded = $state(false);
   let dropActive = $state(false);
   let polling = $state(false);
@@ -627,6 +629,10 @@
     aboutOpen = true;
   }
 
+  function openSubscription() {
+    subscriptionOpen = true;
+  }
+
   async function cycleTier() {
     const order: SubscriptionTier[] = ["free", "client", "service"];
     const idx = order.indexOf(entitlements.tier);
@@ -1054,10 +1060,8 @@
     <button
       class="tier-badge"
       class:service={entitlements.tier === "service"}
-      class:tier-badge-static={!import.meta.env.DEV}
-      onclick={import.meta.env.DEV ? cycleTier : undefined}
-      title={import.meta.env.DEV ? "Dev: cycle tier" : tierLabel(entitlements.tier)}
-      disabled={!import.meta.env.DEV}
+      onclick={import.meta.env.DEV ? cycleTier : openSubscription}
+      title={import.meta.env.DEV ? "Dev: cycle tier" : msg("subscription.open")}
       type="button"
     >
       {tierLabel(entitlements.tier)}
@@ -1171,6 +1175,14 @@
     version={appVersionNumber}
     build={appBuild}
     product={appProduct}
+  />
+
+  <SubscriptionModal
+    bind:open={subscriptionOpen}
+    {locale}
+    onUpdated={(e) => {
+      entitlements = e;
+    }}
   />
 
   <WhatsminerAuthModal

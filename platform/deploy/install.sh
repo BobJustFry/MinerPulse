@@ -10,6 +10,10 @@ source "$ROOT_DIR/deploy/lib/prompt.sh"
 source "$ROOT_DIR/deploy/lib/preflight.sh"
 # shellcheck source=deploy/lib/render-templates.sh
 source "$ROOT_DIR/deploy/lib/render-templates.sh"
+# shellcheck source=deploy/lib/detect-host-upstream.sh
+source "$ROOT_DIR/deploy/lib/detect-host-upstream.sh"
+# shellcheck source=deploy/lib/dns-preflight.sh
+source "$ROOT_DIR/deploy/lib/dns-preflight.sh"
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
   echo "Run as root: sudo bash deploy/install.sh"
@@ -144,22 +148,19 @@ EOF
 export BASE_DOMAIN DEPLOY_MODE ADMIN_IP_BLOCK HTTP_TO_HTTPS_REDIRECT
 render_templates "$ROOT_DIR"
 
-  if [[ "$DEPLOY_MODE" == "external-proxy" ]]; then
+if [[ "$DEPLOY_MODE" == "external-proxy" ]]; then
   cat >"$ROOT_DIR/docker-compose.override.yml" <<'YAML'
 services:
   api:
     ports:
-      - "3001:3001"
+      - "0.0.0.0:3001:3001"
   web:
     ports:
-      - "3000:3000"
+      - "0.0.0.0:3000:3000"
   admin:
     ports:
-      - "3002:3002"
+      - "0.0.0.0:3002:3002"
 YAML
-  HOST_UPSTREAM="$(ip -4 route show default 2>/dev/null | awk '{print $3}')"
-  HOST_UPSTREAM="${HOST_UPSTREAM:-172.17.0.1}"
-  export HOST_UPSTREAM
 fi
 
 if command -v ufw >/dev/null 2>&1; then
@@ -189,6 +190,41 @@ for i in $(seq 1 30); do
   fi
   sleep 2
 done
+
+if [[ "$DEPLOY_MODE" == "external-proxy" ]]; then
+  export HOST_UPSTREAM
+  HOST_UPSTREAM="$(detect_host_upstream)"
+  export HOST_UPSTREAM
+  render_external_proxy_snippet "$ROOT_DIR"
+  echo "[*] Host proxy snippet: deploy/generated/host-proxy.conf (upstream=${HOST_UPSTREAM})"
+
+  wait_mpulse_dns "$BASE_DOMAIN" "${MPULSE_DNS_WAIT_SECONDS:-120}" || true
+
+  if [[ "${AUTO_INTEGRATE_PROXY:-0}" == "1" ]]; then
+    export SHARED_AI_DIR="${SHARED_AI_DIR:-/opt/sharedai}"
+    export SHARED_AI_CADDYFILE="${SHARED_AI_CADDYFILE:-}"
+    export SHARED_AI_COMPOSE_FILE="${SHARED_AI_COMPOSE_FILE:-}"
+    export SHARED_AI_CADDY_SERVICE="${SHARED_AI_CADDY_SERVICE:-caddy}"
+    bash "$ROOT_DIR/deploy/integrate-external-proxy.sh"
+    echo "[*] Waiting for TLS certificates (up to 90s)..."
+    sleep 15
+    for i in $(seq 1 15); do
+      if curl -sf --connect-timeout 5 "https://admin.${BASE_DOMAIN}/" >/dev/null 2>&1 \
+        && curl -sf --connect-timeout 5 "https://api.${BASE_DOMAIN}/v1/health" >/dev/null 2>&1; then
+        echo "[ok] HTTPS ready for admin and api subdomains"
+        break
+      fi
+      sleep 5
+    done
+    export MPULSE_BASE_DOMAIN="$BASE_DOMAIN"
+    bash "$ROOT_DIR/deploy/verify-external-proxy.sh" || true
+  else
+    echo
+    echo "[!] External-proxy mode: add Caddy blocks and restart reverse proxy:"
+    echo "    sudo bash deploy/integrate-external-proxy.sh"
+    echo "    Or set AUTO_INTEGRATE_PROXY=1 in deploy.config"
+  fi
+fi
 
 ADMIN_URL="https://admin.${BASE_DOMAIN}${PUBLIC_URL_HTTPS_SUFFIX}"
 
@@ -236,6 +272,7 @@ Update: sudo bash deploy/update.sh
 EOF
 
 if [[ "$DEPLOY_MODE" == "external-proxy" ]]; then
-  echo "External proxy snippet: deploy/generated/host-proxy.conf"
+  echo "External proxy snippet: deploy/generated/host-proxy.conf (upstream=${HOST_UPSTREAM:-unknown})"
+  echo "Verify: sudo bash deploy/verify-external-proxy.sh"
   echo "Credentials saved: deploy/generated/credentials.txt"
 fi

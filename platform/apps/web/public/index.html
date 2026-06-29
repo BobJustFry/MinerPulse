@@ -20,20 +20,62 @@
 
     <section class="card auth">
       <h2>Личный кабинет</h2>
+      <p class="auth-hint">
+        Вход для клиентов — email и пароль.
+        Админ-панель:
+        <a id="admin-link" href="#" target="_blank" rel="noopener">admin</a>
+        (логин <code>mpulse-admin</code>, не email).
+      </p>
+
       <div id="auth-forms">
-        <form id="login-form">
-          <input type="email" name="email" placeholder="Email" required />
-          <input type="password" name="password" placeholder="Пароль" required />
+        <div class="auth-tabs" role="tablist" aria-label="Вход или регистрация">
+          <button type="button" class="auth-tab active" role="tab" aria-selected="true" data-tab="login">Вход</button>
+          <button type="button" class="auth-tab" role="tab" aria-selected="false" data-tab="register">Регистрация</button>
+        </div>
+
+        <p id="auth-message" class="auth-message" hidden></p>
+
+        <form id="login-form" class="auth-panel active" role="tabpanel">
+          <label class="field">
+            <span class="field-label">Email</span>
+            <input type="email" name="email" placeholder="you@example.com" autocomplete="email" required />
+          </label>
+          <label class="field">
+            <span class="field-label">Пароль</span>
+            <input type="password" name="password" placeholder="Пароль" autocomplete="current-password" required />
+          </label>
           <button type="submit">Войти</button>
         </form>
-        <form id="register-form">
-          <input type="email" name="email" placeholder="Email" required />
-          <input type="password" name="password" placeholder="Пароль (мин. 8)" minlength="8" required />
-          <button type="submit">Регистрация</button>
+
+        <form id="register-form" class="auth-panel" role="tabpanel" hidden>
+          <label class="field">
+            <span class="field-label">Email</span>
+            <input type="email" name="email" placeholder="you@example.com" autocomplete="email" required />
+          </label>
+          <label class="field">
+            <span class="field-label">Ник (латиница, цифры, _)</span>
+            <input type="text" name="nickname" pattern="[A-Za-z0-9_]{3,32}" minlength="3" maxlength="32" placeholder="miner_user" autocomplete="username" required />
+          </label>
+          <label class="field">
+            <span class="field-label">Пароль</span>
+            <input type="password" name="password" placeholder="Минимум 8 символов" minlength="8" autocomplete="new-password" required />
+          </label>
+          <label class="field">
+            <span class="field-label">Подтверждение пароля</span>
+            <input type="password" name="password_confirm" placeholder="Повторите пароль" minlength="8" autocomplete="new-password" required />
+          </label>
+          <label class="field captcha-field">
+            <span class="field-label">Капча: <strong id="captcha-question">…</strong></span>
+            <input type="number" name="captcha_answer" inputmode="numeric" placeholder="Ответ" required />
+            <button type="button" id="captcha-refresh" class="secondary-btn">Другая задача</button>
+          </label>
+          <button type="submit">Создать аккаунт</button>
         </form>
       </div>
+
       <div id="dashboard" hidden>
         <p id="user-email"></p>
+        <p id="user-nickname"></p>
         <p id="subscription-info"></p>
         <button id="gen-code" type="button">Код для приложения</button>
         <pre id="activation-code"></pre>

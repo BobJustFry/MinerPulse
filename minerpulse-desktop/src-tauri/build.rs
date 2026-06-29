@@ -9,5 +9,9 @@ fn main() {
     let compact = value.to_string();
     println!("cargo:rustc-env=MINERPULSE_VERSION_JSON={compact}");
 
+    let api_url = std::env::var("MINERPULSE_LICENSE_API_URL")
+        .unwrap_or_else(|_| "https://api.mpulse.bob4.fun".to_string());
+    println!("cargo:rustc-env=MINERPULSE_LICENSE_API_URL={api_url}");
+
     tauri_build::build()
 }
