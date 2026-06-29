@@ -1,12 +1,12 @@
 {
-  "version": "1.0.45",
-  "build": 45,
-  "notes": "Miner Pulse 1.0.1 (45) — update progress modal, About scroll fix, WM chip view, updater semver fix.",
-  "pub_date": "2026-06-28T11:39:33Z",
+  "version": "1.0.59",
+  "build": 59,
+  "notes": "Miner Pulse 1.0.1 (59) — subscription login/activation, WhatsMiner chip status analysis.",
+  "pub_date": "2026-06-29T05:22:20Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRFpycUFQZ2tWL3NKb2JyMzJlY3h2blNTZlVmQ3FhQTdveUFRa3hvVEk1NzBuRUtUNk9uMkdTRUNJaEVBZG1USWRVTVFXWC9uQUNEUlJLUEF6Q2I5cWdRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNjQ2NzcwCWZpbGU6TWluZXJQdWxzZV8xLjAuNDVfeDY0LXNldHVwLmV4ZQpRc0t2TkVtZkxkUC9DZW0zdHpLL2sxd1Rud0tpK3M5Sk9sU2d1QmlITGo2R0FGNTlqWkphWXBoMTloNDVJVGN6S0xHYW0wRUJXMjZFLzdWZUxocGVDdz09Cg==",
-      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build45/MinerPulse_1.0.45_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRFllWE5UUVZDakdlN1F4SVJXbHJsUjNESnp5Wmc1bnVHUnM2cUFibEVmNEtYWExVbjJPenpSYmlORjRFN3VnQ1o3OUJHZnpkcE4vTWVyQ25DdDR6YXdRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzEwNTM1CWZpbGU6TWluZXJQdWxzZV8xLjAuNTlfeDY0LXNldHVwLmV4ZQpINTZScEYxQlVUZE5kU05icFhRT0twbWxvVGtLaW51T2w5U0pCYVVUT3ZHZkt1MnB5RHpZbjBsemZ1NzNGRnd3YVFJcGI4cEJEOGlCOW5hc1kxVGRCZz09Cg==",
+      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build59/MinerPulse_1.0.59_x64-setup.exe"
     }
   }
 }
