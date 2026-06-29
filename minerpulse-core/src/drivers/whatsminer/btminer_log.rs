@@ -103,7 +103,24 @@ fn parse_chip_line(line: &str) -> Option<ChipStats> {
         voltage: None,
         errors: None,
         solutions: None,
+        crc_errors: None,
+        nonce: None,
+        repeat_count: None,
+        performance_pct: None,
     };
+
+    if let Some(pct_str) = line.split("pct:").nth(1) {
+        let parts: Vec<_> = pct_str.split('/').collect();
+        let primary = parts
+            .first()
+            .and_then(|value| value.trim().trim_end_matches('%').parse().ok());
+        let secondary = parts
+            .get(1)
+            .and_then(|value| value.trim().trim_end_matches('%').parse().ok());
+        if let (Some(primary), Some(secondary)) = (primary, secondary) {
+            chip.performance_pct = Some([primary, secondary]);
+        }
+    }
 
     for part in line.split_whitespace() {
         let Some((key, val)) = part.split_once(':') else {
@@ -114,6 +131,9 @@ fn parse_chip_line(line: &str) -> Option<ChipStats> {
             "vol" => chip.voltage = val.parse().ok(),
             "temp" => chip.temp_c = val.parse().unwrap_or(0),
             "err" | "error" => chip.errors = val.parse().ok(),
+            "crc" => chip.crc_errors = val.parse().ok(),
+            "nonce" => chip.nonce = val.parse().ok(),
+            "repeat" => chip.repeat_count = val.parse().ok(),
             _ => {}
         }
     }
@@ -165,5 +185,24 @@ C0 freq:782 vol:318 temp:84 nonce:99 err:0 crc:0 x:0 repeat:0 pct:98.8%/94.1%
         assert_eq!(boards[0].chips.len(), 2);
         assert_eq!(boards[0].chips[0].temp_c, 85);
         assert_eq!(boards[1].slot, 1);
+    }
+
+    #[test]
+    fn parses_extended_chip_fields_from_btminer_log() {
+        let sample = r#"
+slot:0, freq:785, temp:92.2, step:1
+C110 freq:609 vol:326 temp:60 nonce:42321590 error:878 crc:0 x:0 repeat:31 pct:101.3%/101.4%
+"#;
+        let boards = parse_btminer_log(sample);
+        let chip = &boards[0].chips[0];
+        assert_eq!(chip.index, 110);
+        assert_eq!(chip.freq_mhz, Some(609));
+        assert_eq!(chip.voltage, Some(326));
+        assert_eq!(chip.temp_c, 60);
+        assert_eq!(chip.nonce, Some(42_321_590));
+        assert_eq!(chip.errors, Some(878));
+        assert_eq!(chip.crc_errors, Some(0));
+        assert_eq!(chip.repeat_count, Some(31));
+        assert_eq!(chip.performance_pct, Some([101.3, 101.4]));
     }
 }

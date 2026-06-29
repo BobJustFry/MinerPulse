@@ -19,6 +19,11 @@
     buildWhatsminerChipGrid,
     whatsminerLayoutMeta,
   } from "$lib/whatsminerChipMap";
+  import {
+    analyzeWhatsminerChip,
+    buildWhatsminerChipTooltip,
+    chipToWhatsminerInput,
+  } from "$lib/whatsminerChipAnalysis";
   import type { BoardChipMap } from "$lib/types";
 
   let {
@@ -60,6 +65,18 @@
       voltage: chip.voltage,
       errors: chip.errors,
       solutions: chip.solutions,
+      freq_mhz: chip.freq_mhz,
+      crc_errors: chip.crc_errors,
+      nonce: chip.nonce,
+      repeat_count: chip.repeat_count,
+      performance_pct: chip.performance_pct,
+    };
+  }
+
+  function whatsminerBoardContext(board: BoardChipMap) {
+    return {
+      label: board.label,
+      chips: board.chips.map((chip) => chipToWhatsminerInput(chip)),
     };
   }
 
@@ -77,6 +94,11 @@
           voltage: chip?.voltage,
           errors: chip?.errors,
           solutions: chip?.solutions,
+          freq_mhz: chip?.freq_mhz,
+          crc_errors: chip?.crc_errors,
+          nonce: chip?.nonce,
+          repeat_count: chip?.repeat_count,
+          performance_pct: chip?.performance_pct,
           empty: false,
         };
       }),
@@ -125,8 +147,19 @@
     return true;
   }
 
-  function chipTitle(cell: ChipCell): string {
+  function chipTitle(cell: ChipCell, board: BoardChipMap): string {
     if (cell.empty) return "";
+
+    if (boardsStacked) {
+      const chip = board.chips.find((entry) => entry.index === cell.index);
+      if (chip) {
+        const context = whatsminerBoardContext(board);
+        const input = chipToWhatsminerInput(chip);
+        const analysis = analyzeWhatsminerChip(input, context);
+        return buildWhatsminerChipTooltip(locale, input, context, analysis);
+      }
+    }
+
     const parts = [`C${cell.index}: ${cell.temp}°C`];
     if (cell.voltage != null) {
       parts.push(`${msg("data.chipVoltage")}: ${formatChipVoltage(cell.voltage, voltageUnit)}`);
@@ -244,7 +277,7 @@
                       class="chip-cell"
                       class:chip-cell-fault={showChipErrorOverlay(cell)}
                       style={`background:${chipCellBackground(cell, displayMetric, metricRange)}`}
-                      title={chipTitle(cell)}
+                      title={chipTitle(cell, board)}
                     >
                       <span class="chip-cell-id">C{cell.index}</span>
                       <span class="chip-cell-value">{chipCellDisplayValue(cell, displayMetric, voltageUnit)}</span>

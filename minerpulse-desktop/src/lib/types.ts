@@ -89,6 +89,10 @@ export interface BoardChipMap {
     voltage?: number | null;
     errors?: number | null;
     solutions?: number | null;
+    crc_errors?: number | null;
+    nonce?: number | null;
+    repeat_count?: number | null;
+    performance_pct?: [number, number] | null;
   }>;
 }
 

@@ -80,12 +80,24 @@ pub struct ChipStats {
     #[serde(default)]
     /// Per-chip voltage in millivolts (`PVT_V` on Avalon).
     pub voltage: Option<u32>,
-    /// Per-chip CRC error count (`ASICCRC` on Avalon, `crc`/`err` on WhatsMiner).
+    /// Per-chip CRC error count on Avalon (`ASICCRC`). PLL/splash count on WhatsMiner (`error`/`err`).
     #[serde(default)]
     pub errors: Option<u32>,
     /// Per-chip solution count (`MW` on Avalon).
     #[serde(default)]
     pub solutions: Option<u32>,
+    /// WhatsMiner btminer log: CRC communication errors (`crc` field).
+    #[serde(default)]
+    pub crc_errors: Option<u32>,
+    /// WhatsMiner btminer log: cumulative valid nonce count.
+    #[serde(default)]
+    pub nonce: Option<u64>,
+    /// WhatsMiner btminer log: retry count (`repeat` field).
+    #[serde(default)]
+    pub repeat_count: Option<u32>,
+    /// WhatsMiner btminer log: performance % (short-term / long-term from `pct:X%/Y%`).
+    #[serde(default)]
+    pub performance_pct: Option<[f32; 2]>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
