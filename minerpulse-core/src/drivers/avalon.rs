@@ -660,5 +660,12 @@ User=worker1"#;
             snap.boards[0].chip_temp_min_c.unwrap()
                 <= snap.boards[0].chip_temp_max_c.unwrap()
         );
+        let board2 = snap
+            .board_chips
+            .iter()
+            .find(|board| board.slot == 2)
+            .expect("board 2 chips");
+        assert!(board2.chips.iter().any(|chip| chip.temp_c == -26));
+        assert!(board2.chips.iter().any(|chip| chip.temp_c == -273));
     }
 }

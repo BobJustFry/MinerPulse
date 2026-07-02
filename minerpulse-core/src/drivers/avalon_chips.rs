@@ -9,7 +9,7 @@ pub fn parse_avalon_board_chips(
     let mut boards = Vec::new();
 
     for slot in 0..8u32 {
-        let temps = parse_bracket_u32s(text, &format!("PVT_T{slot}["));
+        let temps = parse_bracket_i32s(text, &format!("PVT_T{slot}["));
         if temps.is_empty() {
             break;
         }
@@ -25,7 +25,7 @@ pub fn parse_avalon_board_chips(
                 let index = (idx + 1) as u32;
                 ChipStats {
                     index,
-                    temp_c: temps[idx] as i32,
+                    temp_c: temps[idx],
                     voltage: voltages.get(idx).copied(),
                     solutions: solutions.get(idx).copied(),
                     errors: crc_errors.get(idx).copied(),
@@ -133,6 +133,17 @@ fn avalon_model_digits(firmware: &str) -> Option<u32> {
     digits.parse().ok()
 }
 
+pub fn parse_bracket_i32s(text: &str, key: &str) -> Vec<i32> {
+    get_parameter_bracket(text, key)
+        .map(|value| {
+            value
+                .split_whitespace()
+                .filter_map(|part| parse_i32(part))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 pub fn parse_bracket_u32s(text: &str, key: &str) -> Vec<u32> {
     get_parameter_bracket(text, key)
         .map(|value| {
@@ -207,5 +218,15 @@ mod tests {
         assert_eq!(boards[0].chips[0].solutions, Some(46));
         assert_eq!(boards[0].chips[1].errors, Some(1));
         assert_eq!(boards[1].chips[2].errors, Some(2));
+    }
+
+    #[test]
+    fn parses_negative_avalon_chip_temps() {
+        let sample = "PVT_T0[66 -26 -34 -273] PVT_V0[326 332 329 300] MW0[1 2 3 4]";
+        let boards = parse_avalon_board_chips(sample, "1466", Some("A3198S"));
+        assert_eq!(boards.len(), 1);
+        assert_eq!(boards[0].chips[1].temp_c, -26);
+        assert_eq!(boards[0].chips[2].temp_c, -34);
+        assert_eq!(boards[0].chips[3].temp_c, -273);
     }
 }

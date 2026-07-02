@@ -52,6 +52,9 @@ export function lookupWhatsminerError(
 }
 
 export function chipTempColor(temp: number, min = 60, max = 100): string {
+  if (temp < 0) {
+    return "hsl(210 85% 48%)";
+  }
   const ratio = Math.max(0, Math.min(1, (temp - min) / Math.max(1, max - min)));
   const hue = 120 - ratio * 120;
   return `hsl(${hue} 72% 42%)`;
