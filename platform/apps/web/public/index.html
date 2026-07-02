@@ -1,39 +1,47 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Miner Pulse — подписка</title>
+  <title>Miner Pulse</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
+  <header class="site-chrome">
+    <div class="site-controls site-controls-left">
+      <label class="control-label" for="locale-select" data-i18n="controls.language">Язык</label>
+      <select id="locale-select" class="control-select" aria-label="Language"></select>
+    </div>
+    <button type="button" id="theme-toggle" class="theme-toggle">Тёмная</button>
+  </header>
+
   <main class="shell">
     <header class="hero">
-      <h1>Miner Pulse</h1>
-      <p>Мониторинг ASIC-майнеров. Подписка Client / Service.</p>
+      <h1 data-i18n="hero.title">Miner Pulse</h1>
+      <p data-i18n="hero.subtitle">Мониторинг ASIC-майнеров. Подписка Client / Service.</p>
     </header>
 
     <section id="plans" class="card">
-      <h2>Тарифы</h2>
+      <h2 data-i18n="plans.title">Тарифы</h2>
       <div id="plans-list" class="grid"></div>
     </section>
 
     <section class="card auth">
-      <h2>Личный кабинет</h2>
-      <p class="auth-hint">Вход для клиентов — email и пароль.</p>
+      <h2 data-i18n="auth.title">Личный кабинет</h2>
+      <p class="auth-hint" data-i18n="auth.hint">Вход для клиентов — email и пароль.</p>
 
       <div id="auth-actions" class="auth-actions">
-        <button type="button" id="open-login" class="auth-action-btn primary">ВХОД</button>
-        <button type="button" id="open-register" class="auth-action-btn">РЕГИСТРАЦИЯ</button>
+        <button type="button" id="open-login" class="auth-action-btn primary" data-i18n="auth.login">ВХОД</button>
+        <button type="button" id="open-register" class="auth-action-btn" data-i18n="auth.register">РЕГИСТРАЦИЯ</button>
       </div>
 
       <div id="dashboard" hidden>
         <p id="user-email"></p>
         <p id="user-nickname"></p>
         <p id="subscription-info"></p>
-        <button id="gen-code" type="button">Код для приложения</button>
+        <button id="gen-code" type="button" data-i18n="auth.genCode">Код для приложения</button>
         <pre id="activation-code"></pre>
-        <button id="logout" type="button">Выйти</button>
+        <button id="logout" type="button" data-i18n="auth.logout">Выйти</button>
       </div>
     </section>
   </main>
@@ -42,22 +50,22 @@
     <div class="modal-backdrop" data-close="login-modal"></div>
     <div class="modal-card" role="dialog" aria-labelledby="login-modal-title">
       <header class="modal-header">
-        <h3 id="login-modal-title">Вход</h3>
-        <button type="button" class="modal-close" data-close="login-modal" aria-label="Закрыть">×</button>
+        <h3 id="login-modal-title" data-i18n="modal.login.title">Вход</h3>
+        <button type="button" class="modal-close" data-close="login-modal" data-i18n-aria="modal.close" aria-label="Закрыть">×</button>
       </header>
       <p id="login-message" class="auth-message" hidden></p>
       <form id="login-form">
         <label class="field">
-          <span class="field-label">Email</span>
-          <input type="email" name="email" placeholder="you@example.com" autocomplete="email" required />
+          <span class="field-label" data-i18n="field.email">Email</span>
+          <input type="email" name="email" data-i18n-placeholder="field.emailPlaceholder" placeholder="you@example.com" autocomplete="email" required />
         </label>
         <label class="field">
-          <span class="field-label">Пароль</span>
-          <input type="password" name="password" placeholder="Пароль" autocomplete="current-password" required />
+          <span class="field-label" data-i18n="field.password">Пароль</span>
+          <input type="password" name="password" data-i18n-placeholder="field.passwordPlaceholder" placeholder="Пароль" autocomplete="current-password" required />
         </label>
         <div class="modal-actions">
-          <button type="submit" class="primary-btn">Войти</button>
-          <button type="button" class="secondary-btn" data-close="login-modal">Отмена</button>
+          <button type="submit" class="primary-btn" data-i18n="action.login">Войти</button>
+          <button type="button" class="secondary-btn" data-close="login-modal" data-i18n="modal.cancel">Отмена</button>
         </div>
       </form>
     </div>
@@ -67,35 +75,35 @@
     <div class="modal-backdrop" data-close="register-modal"></div>
     <div class="modal-card" role="dialog" aria-labelledby="register-modal-title">
       <header class="modal-header">
-        <h3 id="register-modal-title">Регистрация</h3>
-        <button type="button" class="modal-close" data-close="register-modal" aria-label="Закрыть">×</button>
+        <h3 id="register-modal-title" data-i18n="modal.register.title">Регистрация</h3>
+        <button type="button" class="modal-close" data-close="register-modal" data-i18n-aria="modal.close" aria-label="Закрыть">×</button>
       </header>
       <p id="register-message" class="auth-message" hidden></p>
       <form id="register-form">
         <label class="field">
-          <span class="field-label">Email</span>
-          <input type="email" name="email" placeholder="you@example.com" autocomplete="email" required />
+          <span class="field-label" data-i18n="field.email">Email</span>
+          <input type="email" name="email" data-i18n-placeholder="field.emailPlaceholder" placeholder="you@example.com" autocomplete="email" required />
         </label>
         <label class="field">
-          <span class="field-label">Ник (латиница, цифры, _)</span>
-          <input type="text" name="nickname" pattern="[A-Za-z0-9_]{3,32}" minlength="3" maxlength="32" placeholder="miner_user" autocomplete="username" required />
+          <span class="field-label" data-i18n="field.nickname">Ник (латиница, цифры, _)</span>
+          <input type="text" name="nickname" pattern="[A-Za-z0-9_]{3,32}" minlength="3" maxlength="32" data-i18n-placeholder="field.nicknamePlaceholder" placeholder="miner_user" autocomplete="username" required />
         </label>
         <label class="field">
-          <span class="field-label">Пароль</span>
-          <input type="password" name="password" placeholder="Минимум 8 символов" minlength="8" autocomplete="new-password" required />
+          <span class="field-label" data-i18n="field.password">Пароль</span>
+          <input type="password" name="password" data-i18n-placeholder="field.passwordNewPlaceholder" placeholder="Минимум 8 символов" minlength="8" autocomplete="new-password" required />
         </label>
         <label class="field">
-          <span class="field-label">Подтверждение пароля</span>
-          <input type="password" name="password_confirm" placeholder="Повторите пароль" minlength="8" autocomplete="new-password" required />
+          <span class="field-label" data-i18n="field.passwordConfirm">Подтверждение пароля</span>
+          <input type="password" name="password_confirm" data-i18n-placeholder="field.passwordConfirmPlaceholder" placeholder="Повторите пароль" minlength="8" autocomplete="new-password" required />
         </label>
         <label class="field captcha-field">
-          <span class="field-label">Капча: <strong id="captcha-question">…</strong></span>
-          <input type="number" name="captcha_answer" inputmode="numeric" placeholder="Ответ" required />
-          <button type="button" id="captcha-refresh" class="secondary-btn">Другая задача</button>
+          <span id="captcha-label" class="field-label">Капча: …</span>
+          <input type="number" name="captcha_answer" data-i18n-placeholder="field.captchaAnswer" inputmode="numeric" placeholder="Ответ" required />
+          <button type="button" id="captcha-refresh" class="secondary-btn" data-i18n="field.captchaRefresh">Другая задача</button>
         </label>
         <div class="modal-actions">
-          <button type="submit" class="primary-btn">Создать аккаунт</button>
-          <button type="button" class="secondary-btn" data-close="register-modal">Отмена</button>
+          <button type="submit" class="primary-btn" data-i18n="action.register">Создать аккаунт</button>
+          <button type="button" class="secondary-btn" data-close="register-modal" data-i18n="modal.cancel">Отмена</button>
         </div>
       </form>
     </div>
@@ -104,6 +112,7 @@
   <script>
     window.MPULSE_API = "__PUBLIC_API_URL__";
   </script>
+  <script src="/i18n.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
