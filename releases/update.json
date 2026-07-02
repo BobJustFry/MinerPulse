@@ -1,12 +1,12 @@
 {
-  "version": "1.0.64",
-  "build": 64,
-  "notes": "Miner Pulse 1.0.1 (64) — fix subscription tier after restart, free-tier read UX, subscription modal theme.",
-  "pub_date": "2026-06-29T06:17:16Z",
+  "version": "1.0.70",
+  "build": 70,
+  "notes": "Miner Pulse 1.0.1 (70) — fix login error messages, Avalon 1466 Matrix_176, logout freeze, update notifications, web i18n.",
+  "pub_date": "2026-07-02T09:32:32Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRGFXY1cyOVRoYWErRHcrdWxFSk9UM3dJYTNRS3l4MmZMejMrdnk0Z01RS0NjeUMxOTFIcWZlVnlwRFpBNW4ySmRpb2lFc3EvUXQ2MzdqZEdQQWdBZ3dZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzEzODMyCWZpbGU6TWluZXJQdWxzZV8xLjAuNjRfeDY0LXNldHVwLmV4ZQpENy9nbUdFNy9WN1RpUGdoaE1EcHN0TDA4ZVBQQmJXQU9PMnpENm43K3oxb1Uxcm9VVDJDWkxyWENqb1QzaGo5VUMxb0VqT0FxL0NKbVFMMjZXVFZBUT09Cg==",
-      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build64/MinerPulse_1.0.64_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRGYvb2k4WmxDWFIyWFc4dXIvQ1RQS0xKVzd6TkNFd0hJQ3MwY1BhU0pDaFNQbUVQZDFJcUVrZW9YeGlkMlRYTVpCYURGdzRmN0wwelRqSENydGFOR2dFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyOTg0NzQ4CWZpbGU6TWluZXJQdWxzZV8xLjAuNzBfeDY0LXNldHVwLmV4ZQp6UEJNd20yZTgwREthVkxEY3Bpa2orbU8vNzJxK0NORWFQbythSnBRc3dBMEhhWWNCTDc5UjJwV0ZBN1FFY3hWNlhjVzJyTVhVUXVzNmJRMTM1eUxDUT09Cg==",
+      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build70/MinerPulse_1.0.70_x64-setup.exe"
     }
   }
 }
