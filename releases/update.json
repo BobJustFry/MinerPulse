@@ -1,12 +1,12 @@
 {
-  "version": "1.0.72",
-  "build": 72,
-  "notes": "Miner Pulse 1.0.1 (72) — lazy chip detection on Avalon boards, web account dates in client timezone.",
-  "pub_date": "2026-07-02T09:47:42Z",
+  "version": "1.0.74",
+  "build": 74,
+  "notes": "Miner Pulse 1.0.1 (74) — admin device management, Avalon mpulse Matrix_176 refresh on import.",
+  "pub_date": "2026-07-02T10:10:44Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRGZRTDIrZEk1ZUlGSys5UE1yMnBjbW5CQmtEb1VJK1hyMzdGWmMycUdVa0lNVU1mbzVjdFpGRGt0QTNjaHdhYnVmcUFUeStSQUg1Sk1JKzU4M2VnY1E0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyOTg1NjU3CWZpbGU6TWluZXJQdWxzZV8xLjAuNzJfeDY0LXNldHVwLmV4ZQpkSEcxblVzWnJqSkk3WWJ1Y2tkd1FqUkFZQzlNZEhMRjg5MjFpQWxYN3FaM3NCcTR1NFNuQW5GV3kyUDJGRTBSbko4MXA2TUErY1dVaDI2QndUb0tDUT09Cg==",
-      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build72/MinerPulse_1.0.72_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRFc5cnRwT0Y4SHlLUkxOOTBaVTVxd3RSMXRSR01tVE5HU3EyaCszd1hxN2VvNVluSGYxRFB6Z2xXVTBYWVY3c2grTWZ5VmFGZDA3NTNXT2EyQzM3S3dFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyOTg3MDM5CWZpbGU6TWluZXJQdWxzZV8xLjAuNzRfeDY0LXNldHVwLmV4ZQpyU1BlTWVhS3VkWG9jbHlYY2E0RGptRnlpL0YyY1cweWhnQ2llWWdLQmk1TXpFaEdCaU1BbHNudUxvbWZQY285WENJSVRNUTVlVVdOdVd5SDY5Y2hCdz09Cg==",
+      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build74/MinerPulse_1.0.74_x64-setup.exe"
     }
   }
 }
