@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { t, type Locale, type MessageKey } from "$lib/i18n";
+  import { formatAppError } from "$lib/formatAppError";
   import type { Entitlements, ErrorResponse, LicenseInfo } from "$lib/types";
 
   let {
@@ -28,12 +29,7 @@
   }
 
   function formatError(err: unknown): string {
-    const e = err as ErrorResponse;
-    if (e?.code) {
-      const key = `error.${e.code}` as MessageKey;
-      return msg(key, { sec: e.args?.sec ?? 0 });
-    }
-    return String(err);
+    return formatAppError(locale, err);
   }
 
   function close() {

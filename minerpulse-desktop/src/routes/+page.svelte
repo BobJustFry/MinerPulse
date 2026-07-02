@@ -40,7 +40,7 @@
   } from "$lib/pollSession";
   import { SessionPlayer, type PlaybackSpeed } from "$lib/sessionPlayer";
   import SessionPlayerBar from "$lib/components/SessionPlayerBar.svelte";
-  import { isSnapshotEmpty } from "$lib/snapshotUtils";
+  import { formatAppError } from "$lib/formatAppError";
   import { checkForAppUpdate, UPDATE_CHECK_INTERVAL_MS } from "$lib/updateCheck";
   import type { ChartsLayout } from "$lib/components/MinerChartsPanel";
   import type {
@@ -280,12 +280,7 @@
   }
 
   function formatError(err: unknown): string {
-    const e = err as ErrorResponse;
-    if (e?.code) {
-      const key = `error.${e.code}` as MessageKey;
-      return msg(key, { sec: e.args?.sec ?? entitlements.min_read_interval_sec });
-    }
-    return String(err);
+    return formatAppError(locale, err, { minReadIntervalSec: entitlements.min_read_interval_sec });
   }
 
   function snapshotStatusText(data: MinerSnapshot): string {

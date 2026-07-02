@@ -125,5 +125,5 @@ export interface ScanResult {
 
 export interface ErrorResponse {
   code: string;
-  args?: { sec?: number };
+  args?: { sec?: number; message?: string };
 }
