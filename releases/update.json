@@ -1,12 +1,12 @@
 {
-  "version": "1.0.70",
-  "build": 70,
-  "notes": "Miner Pulse 1.0.1 (70) — fix login error messages, Avalon 1466 Matrix_176, logout freeze, update notifications, web i18n.",
-  "pub_date": "2026-07-02T09:32:32Z",
+  "version": "1.0.72",
+  "build": 72,
+  "notes": "Miner Pulse 1.0.1 (72) — lazy chip detection on Avalon boards, web account dates in client timezone.",
+  "pub_date": "2026-07-02T09:47:42Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRGYvb2k4WmxDWFIyWFc4dXIvQ1RQS0xKVzd6TkNFd0hJQ3MwY1BhU0pDaFNQbUVQZDFJcUVrZW9YeGlkMlRYTVpCYURGdzRmN0wwelRqSENydGFOR2dFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyOTg0NzQ4CWZpbGU6TWluZXJQdWxzZV8xLjAuNzBfeDY0LXNldHVwLmV4ZQp6UEJNd20yZTgwREthVkxEY3Bpa2orbU8vNzJxK0NORWFQbythSnBRc3dBMEhhWWNCTDc5UjJwV0ZBN1FFY3hWNlhjVzJyTVhVUXVzNmJRMTM1eUxDUT09Cg==",
-      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build70/MinerPulse_1.0.70_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRGZRTDIrZEk1ZUlGSys5UE1yMnBjbW5CQmtEb1VJK1hyMzdGWmMycUdVa0lNVU1mbzVjdFpGRGt0QTNjaHdhYnVmcUFUeStSQUg1Sk1JKzU4M2VnY1E0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyOTg1NjU3CWZpbGU6TWluZXJQdWxzZV8xLjAuNzJfeDY0LXNldHVwLmV4ZQpkSEcxblVzWnJqSkk3WWJ1Y2tkd1FqUkFZQzlNZEhMRjg5MjFpQWxYN3FaM3NCcTR1NFNuQW5GV3kyUDJGRTBSbko4MXA2TUErY1dVaDI2QndUb0tDUT09Cg==",
+      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build72/MinerPulse_1.0.72_x64-setup.exe"
     }
   }
 }
