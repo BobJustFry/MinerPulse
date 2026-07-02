@@ -44,10 +44,11 @@ async function loadUsers() {
           (u) => `<tr>
             <td>${esc(u.email)}</td>
             <td>${esc(u.nickname)}</td>
-            <td>${u.deviceCount ?? u._count.devices}/${u.deviceLimit ?? u._count.devices}</td>
+            <td>${u.deviceCount ?? u._count.devices}/${u.deviceLimit ?? u._count.devices}${u.maxDevicesOverride != null ? " *" : ""}</td>
             <td>${esc(u.subscriptions[0]?.plan?.name ?? "—")}</td>
             <td class="actions">
               <button type="button" class="code-btn" data-user="${u.id}">Код</button>
+              <button type="button" class="limit-user-btn" data-id="${u.id}">Лимит</button>
               <button type="button" class="edit-user-btn" data-id="${u.id}">Изм.</button>
               <button type="button" class="del-user-btn" data-id="${u.id}">Удал.</button>
             </td>
@@ -66,6 +67,12 @@ async function loadUsers() {
       alert(`Код: ${data.code}\nДо: ${data.expires_at}`);
     }),
   );
+  document.querySelectorAll(".limit-user-btn").forEach((btn) =>
+    btn.addEventListener("click", async () => {
+      const { user } = await api(`/v1/admin/users/${btn.dataset.id}`);
+      await promptUserDeviceLimit(user);
+    }),
+  );
   document.querySelectorAll(".edit-user-btn").forEach((btn) =>
     btn.addEventListener("click", () => openUserEdit(btn.dataset.id)),
   );
@@ -81,6 +88,61 @@ async function loadUsers() {
 async function openUserEdit(id) {
   const { user } = await api(`/v1/admin/users/${id}`);
   showUserForm(id, user);
+}
+
+function planDeviceMax(user) {
+  return user.devicePlanMax ?? user.subscriptions?.[0]?.plan?.maxDevices ?? 1;
+}
+
+async function promptUserDeviceLimit(user) {
+  const planMax = planDeviceMax(user);
+  const currentLimit = user.deviceLimit ?? planMax;
+  const count = user.deviceCount ?? user._count?.devices ?? 0;
+  const overrideHint =
+    user.maxDevicesOverride != null
+      ? `Персональный лимит: ${user.maxDevicesOverride} (по тарифу: ${planMax}).`
+      : `Лимит по тарифу: ${planMax}.`;
+  const value = prompt(
+    `${overrideHint}\nЗанято устройств: ${count}.\n\nНовый лимит (число от 1). Пусто — вернуть лимит тарифа (${planMax}):`,
+    user.maxDevicesOverride ?? currentLimit,
+  );
+  if (value === null) return;
+  const trimmed = value.trim();
+  let maxDevicesOverride = null;
+  if (trimmed) {
+    maxDevicesOverride = Number(trimmed);
+    if (!Number.isFinite(maxDevicesOverride) || maxDevicesOverride < 1) {
+      showMsg("Лимит — целое число от 1", true);
+      return;
+    }
+    if (!Number.isInteger(maxDevicesOverride)) {
+      showMsg("Лимит — целое число", true);
+      return;
+    }
+  }
+  if (maxDevicesOverride != null && maxDevicesOverride < count) {
+    if (
+      !confirm(
+        `Лимит ${maxDevicesOverride} меньше занятых устройств (${count}). Продолжить? Новые устройства не смогут подключиться.`,
+      )
+    ) {
+      return;
+    }
+  }
+  try {
+    await api(`/v1/admin/users/${user.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ maxDevicesOverride }),
+    });
+    showMsg(
+      maxDevicesOverride == null
+        ? `Лимит сброшен — по тарифу (${planMax})`
+        : `Лимит устройств: ${maxDevicesOverride}`,
+    );
+    loadUsers();
+  } catch (err) {
+    showMsg(err.message, true);
+  }
 }
 
 function bindDeviceActions(userId) {
@@ -190,10 +252,10 @@ function showUserForm(id = null, user = null) {
       <label>Пароль<input name="password" type="password" minlength="8" ${id ? "" : "required"} placeholder="${id ? "оставить пустым — без смены" : ""}" /></label>
       ${
         id
-          ? `<label>Лимит устройств
-              <input name="maxDevicesOverride" type="number" min="1" value="${user?.maxDevicesOverride ?? ""}" placeholder="по тарифу: ${planMax}" />
+          ? `<label>Количество устройств (лимит)
+              <input name="maxDevicesOverride" type="number" min="1" step="1" value="${user?.maxDevicesOverride ?? ""}" placeholder="по тарифу: ${planMax}" />
             </label>
-            <p class="muted">По тарифу: ${planMax}. Сейчас занято: ${deviceCount}. Эффективный лимит: ${deviceLimit}.</p>`
+            <p class="muted">Пусто — лимит по тарифу (${planMax}). Сейчас ${deviceCount}/${deviceLimit}. Звёздочка (*) в списке — персональный лимит.</p>`
           : ""
       }
       ${devicesHtml}
