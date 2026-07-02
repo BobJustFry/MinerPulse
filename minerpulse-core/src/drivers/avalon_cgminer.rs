@@ -14,7 +14,8 @@ pub fn is_avalon_cgminer_dump(raw: &str) -> bool {
         || raw.contains("GHSmm[")
         || raw.contains("GHSspd[")
         || raw.contains("Ver[1326")
-        || raw.contains("Ver[1346");
+        || raw.contains("Ver[1346")
+        || raw.contains("Ver[1466");
 
     has_avalon && has_payload
 }

@@ -51,7 +51,14 @@ pub fn select_avalon_matrix_id(
     core_chip: Option<&str>,
     chip_count: usize,
 ) -> &'static str {
+    if chip_count == 176 {
+        return "Matrix_176";
+    }
+
     if let Some(model) = avalon_model_digits(firmware) {
+        if model == 1466 {
+            return "Matrix_176";
+        }
         if model == 1346 {
             return "Matrix_1346";
         }
@@ -77,6 +84,9 @@ pub fn select_avalon_matrix_id(
 
     if let Some(core) = core_chip {
         let core = core.trim().to_ascii_uppercase();
+        if core.starts_with("A3198") {
+            return "Matrix_176";
+        }
         if core.starts_with("A3200") {
             return if chip_count >= 160 {
                 "Matrix_15x160"
@@ -104,6 +114,7 @@ pub fn select_avalon_matrix_id(
     }
 
     match chip_count {
+        n if n >= 176 => "Matrix_176",
         n if n >= 160 => "Matrix_15x160",
         n if n >= 120 => "Matrix_11x",
         n if n >= 114 => "Matrix_10x",
@@ -149,6 +160,10 @@ mod tests {
         );
         assert_eq!(select_avalon_matrix_id("1346", None, 120), "Matrix_1346");
         assert_eq!(
+            select_avalon_matrix_id("1466-156-24061401", None, 176),
+            "Matrix_176"
+        );
+        assert_eq!(
             select_avalon_matrix_id("1246", Some("A3201"), 114),
             "Matrix_1326"
         );
@@ -164,6 +179,10 @@ mod tests {
 
     #[test]
     fn selects_matrix_by_core_chip() {
+        assert_eq!(
+            select_avalon_matrix_id("unknown", Some("A3198S"), 176),
+            "Matrix_176"
+        );
         assert_eq!(
             select_avalon_matrix_id("unknown", Some("A3200"), 120),
             "Matrix_1346"

@@ -4,8 +4,8 @@ use super::parse::{get_parameter, get_parameter_bracket, parse_f64, parse_i32, p
 use super::MinerDriver;
 use crate::error::MinerPulseError;
 use crate::model::{
-    BoardStats, FanStats, HashrateStats, MinerIdentity, MinerSnapshot, MinerVendor, PoolInfo,
-    PowerStats, ThermalStats,
+    BoardChipMap, BoardStats, FanStats, HashrateStats, MinerIdentity, MinerSnapshot, MinerVendor,
+    PoolInfo, PowerStats, ThermalStats,
 };
 use crate::tcp::TcpCgminerClient;
 
@@ -155,6 +155,37 @@ fn build_avalon_boards(
         .collect()
 }
 
+fn enrich_avalon_boards(
+    boards: &mut [BoardStats],
+    board_chips: &[BoardChipMap],
+    eeprom_counts: &[u32],
+) {
+    for (index, board) in boards.iter_mut().enumerate() {
+        if let Some(count) = eeprom_counts.get(index).copied() {
+            if count > 0 {
+                board.effective_chips = Some(count);
+            }
+        }
+        if let Some(chip_board) = board_chips.iter().find(|item| item.slot as usize == index) {
+            if chip_board.chips.is_empty() {
+                continue;
+            }
+            let mut min_temp = i32::MAX;
+            let mut max_temp = i32::MIN;
+            let mut sum = 0i64;
+            for chip in &chip_board.chips {
+                min_temp = min_temp.min(chip.temp_c);
+                max_temp = max_temp.max(chip.temp_c);
+                sum += chip.temp_c as i64;
+            }
+            let count = chip_board.chips.len() as i64;
+            board.chip_temp_min_c = Some(min_temp as f64);
+            board.chip_temp_max_c = Some(max_temp as f64);
+            board.chip_temp_avg_c = Some(sum as f64 / count as f64);
+        }
+    }
+}
+
 fn avalon_model_from_firmware(firmware: &str) -> String {
     if firmware.is_empty() {
         return "Avalon".to_string();
@@ -290,6 +321,10 @@ pub fn parse_avalon_estats_log(raw: &str) -> MinerSnapshot {
         &fans,
         fan_count_matches_boards,
     );
+
+    let eeprom_counts = parse_bracket_u32s(&flattened, "EEPROM[");
+    let mut boards = boards;
+    enrich_avalon_boards(&mut boards, &board_chips, &eeprom_counts);
 
     let pools = parse_avalon_pools_from_lcd(raw);
 
@@ -474,6 +509,8 @@ pub fn parse_estats(raw: &str, pools_raw: &str) -> MinerSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::path::PathBuf;
 
     #[test]
     fn detects_avalon_by_ver() {
@@ -532,5 +569,32 @@ User=worker1"#;
     fn parses_ataopts_voltage_level() {
         let raw = "--avalon10-freq 464:484:504:524 --avalon10-voltage-level 69 ";
         assert_eq!(parse_ataopts_voltage_level(raw), Some(69));
+    }
+
+    #[test]
+    fn parses_avalon_1466_board_details() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../OldProject/txt/minerpulse-1782981279760.mpulse");
+        if !path.exists() {
+            return;
+        }
+        let content = fs::read_to_string(path).expect("read 1466 sample");
+        let mpulse: crate::mpulse::MpulseFile =
+            serde_json::from_str(&content).expect("parse mpulse");
+        let raw = &mpulse.frames[0].snapshot.raw_log;
+        let snap = parse_avalon_estats_log(raw);
+        assert!(snap.identity.model.contains("1466"));
+        assert_eq!(snap.identity.core_chip.as_deref(), Some("A3198S"));
+        assert_eq!(snap.board_chips.len(), 3);
+        assert_eq!(snap.board_chips[0].matrix_id.as_deref(), Some("Matrix_176"));
+        assert_eq!(snap.board_chips[0].chips.len(), 176);
+        assert_eq!(snap.boards[0].effective_chips, Some(176));
+        assert!(snap.boards[0].chip_temp_min_c.is_some());
+        assert!(snap.boards[0].chip_temp_max_c.is_some());
+        assert!(snap.boards[0].chip_temp_avg_c.is_some());
+        assert!(
+            snap.boards[0].chip_temp_min_c.unwrap()
+                <= snap.boards[0].chip_temp_max_c.unwrap()
+        );
     }
 }
