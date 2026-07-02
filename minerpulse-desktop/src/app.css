@@ -1324,6 +1324,17 @@ button {
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--danger) 85%, #fff);
 }
 
+.chip-cell-lazy {
+  outline: 2px solid var(--danger);
+  outline-offset: -2px;
+}
+
+.chip-cell-fault.chip-cell-lazy {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--danger) 85%, #fff);
+  outline: 2px solid var(--danger);
+  outline-offset: -2px;
+}
+
 .chip-cell-badge {
   position: absolute;
   top: 2px;

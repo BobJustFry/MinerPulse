@@ -193,6 +193,8 @@
   "data.chipSolutions": "Solutions",
   "data.chipMatrixLoadFailed": "Could not load chip layout {id}",
   "chips.displayMetric": "Show on chip",
+  "chips.lazyChip": "Lazy chip (< 50% of board max solutions)",
+  "chips.lazyCount": "lazy: {count}",
   "chips.metric.temp": "Temp",
   "chips.metric.crc": "CRC",
   "data.coreChip": "ASIC",

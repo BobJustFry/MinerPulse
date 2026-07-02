@@ -193,6 +193,8 @@
   "data.chipSolutions": "提交",
   "data.chipMatrixLoadFailed": "无法加载芯片布局 {id}",
   "chips.displayMetric": "芯片显示",
+  "chips.lazyChip": "低效芯片（低于板内最大解的 50%）",
+  "chips.lazyCount": "低效：{count}",
   "chips.metric.temp": "温度",
   "chips.metric.crc": "CRC",
   "data.coreChip": "ASIC",

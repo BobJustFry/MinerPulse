@@ -1,9 +1,11 @@
 const API = window.MPULSE_API || "http://localhost:3001";
 
-const { t, humanError } = window.MPulseI18n;
+const { t, humanError, formatClientDateTime } = window.MPulseI18n;
 
 let captchaId = null;
 let captchaQuestionText = "…";
+let lastActivationCode = null;
+let lastActivationExpiresAt = null;
 
 function openModal(id) {
   const modal = document.getElementById(id);
@@ -91,6 +93,19 @@ async function loadPlans() {
     .join("");
 }
 
+function formatSubscriptionEnd(value) {
+  if (value == null || value === "") return "∞";
+  return formatClientDateTime(value);
+}
+
+function renderActivationCode() {
+  if (!lastActivationCode) return;
+  const el = document.getElementById("activation-code");
+  el.textContent = `${t("auth.codeLine", { code: lastActivationCode })}\n${t("auth.codeExpires", {
+    date: formatClientDateTime(lastActivationExpiresAt),
+  })}`;
+}
+
 function showGuestAuth() {
   document.getElementById("auth-actions").hidden = false;
   document.getElementById("auth-hint").hidden = false;
@@ -108,7 +123,7 @@ function showDashboard(user, subscription) {
     ? t("auth.subscriptionActive", {
         name: subscription.plan.name,
         tier: subscription.plan.tier,
-        date: subscription.endsAt ?? "∞",
+        date: formatSubscriptionEnd(subscription.endsAt),
       })
     : t("auth.subscriptionNone");
 }
@@ -205,7 +220,9 @@ function bindApp() {
       method: "POST",
       body: "{}",
     });
-    document.getElementById("activation-code").textContent = `${t("auth.codeLine", { code: data.code })}\n${t("auth.codeExpires", { date: data.expires_at })}`;
+    lastActivationCode = data.code;
+    lastActivationExpiresAt = data.expires_at;
+    renderActivationCode();
   });
 
   document.getElementById("logout").addEventListener("click", () => {
@@ -218,6 +235,7 @@ function bindApp() {
     loadPlans().catch(console.error);
     refreshDashboard().catch(() => {});
     updateCaptchaLabel();
+    renderActivationCode();
   });
 
   loadPlans().catch(console.error);

@@ -193,6 +193,8 @@
   "data.chipSolutions": "Решения",
   "data.chipMatrixLoadFailed": "Не удалось загрузить карту чипов {id}",
   "chips.displayMetric": "На чипе",
+  "chips.lazyChip": "Ленивый чип (< 50% от максимума решений на плате)",
+  "chips.lazyCount": "ленивых: {count}",
   "chips.metric.temp": "Темп.",
   "chips.metric.crc": "CRC",
   "data.coreChip": "ASIC",

@@ -24,6 +24,7 @@
     buildWhatsminerChipTooltip,
     chipToWhatsminerInput,
   } from "$lib/whatsminerChipAnalysis";
+  import { lazyChipIndexes } from "$lib/lazyChips";
   import type { BoardChipMap } from "$lib/types";
 
   let {
@@ -71,6 +72,12 @@
       repeat_count: chip.repeat_count,
       performance_pct: chip.performance_pct,
     };
+  }
+
+  function lazyIndexesForBoard(board: BoardChipMap): Set<number> {
+    return lazyChipIndexes(
+      board.chips.map((chip) => ({ index: chip.index, solutions: chip.solutions })),
+    );
   }
 
   function whatsminerBoardContext(board: BoardChipMap) {
@@ -147,7 +154,7 @@
     return true;
   }
 
-  function chipTitle(cell: ChipCell, board: BoardChipMap): string {
+  function chipTitle(cell: ChipCell, board: BoardChipMap, lazy: boolean): string {
     if (cell.empty) return "";
 
     if (boardsStacked) {
@@ -156,7 +163,9 @@
         const context = whatsminerBoardContext(board);
         const input = chipToWhatsminerInput(chip);
         const analysis = analyzeWhatsminerChip(input, context);
-        return buildWhatsminerChipTooltip(locale, input, context, analysis);
+        const lines = [buildWhatsminerChipTooltip(locale, input, context, analysis)];
+        if (lazy) lines.push(msg("chips.lazyChip"));
+        return lines.join("\n");
       }
     }
 
@@ -172,6 +181,9 @@
       !(boardsStacked && (displayMetric === "temp" || displayMetric === "voltage"))
     ) {
       parts.push(`${msg("data.chipCrc")}: ${formatChipMetric(cell.errors)}`);
+    }
+    if (lazy) {
+      parts.push(msg("chips.lazyChip"));
     }
     return parts.join("\n");
   }
@@ -249,11 +261,16 @@
         {@const grid = boardGrid(board)}
         {@const sectionBreak = boardSectionBreak(board)}
         {@const layoutLabel = boardLayoutLabel(board)}
+        {@const lazyIndexes = lazyIndexesForBoard(board)}
+        {@const lazyCount = lazyIndexes.size}
         <article class="chip-board-card">
           <div class="chip-board-head">
             <span class="chip-board-label">{board.label}</span>
             <span class="chip-board-meta">
               {board.chips.length} {msg("data.chips")}
+              {#if lazyCount > 0}
+                · {msg("chips.lazyCount", { count: lazyCount })}
+              {/if}
               {#if board.matrix_id}
                 · {board.matrix_id}
               {:else if layoutLabel}
@@ -276,8 +293,9 @@
                     <div
                       class="chip-cell"
                       class:chip-cell-fault={showChipErrorOverlay(cell)}
+                      class:chip-cell-lazy={lazyIndexes.has(cell.index)}
                       style={`background:${chipCellBackground(cell, displayMetric, metricRange)}`}
-                      title={chipTitle(cell, board)}
+                      title={chipTitle(cell, board, lazyIndexes.has(cell.index))}
                     >
                       <span class="chip-cell-id">C{cell.index}</span>
                       <span class="chip-cell-value">{chipCellDisplayValue(cell, displayMetric, voltageUnit)}</span>

@@ -29,6 +29,23 @@
     return interpolate(raw, vars);
   }
 
+  function localeTag(id) {
+    if (id === "zh-CN") return "zh-CN";
+    if (id === "en") return "en-US";
+    return "ru-RU";
+  }
+
+  /** Formats ISO date/time in the browser's local timezone. */
+  function formatClientDateTime(value) {
+    if (value == null || value === "") return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return new Intl.DateTimeFormat(localeTag(locale), {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(date);
+  }
+
   function applyStaticI18n() {
     document.title = t("meta.title");
 
@@ -143,6 +160,7 @@
     init,
     t,
     humanError,
+    formatClientDateTime,
     getLocale: () => locale,
     getTheme: () => theme,
     LOCALES,
