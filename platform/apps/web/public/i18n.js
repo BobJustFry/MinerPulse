@@ -81,13 +81,26 @@
     applyTheme(theme === "dark" ? "light" : "dark");
   }
 
-  async function loadLocale(nextLocale) {
+  function detectSystemLocale() {
+    const langs = navigator.languages?.length ? navigator.languages : [navigator.language];
+    for (const raw of langs) {
+      const tag = String(raw || "").toLowerCase();
+      if (tag.startsWith("zh")) return "zh-CN";
+      if (tag.startsWith("ru")) return "ru";
+      if (tag.startsWith("en")) return "en";
+    }
+    return "en";
+  }
+
+  async function loadLocale(nextLocale, persist = true) {
     if (!LOCALES.some((item) => item.id === nextLocale)) return;
     const res = await fetch(`/i18n/${nextLocale}.json`);
     if (!res.ok) throw new Error(`locale_load_failed:${nextLocale}`);
     messages = await res.json();
     locale = nextLocale;
-    localStorage.setItem(STORAGE_LOCALE, locale);
+    if (persist) {
+      localStorage.setItem(STORAGE_LOCALE, locale);
+    }
     document.documentElement.lang = htmlLang(locale);
     applyStaticI18n();
     document.dispatchEvent(new CustomEvent("mpulse:locale", { detail: { locale } }));
@@ -114,14 +127,13 @@
     initTheme();
 
     const storedLocale = localStorage.getItem(STORAGE_LOCALE);
-    const initialLocale = LOCALES.some((item) => item.id === storedLocale)
-      ? storedLocale
-      : "ru";
+    const hasStoredLocale = LOCALES.some((item) => item.id === storedLocale);
+    const initialLocale = hasStoredLocale ? storedLocale : detectSystemLocale();
 
-    await loadLocale(initialLocale);
+    await loadLocale(initialLocale, hasStoredLocale);
 
     document.getElementById("locale-select")?.addEventListener("change", (event) => {
-      loadLocale(event.target.value).catch(console.error);
+      loadLocale(event.target.value, true).catch(console.error);
     });
 
     document.getElementById("theme-toggle")?.addEventListener("click", toggleTheme);

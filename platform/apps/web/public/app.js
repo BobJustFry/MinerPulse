@@ -91,8 +91,15 @@ async function loadPlans() {
     .join("");
 }
 
+function showGuestAuth() {
+  document.getElementById("auth-actions").hidden = false;
+  document.getElementById("auth-hint").hidden = false;
+  document.getElementById("dashboard").hidden = true;
+}
+
 function showDashboard(user, subscription) {
   document.getElementById("auth-actions").hidden = true;
+  document.getElementById("auth-hint").hidden = true;
   closeAllModals();
   document.getElementById("dashboard").hidden = false;
   document.getElementById("user-email").textContent = user.email;
@@ -108,9 +115,18 @@ function showDashboard(user, subscription) {
 
 async function refreshDashboard() {
   const token = localStorage.getItem("mpulse_token");
-  if (!token) return;
-  const me = await api("/v1/account/me");
-  showDashboard(me.user, me.subscription);
+  if (!token) {
+    showGuestAuth();
+    return;
+  }
+  try {
+    const me = await api("/v1/account/me");
+    showDashboard(me.user, me.subscription);
+  } catch {
+    localStorage.removeItem("mpulse_token");
+    localStorage.removeItem("mpulse_refresh");
+    showGuestAuth();
+  }
 }
 
 function bindApp() {

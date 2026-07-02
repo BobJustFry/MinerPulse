@@ -51,6 +51,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
