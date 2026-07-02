@@ -44,5 +44,13 @@
   "error.captcha_failed": "验证码答案错误",
   "error.password_mismatch": "两次密码不一致",
   "error.invalid_credentials": "邮箱或密码错误",
-  "error.validation_failed": "请检查表单字段"
+  "error.validation_failed": "请检查表单字段",
+  "error.not_found": "未找到",
+  "devices.title": "设备",
+  "devices.summary": "已连接：{count} / {limit}",
+  "devices.empty": "暂无已连接设备。",
+  "devices.col.name": "设备",
+  "devices.col.lastSeen": "最后在线",
+  "devices.delete": "删除",
+  "devices.deleteConfirm": "删除此设备？该电脑上的应用需要重新登录。"
 }

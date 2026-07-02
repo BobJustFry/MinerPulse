@@ -342,6 +342,65 @@ pre {
   border: 1px solid var(--border);
 }
 
+.devices-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.devices-section h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.devices-summary {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.devices-empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.devices-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.devices-table th,
+.devices-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.devices-table th {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.devices-meta {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.devices-actions {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.devices-actions .secondary-btn {
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+
 @media (max-width: 640px) {
   .site-chrome {
     padding: 10px 16px;

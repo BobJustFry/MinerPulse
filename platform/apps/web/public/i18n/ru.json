@@ -44,5 +44,13 @@
   "error.captcha_failed": "Неверный ответ капчи",
   "error.password_mismatch": "Пароли не совпадают",
   "error.invalid_credentials": "Неверный email или пароль",
-  "error.validation_failed": "Проверьте поля формы"
+  "error.validation_failed": "Проверьте поля формы",
+  "error.not_found": "Не найдено",
+  "devices.title": "Устройства",
+  "devices.summary": "Подключено: {count} из {limit}",
+  "devices.empty": "Нет подключённых устройств.",
+  "devices.col.name": "Устройство",
+  "devices.col.lastSeen": "Последний вход",
+  "devices.delete": "Удалить",
+  "devices.deleteConfirm": "Удалить это устройство? На нём потребуется снова войти в приложение."
 }

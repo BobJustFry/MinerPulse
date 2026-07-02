@@ -112,7 +112,75 @@ function showGuestAuth() {
   document.getElementById("dashboard").hidden = true;
 }
 
-function showDashboard(user, subscription) {
+function escHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/"/g, "&quot;");
+}
+
+function deviceLabel(device) {
+  if (device.label) return device.label;
+  if (device.os && device.appVersion) return `${device.os} · ${device.appVersion}`;
+  if (device.os) return device.os;
+  return device.hwid.slice(0, 12) + "…";
+}
+
+function renderDevices(devices, deviceLimit) {
+  const summary = document.getElementById("devices-summary");
+  const list = document.getElementById("devices-list");
+  if (!summary || !list) return;
+
+  summary.textContent = t("devices.summary", {
+    count: devices.length,
+    limit: deviceLimit,
+  });
+
+  if (!devices.length) {
+    list.innerHTML = `<p class="devices-empty">${t("devices.empty")}</p>`;
+    return;
+  }
+
+  list.innerHTML = `<table class="devices-table">
+    <thead>
+      <tr>
+        <th>${t("devices.col.name")}</th>
+        <th>${t("devices.col.lastSeen")}</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      ${devices
+        .map(
+          (device) => `<tr>
+            <td>
+              <strong>${escHtml(deviceLabel(device))}</strong>
+              <div class="devices-meta">${escHtml(device.hwid)}</div>
+            </td>
+            <td>${escHtml(formatClientDateTime(device.lastSeenAt))}</td>
+            <td class="devices-actions">
+              <button type="button" class="secondary-btn device-delete-btn" data-id="${escHtml(device.id)}">${t("devices.delete")}</button>
+            </td>
+          </tr>`,
+        )
+        .join("")}
+    </tbody>
+  </table>`;
+
+  list.querySelectorAll(".device-delete-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm(t("devices.deleteConfirm"))) return;
+      try {
+        await api(`/v1/account/devices/${btn.dataset.id}`, { method: "DELETE" });
+        await refreshDashboard();
+      } catch (err) {
+        alert(err.message || t("error.generic"));
+      }
+    });
+  });
+}
+
+function showDashboard(user, subscription, devices = [], deviceLimit = 1) {
   document.getElementById("auth-actions").hidden = true;
   document.getElementById("auth-hint").hidden = true;
   closeAllModals();
@@ -126,6 +194,7 @@ function showDashboard(user, subscription) {
         date: formatSubscriptionEnd(subscription.endsAt),
       })
     : t("auth.subscriptionNone");
+  renderDevices(devices, deviceLimit);
 }
 
 async function refreshDashboard() {
@@ -136,7 +205,7 @@ async function refreshDashboard() {
   }
   try {
     const me = await api("/v1/account/me");
-    showDashboard(me.user, me.subscription);
+    showDashboard(me.user, me.subscription, me.devices ?? [], me.deviceLimit ?? 1);
   } catch {
     localStorage.removeItem("mpulse_token");
     localStorage.removeItem("mpulse_refresh");
@@ -237,7 +306,6 @@ function bindApp() {
     updateCaptchaLabel();
     renderActivationCode();
   });
-
   loadPlans().catch(console.error);
   refreshDashboard().catch(() => {});
 }

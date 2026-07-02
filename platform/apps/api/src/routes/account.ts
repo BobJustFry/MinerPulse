@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { z } from "zod";
 import type { User } from "@minerpulse/db";
 import { prisma } from "../lib/prisma.js";
+import { deleteUserDevice, maxDevicesForUser } from "../lib/device.js";
 import { randomActivationCode, verifyAccessToken } from "../lib/jwt.js";
 
 type AccountEnv = { Variables: { user: User } };
@@ -30,8 +30,18 @@ account.get("/me", async (c) => {
     include: { plan: true },
     orderBy: { createdAt: "desc" },
   });
-  const devices = await prisma.device.findMany({ where: { userId: user.id } });
-  return c.json({ user: { id: user.id, email: user.email, nickname: user.nickname }, subscription, devices });
+  const devices = await prisma.device.findMany({
+    where: { userId: user.id },
+    orderBy: { lastSeenAt: "desc" },
+  });
+  const deviceLimit = await maxDevicesForUser(user.id);
+  return c.json({
+    user: { id: user.id, email: user.email, nickname: user.nickname },
+    subscription,
+    devices,
+    deviceLimit,
+    deviceCount: devices.length,
+  });
 });
 
 account.post("/activation-code", async (c) => {
@@ -53,6 +63,19 @@ account.post("/activation-code", async (c) => {
     },
   });
   return c.json({ code: activation.code, expires_at: activation.expiresAt });
+});
+
+account.delete("/devices/:id", async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+  const device = await prisma.device.findFirst({
+    where: { id, userId: user.id },
+  });
+  if (!device) {
+    return c.json({ error: "not_found" }, 404);
+  }
+  await deleteUserDevice(id);
+  return c.json({ ok: true });
 });
 
 export { account };
