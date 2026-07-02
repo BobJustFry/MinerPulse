@@ -38,13 +38,13 @@ async function loadUsers() {
     </div>
     <div id="user-form-wrap" hidden></div>
     <table>
-      <tr><th>Email</th><th>Ник</th><th>Devices</th><th>Подписка</th><th></th></tr>
+      <tr><th>Email</th><th>Ник</th><th>Устройства</th><th>Подписка</th><th></th></tr>
       ${users
         .map(
           (u) => `<tr>
             <td>${esc(u.email)}</td>
             <td>${esc(u.nickname)}</td>
-            <td>${u._count.devices}</td>
+            <td>${u.deviceCount ?? u._count.devices}/${u.deviceLimit ?? u._count.devices}</td>
             <td>${esc(u.subscriptions[0]?.plan?.name ?? "—")}</td>
             <td class="actions">
               <button type="button" class="code-btn" data-user="${u.id}">Код</button>
@@ -67,10 +67,7 @@ async function loadUsers() {
     }),
   );
   document.querySelectorAll(".edit-user-btn").forEach((btn) =>
-    btn.addEventListener("click", async () => {
-      const { user } = await api(`/v1/admin/users/${btn.dataset.id}`);
-      showUserForm(btn.dataset.id, user);
-    }),
+    btn.addEventListener("click", () => openUserEdit(btn.dataset.id)),
   );
   document.querySelectorAll(".del-user-btn").forEach((btn) =>
     btn.addEventListener("click", async () => {
@@ -81,38 +78,124 @@ async function loadUsers() {
   );
 }
 
+async function openUserEdit(id) {
+  const { user } = await api(`/v1/admin/users/${id}`);
+  showUserForm(id, user);
+}
+
+function bindDeviceActions(userId) {
+  document.querySelectorAll(".edit-device-btn").forEach((btn) =>
+    btn.addEventListener("click", async () => {
+      const label = prompt("Метка устройства (пусто — без метки):", btn.dataset.label ?? "");
+      if (label === null) return;
+      try {
+        await api(`/v1/admin/devices/${btn.dataset.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ label: label.trim() || null }),
+        });
+        await openUserEdit(userId);
+        showMsg("Устройство обновлено");
+      } catch (err) {
+        showMsg(err.message, true);
+      }
+    }),
+  );
+
+  document.querySelectorAll(".del-device-btn").forEach((btn) =>
+    btn.addEventListener("click", async () => {
+      if (!confirm("Удалить устройство? Клиенту потребуется повторная активация на этом ПК.")) return;
+      try {
+        await api(`/v1/admin/devices/${btn.dataset.id}`, { method: "DELETE" });
+        await openUserEdit(userId);
+        loadUsers();
+        showMsg("Устройство удалено");
+      } catch (err) {
+        showMsg(err.message, true);
+      }
+    }),
+  );
+
+  const addForm = document.getElementById("device-add-form");
+  if (addForm) {
+    addForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(addForm);
+      const hwid = String(fd.get("hwid") ?? "").trim();
+      const label = String(fd.get("label") ?? "").trim();
+      if (hwid.length < 8) {
+        showMsg("HWID не короче 8 символов", true);
+        return;
+      }
+      try {
+        await api(`/v1/admin/users/${userId}/devices`, {
+          method: "POST",
+          body: JSON.stringify({ hwid, label: label || null }),
+        });
+        await openUserEdit(userId);
+        loadUsers();
+        showMsg("Устройство добавлено");
+      } catch (err) {
+        showMsg(err.message === "device_limit" ? "Достигнут лимит устройств" : err.message, true);
+      }
+    });
+  }
+}
+
 function showUserForm(id = null, user = null) {
   const wrap = document.getElementById("user-form-wrap");
   wrap.hidden = false;
-  const devicesHtml =
-    id && user?.devices?.length
-      ? `<div class="device-list">
-          <h4>Устройства</h4>
-          <table>
-            <tr><th>HWID</th><th>ОС</th><th>Версия ОС</th><th>Версия</th><th>Билд</th><th>Последний вход</th></tr>
+  const planMax = user?.devicePlanMax ?? user?.subscriptions?.[0]?.plan?.maxDevices ?? 1;
+  const deviceLimit = user?.deviceLimit ?? planMax;
+  const deviceCount = user?.deviceCount ?? user?.devices?.length ?? user?._count?.devices ?? 0;
+  const devicesHtml = id
+    ? `<div class="device-list">
+          <h4>Устройства (${deviceCount}/${deviceLimit})</h4>
+          ${
+            user?.devices?.length
+              ? `<table>
+            <tr><th>Метка</th><th>HWID</th><th>ОС</th><th>Версия ОС</th><th>App</th><th>Билд</th><th>Последний вход</th><th></th></tr>
             ${user.devices
               .map(
                 (d) => `<tr>
+                  <td>${esc(d.label ?? "—")}</td>
                   <td><code>${esc(d.hwid)}</code></td>
                   <td>${esc(d.os ?? "—")}</td>
                   <td>${esc(d.osVersion ?? "—")}</td>
                   <td>${esc(d.appVersion ?? "—")}</td>
                   <td>${esc(d.appBuild ?? "—")}</td>
                   <td>${esc(d.lastSeenAt ? new Date(d.lastSeenAt).toLocaleString("ru-RU") : "—")}</td>
+                  <td class="actions">
+                    <button type="button" class="edit-device-btn" data-id="${d.id}" data-label="${esc(d.label ?? "")}">Метка</button>
+                    <button type="button" class="del-device-btn" data-id="${d.id}">Удал.</button>
+                  </td>
                 </tr>`,
               )
               .join("")}
-          </table>
+          </table>`
+              : `<p class="muted">Устройств пока нет.</p>`
+          }
+          <form id="device-add-form" class="device-add-form">
+            <h4>Добавить устройство</h4>
+            <label>HWID<input name="hwid" minlength="8" required placeholder="мин. 8 символов" /></label>
+            <label>Метка<input name="label" placeholder="необязательно" /></label>
+            <button type="submit">Добавить</button>
+          </form>
         </div>`
-      : id
-        ? `<p class="muted">Устройств пока нет.</p>`
-        : "";
+    : "";
   wrap.innerHTML = `
     <form id="user-form" class="inline-form">
       <h3>${id ? "Редактировать клиента" : "Новый клиент"}</h3>
       <label>Email<input name="email" type="email" value="${esc(user?.email ?? "")}" required /></label>
       <label>Ник<input name="nickname" pattern="[A-Za-z0-9_]{3,32}" value="${esc(user?.nickname ?? "")}" required /></label>
       <label>Пароль<input name="password" type="password" minlength="8" ${id ? "" : "required"} placeholder="${id ? "оставить пустым — без смены" : ""}" /></label>
+      ${
+        id
+          ? `<label>Лимит устройств
+              <input name="maxDevicesOverride" type="number" min="1" value="${user?.maxDevicesOverride ?? ""}" placeholder="по тарифу: ${planMax}" />
+            </label>
+            <p class="muted">По тарифу: ${planMax}. Сейчас занято: ${deviceCount}. Эффективный лимит: ${deviceLimit}.</p>`
+          : ""
+      }
       ${devicesHtml}
       <div class="form-actions">
         <button type="submit">Сохранить</button>
@@ -130,6 +213,10 @@ function showUserForm(id = null, user = null) {
       nickname: fd.get("nickname"),
     };
     if (fd.get("password")) body.password = fd.get("password");
+    if (id) {
+      const overrideRaw = String(fd.get("maxDevicesOverride") ?? "").trim();
+      body.maxDevicesOverride = overrideRaw ? Number(overrideRaw) : null;
+    }
     try {
       if (id) {
         await api(`/v1/admin/users/${id}`, { method: "PATCH", body: JSON.stringify(body) });
@@ -142,6 +229,7 @@ function showUserForm(id = null, user = null) {
       showMsg(err.message, true);
     }
   });
+  if (id) bindDeviceActions(id);
 }
 
 async function loadPlans() {

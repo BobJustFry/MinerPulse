@@ -1,4 +1,5 @@
 import { prisma } from "./prisma.js";
+import { activeSubscription } from "./subscription.js";
 
 export type DeviceInput = {
   hwid: string;
@@ -10,6 +11,27 @@ export type DeviceInput = {
 
 export class DeviceLimitError extends Error {
   code = "device_limit" as const;
+}
+
+export function effectiveMaxDevices(
+  planMaxDevices: number,
+  override: number | null | undefined,
+): number {
+  if (override != null && override > 0) {
+    return override;
+  }
+  return planMaxDevices;
+}
+
+export async function maxDevicesForUser(userId: string): Promise<number> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { maxDevicesOverride: true },
+  });
+  if (!user) return 1;
+  const sub = await activeSubscription(userId);
+  const planMax = sub?.plan.maxDevices ?? 1;
+  return effectiveMaxDevices(planMax, user.maxDevicesOverride);
 }
 
 export function parseDeviceFields(body: Record<string, unknown>): DeviceInput | null {
@@ -67,6 +89,26 @@ export async function upsertUserDevice(
       appBuild: device.app_build,
     },
   });
+}
+
+export async function createUserDevice(
+  userId: string,
+  device: DeviceInput,
+  opts?: { maxDevices?: number; label?: string | null },
+) {
+  const record = await upsertUserDevice(userId, device, opts);
+  if (opts?.label !== undefined) {
+    return prisma.device.update({
+      where: { id: record.id },
+      data: { label: opts.label },
+    });
+  }
+  return record;
+}
+
+export async function deleteUserDevice(deviceId: string) {
+  await prisma.refreshToken.deleteMany({ where: { deviceId } });
+  return prisma.device.delete({ where: { id: deviceId } });
 }
 
 export async function findUserDevice(userId: string, hwid: string) {

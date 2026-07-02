@@ -6,7 +6,7 @@ import { prisma } from "../lib/prisma.js";
 import { createCaptcha, verifyCaptcha } from "../lib/captcha.js";
 import { hashToken, randomToken, signAccessToken } from "../lib/jwt.js";
 import { activeSubscription } from "../lib/subscription.js";
-import { DeviceLimitError, parseDeviceFields, upsertUserDevice } from "../lib/device.js";
+import { DeviceLimitError, maxDevicesForUser, parseDeviceFields, upsertUserDevice } from "../lib/device.js";
 
 const auth = new Hono();
 
@@ -115,8 +115,9 @@ auth.post("/login", async (c) => {
       const deviceInput = parseDeviceFields(body);
       if (deviceInput) {
         try {
+          const maxDevices = await maxDevicesForUser(user.id);
           const device = await upsertUserDevice(user.id, deviceInput, {
-            maxDevices: sub.plan.maxDevices,
+            maxDevices,
           });
           deviceId = device.id;
         } catch (err) {

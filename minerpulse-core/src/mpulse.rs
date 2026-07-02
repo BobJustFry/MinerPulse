@@ -1,3 +1,4 @@
+use crate::drivers::avalon::refresh_avalon_board_chips_from_raw_log;
 use crate::entitlements::SubscriptionTier;
 use crate::error::MinerPulseError;
 use crate::model::MinerSnapshot;
@@ -177,9 +178,17 @@ pub fn load_mpulse(path: &Path) -> Result<MpulseFile, MinerPulseError> {
         MinerPulseError::with_code(crate::error::ErrorCode::IoError)
     })?;
     let json = decode_mpulse_bytes(&bytes)?;
-    serde_json::from_str(&json).map_err(|_| {
+    let mut file: MpulseFile = serde_json::from_str(&json).map_err(|_| {
         MinerPulseError::with_code(crate::error::ErrorCode::ParseFailed)
-    })
+    })?;
+    refresh_loaded_mpulse_frames(&mut file);
+    Ok(file)
+}
+
+fn refresh_loaded_mpulse_frames(file: &mut MpulseFile) {
+    for frame in &mut file.frames {
+        refresh_avalon_board_chips_from_raw_log(&mut frame.snapshot, Some(&frame.raw_log));
+    }
 }
 
 pub fn save_snapshot(path: &Path, file: &MpulseFile) -> Result<(), MinerPulseError> {

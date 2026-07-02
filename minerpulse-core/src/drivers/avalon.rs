@@ -355,6 +355,70 @@ pub fn parse_avalon_estats_log(raw: &str) -> MinerSnapshot {
     }
 }
 
+/// Re-parse Avalon chip maps from embedded log text (e.g. when loading older `.mpulse` snapshots).
+pub fn refresh_avalon_board_chips_from_raw_log(
+    snapshot: &mut MinerSnapshot,
+    frame_raw_log: Option<&str>,
+) {
+    if snapshot.identity.driver_id != "avalon"
+        && snapshot.identity.vendor != MinerVendor::Avalon
+    {
+        return;
+    }
+
+    let raw = frame_raw_log
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            if snapshot.raw_log.trim().is_empty() {
+                None
+            } else {
+                Some(snapshot.raw_log.as_str())
+            }
+        });
+
+    let Some(raw) = raw else {
+        return;
+    };
+
+    let fresh = parse_avalon_cgminer_dump(raw).or_else(|| {
+        if raw.contains("CMD=estats")
+            || raw.contains("MM ID0=")
+            || raw.contains("ID=AVA")
+        {
+            Some(parse_avalon_estats_log(raw))
+        } else {
+            None
+        }
+    });
+
+    let Some(fresh) = fresh else {
+        return;
+    };
+
+    if fresh.board_chips.is_empty() {
+        return;
+    }
+
+    snapshot.board_chips = fresh.board_chips;
+    sync_avalon_board_chip_stats(snapshot, &fresh.boards);
+}
+
+fn sync_avalon_board_chip_stats(snapshot: &mut MinerSnapshot, fresh_boards: &[BoardStats]) {
+    for (index, board) in snapshot.boards.iter_mut().enumerate() {
+        let Some(fresh) = fresh_boards.get(index) else {
+            continue;
+        };
+        if let Some(value) = fresh.effective_chips {
+            board.effective_chips = Some(value);
+        }
+        if fresh.chip_temp_min_c.is_some() {
+            board.chip_temp_min_c = fresh.chip_temp_min_c;
+            board.chip_temp_max_c = fresh.chip_temp_max_c;
+            board.chip_temp_avg_c = fresh.chip_temp_avg_c;
+        }
+    }
+}
+
 fn parse_avalon_pools(raw: &str) -> Vec<PoolInfo> {
     let trimmed = raw.trim();
     if trimmed.starts_with('{') {

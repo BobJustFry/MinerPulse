@@ -3,6 +3,14 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { SubscriptionStatus, Tier, type AdminUser } from "@minerpulse/db";
 import { prisma } from "../lib/prisma.js";
+import {
+  DeviceLimitError,
+  createUserDevice,
+  deleteUserDevice,
+  effectiveMaxDevices,
+  parseDeviceFields,
+} from "../lib/device.js";
+import { activeSubscription } from "../lib/subscription.js";
 import { randomActivationCode, verifyAccessToken } from "../lib/jwt.js";
 
 type AdminEnv = { Variables: { admin: AdminUser } };
@@ -48,6 +56,16 @@ async function audit(
   });
 }
 
+async function userDeviceLimit(user: {
+  maxDevicesOverride: number | null;
+  subscriptions: Array<{ plan: { maxDevices: number } }>;
+  _count?: { devices: number };
+}) {
+  const planMax = user.subscriptions[0]?.plan.maxDevices ?? 1;
+  const limit = effectiveMaxDevices(planMax, user.maxDevicesOverride);
+  return { planMax, limit, count: user._count?.devices ?? 0 };
+}
+
 admin.get("/users", async (c) => {
   const users = await prisma.user.findMany({
     orderBy: { createdAt: "desc" },
@@ -56,7 +74,13 @@ admin.get("/users", async (c) => {
       _count: { select: { devices: true } },
     },
   });
-  return c.json({ users });
+  const enriched = await Promise.all(
+    users.map(async (user) => {
+      const { planMax, limit, count } = await userDeviceLimit(user);
+      return { ...user, deviceLimit: limit, devicePlanMax: planMax, deviceCount: count };
+    }),
+  );
+  return c.json({ users: enriched });
 });
 
 admin.get("/users/:id", async (c) => {
@@ -69,7 +93,15 @@ admin.get("/users/:id", async (c) => {
     },
   });
   if (!user) return c.json({ error: "not_found" }, 404);
-  return c.json({ user });
+  const { planMax, limit, count } = await userDeviceLimit(user);
+  return c.json({
+    user: {
+      ...user,
+      deviceLimit: limit,
+      devicePlanMax: planMax,
+      deviceCount: count,
+    },
+  });
 });
 
 admin.post("/users", async (c) => {
@@ -105,6 +137,7 @@ admin.patch("/users/:id", async (c) => {
       nickname: nicknameSchema.optional(),
       password: z.string().min(8).optional(),
       locale: z.string().optional(),
+      maxDevicesOverride: z.number().int().positive().nullable().optional(),
     })
     .parse(await c.req.json());
 
@@ -113,6 +146,7 @@ admin.patch("/users/:id", async (c) => {
     nickname?: string;
     passwordHash?: string;
     locale?: string;
+    maxDevicesOverride?: number | null;
   } = {};
 
   if (body.email) {
@@ -131,6 +165,9 @@ admin.patch("/users/:id", async (c) => {
     data.passwordHash = await bcrypt.hash(body.password, 12);
   }
   if (body.locale) data.locale = body.locale;
+  if (body.maxDevicesOverride !== undefined) {
+    data.maxDevicesOverride = body.maxDevicesOverride;
+  }
 
   const user = await prisma.user.update({ where: { id }, data });
   await audit(c, "update", "User", id, body);
@@ -141,6 +178,88 @@ admin.delete("/users/:id", async (c) => {
   const id = c.req.param("id");
   await prisma.user.delete({ where: { id } });
   await audit(c, "delete", "User", id);
+  return c.json({ ok: true });
+});
+
+admin.post("/users/:userId/devices", async (c) => {
+  const userId = c.req.param("userId");
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return c.json({ error: "not_found" }, 404);
+
+  const body = z
+    .object({
+      hwid: z.string().min(8),
+      label: z.string().max(64).nullable().optional(),
+      os: z.string().optional(),
+      os_version: z.string().optional(),
+      app_version: z.string().optional(),
+      app_build: z.coerce.number().int().positive().optional(),
+    })
+    .parse(await c.req.json());
+
+  const deviceInput = parseDeviceFields(body);
+  if (!deviceInput) {
+    return c.json({ error: "hwid_invalid" }, 400);
+  }
+
+  const sub = await activeSubscription(userId);
+  const planMax = sub?.plan.maxDevices ?? 1;
+  const maxDevices = effectiveMaxDevices(planMax, user.maxDevicesOverride);
+
+  try {
+    const device = await createUserDevice(userId, deviceInput, {
+      maxDevices,
+      label: body.label ?? null,
+    });
+    await audit(c, "create", "Device", device.id, { userId, hwid: device.hwid });
+    return c.json({ device });
+  } catch (err) {
+    if (err instanceof DeviceLimitError) {
+      return c.json({ error: "device_limit", max_devices: maxDevices }, 403);
+    }
+    throw err;
+  }
+});
+
+admin.patch("/devices/:id", async (c) => {
+  const id = c.req.param("id");
+  const body = z
+    .object({
+      label: z.string().max(64).nullable().optional(),
+      hwid: z.string().min(8).optional(),
+    })
+    .parse(await c.req.json());
+
+  const existing = await prisma.device.findUnique({ where: { id } });
+  if (!existing) return c.json({ error: "not_found" }, 404);
+
+  if (body.hwid && body.hwid !== existing.hwid) {
+    const clash = await prisma.device.findUnique({
+      where: { userId_hwid: { userId: existing.userId, hwid: body.hwid } },
+    });
+    if (clash && clash.id !== id) {
+      return c.json({ error: "hwid_taken" }, 409);
+    }
+  }
+
+  const device = await prisma.device.update({
+    where: { id },
+    data: {
+      label: body.label,
+      hwid: body.hwid,
+    },
+  });
+  await audit(c, "update", "Device", id, body);
+  return c.json({ device });
+});
+
+admin.delete("/devices/:id", async (c) => {
+  const id = c.req.param("id");
+  const device = await prisma.device.findUnique({ where: { id } });
+  if (!device) return c.json({ error: "not_found" }, 404);
+
+  await deleteUserDevice(id);
+  await audit(c, "delete", "Device", id, { userId: device.userId, hwid: device.hwid });
   return c.json({ ok: true });
 });
 

@@ -18,3 +18,9 @@ td, th { border: 1px solid #2d3348; padding: 6px 8px; text-align: left; vertical
 .form-actions button { width: auto; flex: 1; }
 #admin-msg { margin-bottom: 12px; padding: 10px; border-radius: 8px; background: #1e3a2f; border: 1px solid #2d6a4f; }
 #admin-msg.error { background: #3a1e1e; border-color: #6a2d2d; color: #f0b7b7; }
+.muted { color: #9aa0a6; font-size: 13px; margin: 4px 0 12px; }
+.device-list { margin-top: 12px; }
+.device-list h4 { margin: 12px 0 8px; font-size: 0.95rem; }
+.device-add-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid #2d3348; }
+.device-add-form button { width: auto; margin-top: 8px; }
+code { font-size: 12px; word-break: break-all; }

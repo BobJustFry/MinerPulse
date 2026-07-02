@@ -1,5 +1,7 @@
 use crate::drivers::antminer::{parse_antminer_snapshot, split_antminer_log, AntminerDriver};
-use crate::drivers::avalon::{parse_avalon_estats_log, parse_estats, AvalonDriver};
+use crate::drivers::avalon::{
+    parse_avalon_estats_log, parse_estats, refresh_avalon_board_chips_from_raw_log, AvalonDriver,
+};
 use crate::drivers::avalon_cgminer::{is_avalon_cgminer_dump, parse_avalon_cgminer_dump};
 use crate::drivers::whatsminer::{classify_whatsminer, parse_whatsminer_snapshot};
 use crate::drivers::MinerDriver;
@@ -123,8 +125,11 @@ fn import_json(trimmed: &str, label: &str) -> Result<ImportResult, MinerPulseErr
                 crate::error::ErrorCode::ParseFailed,
             ))?;
 
+        let mut snapshot = frame.snapshot.clone();
+        refresh_avalon_board_chips_from_raw_log(&mut snapshot, Some(&frame.raw_log));
+
         return Ok(ImportResult {
-            snapshot: frame.snapshot.clone(),
+            snapshot,
             source_label: label.to_string(),
             miner_ip: Some(file.miner_ip),
         });
@@ -237,5 +242,23 @@ mod tests {
         assert!(result.snapshot.identity.model.contains("1346"));
         assert_eq!(result.snapshot.boards.len(), 3);
         assert_eq!(result.snapshot.board_chips[0].matrix_id.as_deref(), Some("Matrix_1346"));
+    }
+
+    #[test]
+    fn refreshes_avalon_1466_matrix_when_importing_mpulse() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../OldProject/txt/minerpulse-1782981279760.mpulse");
+        if !path.exists() {
+            return;
+        }
+        let content = fs::read_to_string(path).expect("read 1466 mpulse");
+        let result = import_file_content(&content, Some("1466.mpulse")).expect("import");
+        assert!(result.snapshot.identity.model.contains("1466"));
+        assert_eq!(result.snapshot.board_chips.len(), 3);
+        assert_eq!(
+            result.snapshot.board_chips[0].matrix_id.as_deref(),
+            Some("Matrix_176")
+        );
+        assert_eq!(result.snapshot.board_chips[0].chips.len(), 176);
     }
 }

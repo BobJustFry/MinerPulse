@@ -32,13 +32,14 @@ enum AdminRole {
 }
 
 model User {
-  id           String         @id @default(cuid())
-  email        String         @unique
-  nickname     String         @unique
-  passwordHash String
-  locale       String         @default("ru")
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  id                 String         @id @default(cuid())
+  email              String         @unique
+  nickname           String         @unique
+  passwordHash       String
+  locale             String         @default("ru")
+  maxDevicesOverride Int?           @map("max_devices_override")
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
   subscriptions Subscription[]
   devices      Device[]
   payments     Payment[]

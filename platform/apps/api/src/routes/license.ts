@@ -3,7 +3,7 @@ import { z } from "zod";
 import { Tier } from "@minerpulse/db";
 import { prisma, getOfflineGraceDays } from "../lib/prisma.js";
 import { activeSubscription } from "../lib/subscription.js";
-import { DeviceLimitError, findUserDevice, parseDeviceFields, upsertUserDevice } from "../lib/device.js";
+import { DeviceLimitError, findUserDevice, maxDevicesForUser, parseDeviceFields, upsertUserDevice } from "../lib/device.js";
 import {
   hashToken,
   randomToken,
@@ -56,8 +56,9 @@ license.post("/activate", async (c) => {
 
   let device;
   try {
+    const maxDevices = await maxDevicesForUser(activation.userId);
     device = await upsertUserDevice(activation.userId, deviceInput, {
-      maxDevices: sub.plan.maxDevices,
+      maxDevices,
     });
   } catch (err) {
     if (err instanceof DeviceLimitError) {
@@ -126,8 +127,9 @@ license.post("/refresh", async (c) => {
   let device = await findUserDevice(stored.userId, deviceInput.hwid);
   if (!device) {
     try {
+      const maxDevices = await maxDevicesForUser(stored.userId);
       device = await upsertUserDevice(stored.userId, deviceInput, {
-        maxDevices: sub.plan.maxDevices,
+        maxDevices,
       });
     } catch (err) {
       if (err instanceof DeviceLimitError) {
