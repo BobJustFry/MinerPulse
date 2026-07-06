@@ -205,4 +205,26 @@ C110 freq:609 vol:326 temp:60 nonce:42321590 error:878 crc:0 x:0 repeat:31 pct:1
         assert_eq!(chip.repeat_count, Some(31));
         assert_eq!(chip.performance_pct, Some([101.3, 101.4]));
     }
+
+    #[test]
+    fn parses_compact_whatsminer_chip_line() {
+        let sample = r#"
+slot0:
+(
+   C0  : freq:581  vol:326 temp:74  nonce:66       error:0    crc:0    x:0   / 0 repeat:0    pct: 99.7%/  0.0%
+   C1  : freq:581  vol:324 temp:76  nonce:69       error:0    crc:0    x:0   / 0 repeat:0    pct:100.0%/  0.0%
+)
+"#;
+        let boards = parse_btminer_log(sample);
+        assert_eq!(boards.len(), 1);
+        let chip = &boards[0].chips[0];
+        assert_eq!(chip.freq_mhz, Some(581));
+        assert_eq!(chip.voltage, Some(326));
+        assert_eq!(chip.temp_c, 74);
+        assert_eq!(chip.nonce, Some(66));
+        assert_eq!(chip.errors, Some(0));
+        assert_eq!(chip.crc_errors, Some(0));
+        assert_eq!(chip.repeat_count, Some(0));
+        assert_eq!(chip.performance_pct, Some([99.7, 0.0]));
+    }
 }

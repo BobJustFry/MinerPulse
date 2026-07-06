@@ -46,6 +46,11 @@
     voltage: "data.chipVoltage",
     solutions: "data.chipSolutions",
     crc: "data.chipCrc",
+    freq: "chips.metric.freq",
+    nonce: "chips.metric.nonce",
+    error: "chips.metric.error",
+    repeat: "chips.metric.repeat",
+    pct: "chips.metric.pct",
   };
 
   let voltageUnit = $derived(chipVoltageUnitForVendor(vendor));
@@ -141,15 +146,41 @@
     return usesMatrixLayout(board) ? matrixGrid(board) : domainGrid(board);
   }
 
-  function hasCrcFault(cell: ChipCell): boolean {
+  function hasPllFault(cell: ChipCell): boolean {
     return cell.errors != null && cell.errors > 0;
+  }
+
+  function hasCrcFault(cell: ChipCell): boolean {
+    if (boardsStacked) {
+      return cell.crc_errors != null && cell.crc_errors > 0;
+    }
+    return cell.errors != null && cell.errors > 0;
+  }
+
+  function chipFaultBadge(cell: ChipCell): number | null {
+    if (boardsStacked) {
+      if (hasPllFault(cell)) return cell.errors!;
+      if (hasCrcFault(cell)) return cell.crc_errors!;
+      return null;
+    }
+    return hasCrcFault(cell) ? cell.errors! : null;
   }
 
   /** WhatsMiner `errors` are PLL/splash counts — hide on temp/voltage views. */
   function showChipErrorOverlay(cell: ChipCell): boolean {
-    if (!hasCrcFault(cell) || displayMetric === "crc") return false;
-    if (boardsStacked && (displayMetric === "temp" || displayMetric === "voltage")) {
-      return false;
+    const badge = chipFaultBadge(cell);
+    if (badge == null) return false;
+    if (displayMetric === "crc" || displayMetric === "error") return false;
+    if (boardsStacked) {
+      const quietMetrics: ChipDisplayMetric[] = [
+        "temp",
+        "voltage",
+        "freq",
+        "nonce",
+        "pct",
+        "repeat",
+      ];
+      if (quietMetrics.includes(displayMetric)) return false;
     }
     return true;
   }
@@ -176,10 +207,7 @@
     if (cell.solutions != null) {
       parts.push(`${msg("data.chipSolutions")}: ${formatChipMetric(cell.solutions)}`);
     }
-    if (
-      cell.errors != null &&
-      !(boardsStacked && (displayMetric === "temp" || displayMetric === "voltage"))
-    ) {
+    if (cell.errors != null && displayMetric !== "temp" && displayMetric !== "voltage") {
       parts.push(`${msg("data.chipCrc")}: ${formatChipMetric(cell.errors)}`);
     }
     if (lazy) {
@@ -214,6 +242,7 @@
       boards.map((board) => ({
         chips: board.chips.map((chip) => chipFields(chip)),
       })),
+      vendor,
     ),
   );
 
@@ -300,7 +329,7 @@
                       <span class="chip-cell-id">C{cell.index}</span>
                       <span class="chip-cell-value">{chipCellDisplayValue(cell, displayMetric, voltageUnit)}</span>
                       {#if showChipErrorOverlay(cell)}
-                        <span class="chip-cell-badge">{cell.errors}</span>
+                        <span class="chip-cell-badge">{chipFaultBadge(cell)}</span>
                       {/if}
                     </div>
                   {/if}
