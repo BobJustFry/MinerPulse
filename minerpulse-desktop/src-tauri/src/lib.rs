@@ -582,6 +582,7 @@ async fn open_scan_window(app: AppHandle) -> Result<(), ErrorResponse> {
         .parent(&main)
         .map_err(|_| io_error())?
         .always_on_top(true)
+        .shadow(true)
         .build()
         .map_err(|_| io_error())?;
 
@@ -943,7 +944,7 @@ pub fn run() {
                 let product = meta["product"].as_str().unwrap_or("Miner Pulse");
                 let title = format_app_display(product, version, build);
                 let _ = window.set_title(&title);
-                let _ = window.set_shadow(false);
+                let _ = window.set_shadow(true);
                 apply_windows_frame(&window, true);
             }
             Ok(())
