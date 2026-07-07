@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { openUrl } from "@tauri-apps/plugin-opener";
   import { t, type Locale, type MessageKey } from "$lib/i18n";
   import { formatAppError } from "$lib/formatAppError";
   import type { Entitlements, ErrorResponse, LicenseInfo } from "$lib/types";
@@ -15,6 +16,8 @@
   } = $props();
 
   type AuthTab = "code" | "login";
+
+  const PORTAL_URL = "https://mpulse.bob4.fun/";
 
   let tab = $state<AuthTab>("code");
   let code = $state("");
@@ -44,6 +47,14 @@
 
   function onKeydown(event: KeyboardEvent) {
     if (event.key === "Escape" && !busy) close();
+  }
+
+  async function openExternal(url: string) {
+    try {
+      await openUrl(url);
+    } catch {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
   }
 
   async function refreshInfo() {
@@ -151,6 +162,13 @@
             {msg("subscription.logout")}
           </button>
         {:else}
+          <section class="subscription-portal">
+            <p>{msg("subscription.portalHint")}</p>
+            <button type="button" class="btn" disabled={busy} onclick={() => openExternal(PORTAL_URL)}>
+              {msg("subscription.openWebsite")}
+            </button>
+          </section>
+
           <div class="subscription-tabs" role="tablist" aria-label={msg("subscription.title")}>
             <button
               type="button"

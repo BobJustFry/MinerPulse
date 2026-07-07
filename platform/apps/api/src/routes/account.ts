@@ -1,6 +1,8 @@
 import { Hono } from "hono";
-import type { User } from "@minerpulse/db";
+import { z } from "zod";
+import { SubscriptionStatus, type User } from "@minerpulse/db";
 import { prisma } from "../lib/prisma.js";
+import { betaConfig, betaMaxDevices, betaSelfServiceEnabled } from "../lib/beta.js";
 import { deleteUserDevice, maxDevicesForUser } from "../lib/device.js";
 import { randomActivationCode, verifyAccessToken } from "../lib/jwt.js";
 
@@ -41,6 +43,7 @@ account.get("/me", async (c) => {
     devices,
     deviceLimit,
     deviceCount: devices.length,
+    beta: betaConfig(),
   });
 });
 
@@ -76,6 +79,67 @@ account.delete("/devices/:id", async (c) => {
   }
   await deleteUserDevice(id);
   return c.json({ ok: true });
+});
+
+account.post("/subscribe", async (c) => {
+  if (!betaSelfServiceEnabled()) {
+    return c.json({ error: "beta_disabled" }, 403);
+  }
+
+  const user = c.get("user");
+  const body = z
+    .object({
+      planId: z.string().min(1),
+      deviceCount: z.number().int().min(1),
+    })
+    .parse(await c.req.json());
+
+  const maxDevices = betaMaxDevices();
+  if (body.deviceCount > maxDevices) {
+    return c.json({ error: "device_count_too_high" }, 400);
+  }
+
+  const plan = await prisma.plan.findFirst({
+    where: { id: body.planId, active: true },
+  });
+  if (!plan) {
+    return c.json({ error: "plan_not_found" }, 404);
+  }
+
+  const deviceCount = await prisma.device.count({ where: { userId: user.id } });
+  if (deviceCount > body.deviceCount) {
+    return c.json({ error: "device_count_below_connected" }, 400);
+  }
+
+  const endsAt = new Date(Date.now() + plan.durationDays * 24 * 3600 * 1000);
+
+  const subscription = await prisma.$transaction(async (tx) => {
+    await tx.subscription.updateMany({
+      where: { userId: user.id, status: SubscriptionStatus.ACTIVE },
+      data: { status: SubscriptionStatus.CANCELLED },
+    });
+
+    await tx.user.update({
+      where: { id: user.id },
+      data: { maxDevicesOverride: body.deviceCount },
+    });
+
+    return tx.subscription.create({
+      data: {
+        userId: user.id,
+        planId: plan.id,
+        status: SubscriptionStatus.ACTIVE,
+        source: "beta",
+        endsAt,
+      },
+      include: { plan: true },
+    });
+  });
+
+  return c.json({
+    subscription,
+    deviceLimit: body.deviceCount,
+  });
 });
 
 export { account };

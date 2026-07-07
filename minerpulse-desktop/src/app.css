@@ -1563,6 +1563,15 @@ button {
   background: var(--accent-soft);
 }
 
+.about-portal-hint {
+  margin: 0;
+  width: 100%;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .about-donate {
   width: 100%;
   display: grid;
@@ -1860,6 +1869,22 @@ button {
 }
 
 .subscription-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.subscription-portal {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-base);
+}
+
+.subscription-portal p {
   margin: 0;
   color: var(--text-muted);
   font-size: 12px;

@@ -6,6 +6,10 @@ let captchaId = null;
 let captchaQuestionText = "…";
 let lastActivationCode = null;
 let lastActivationExpiresAt = null;
+let publicPlans = [];
+let betaConfig = { selfService: false, maxDevices: 10 };
+let selectedPlanId = null;
+let dashboardDeviceLimit = 1;
 
 function openModal(id) {
   const modal = document.getElementById(id);
@@ -78,10 +82,21 @@ async function loadCaptcha() {
   if (answerInput) answerInput.value = "";
 }
 
-async function loadPlans() {
-  const { plans } = await api("/v1/plans/public");
+function renderBetaBanner() {
+  const banner = document.getElementById("beta-banner");
+  if (!banner) return;
+  if (!betaConfig.selfService) {
+    banner.hidden = true;
+    return;
+  }
+  banner.hidden = false;
+  banner.textContent = t("beta.banner");
+}
+
+function renderPlansList() {
   const root = document.getElementById("plans-list");
-  root.innerHTML = plans
+  if (!root) return;
+  root.innerHTML = publicPlans
     .map(
       (p) => `<div class="plan">
         <strong>${p.name}</strong>
@@ -91,6 +106,68 @@ async function loadPlans() {
       </div>`,
     )
     .join("");
+}
+
+async function loadPlans() {
+  const data = await api("/v1/plans/public");
+  publicPlans = data.plans ?? [];
+  betaConfig = data.beta ?? { selfService: false, maxDevices: 10 };
+  renderPlansList();
+  renderBetaBanner();
+  renderSubscribePlans();
+}
+
+function renderSubscribePlans() {
+  const section = document.getElementById("subscribe-section");
+  const root = document.getElementById("subscribe-plans");
+  const devicesInput = document.getElementById("subscribe-devices");
+  if (!section || !root || !devicesInput) return;
+
+  if (!betaConfig.selfService || !localStorage.getItem("mpulse_token")) {
+    section.hidden = true;
+    return;
+  }
+
+  section.hidden = false;
+  devicesInput.max = String(betaConfig.maxDevices);
+  const hint = section.querySelector(".subscribe-devices-hint");
+  if (hint) {
+    hint.textContent = t("subscribe.devicesHint", { max: betaConfig.maxDevices });
+  }
+
+  if (!selectedPlanId && publicPlans.length) {
+    selectedPlanId = publicPlans[0].id;
+  }
+
+  root.innerHTML = publicPlans
+    .map(
+      (p) => `<button type="button" class="plan plan-selectable${p.id === selectedPlanId ? " selected" : ""}" data-plan-id="${p.id}">
+        <strong>${p.name}</strong>
+        <div>${p.tier}</div>
+        <div class="plan-price">${(p.priceCents / 100).toFixed(0)} ${p.currency}</div>
+        <div class="plan-meta">${t("plans.duration", { days: p.durationDays, devices: p.maxDevices })}</div>
+      </button>`,
+    )
+    .join("");
+
+  root.querySelectorAll("[data-plan-id]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      selectedPlanId = btn.dataset.planId;
+      renderSubscribePlans();
+    });
+  });
+
+  if (!devicesInput.value || Number(devicesInput.value) < 1) {
+    devicesInput.value = String(Math.max(1, dashboardDeviceLimit));
+  }
+}
+
+function showSubscribeMessage(text, isError = false) {
+  const el = document.getElementById("subscribe-message");
+  if (!el) return;
+  el.textContent = text;
+  el.hidden = !text;
+  el.classList.toggle("error", isError);
 }
 
 function formatSubscriptionEnd(value) {
@@ -110,6 +187,7 @@ function showGuestAuth() {
   document.getElementById("auth-actions").hidden = false;
   document.getElementById("auth-hint").hidden = false;
   document.getElementById("dashboard").hidden = true;
+  renderSubscribePlans();
 }
 
 function escHtml(value) {
@@ -187,14 +265,22 @@ function showDashboard(user, subscription, devices = [], deviceLimit = 1) {
   document.getElementById("dashboard").hidden = false;
   document.getElementById("user-email").textContent = user.email;
   document.getElementById("user-nickname").textContent = user.nickname ? `@${user.nickname}` : "";
+  dashboardDeviceLimit = deviceLimit;
+  if (subscription?.planId) {
+    selectedPlanId = subscription.planId;
+  }
   document.getElementById("subscription-info").textContent = subscription
     ? t("auth.subscriptionActive", {
         name: subscription.plan.name,
         tier: subscription.plan.tier,
         date: formatSubscriptionEnd(subscription.endsAt),
       })
-    : t("auth.subscriptionNone");
+    : betaConfig.selfService
+      ? t("auth.subscriptionNoneBeta")
+      : t("auth.subscriptionNone");
   renderDevices(devices, deviceLimit);
+  renderSubscribePlans();
+  showSubscribeMessage("");
 }
 
 async function refreshDashboard() {
@@ -205,6 +291,10 @@ async function refreshDashboard() {
   }
   try {
     const me = await api("/v1/account/me");
+    if (me.beta) {
+      betaConfig = me.beta;
+      renderBetaBanner();
+    }
     showDashboard(me.user, me.subscription, me.devices ?? [], me.deviceLimit ?? 1);
   } catch {
     localStorage.removeItem("mpulse_token");
@@ -281,6 +371,26 @@ function bindApp() {
     } catch (err) {
       showModalMessage("register-modal", err.message || t("error.registerFailed"), true);
       loadCaptcha().catch(console.error);
+    }
+  });
+
+  document.getElementById("subscribe-btn")?.addEventListener("click", async () => {
+    const devicesInput = document.getElementById("subscribe-devices");
+    const deviceCount = Number(devicesInput?.value ?? 1);
+    if (!selectedPlanId) {
+      showSubscribeMessage(t("error.plan_required"), true);
+      return;
+    }
+    showSubscribeMessage("");
+    try {
+      await api("/v1/account/subscribe", {
+        method: "POST",
+        body: JSON.stringify({ planId: selectedPlanId, deviceCount }),
+      });
+      showSubscribeMessage(t("subscribe.success"));
+      await refreshDashboard();
+    } catch (err) {
+      showSubscribeMessage(err.message || t("error.generic"), true);
     }
   });
 

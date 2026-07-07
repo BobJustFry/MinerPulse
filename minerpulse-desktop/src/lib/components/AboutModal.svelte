@@ -4,6 +4,7 @@
 
   const GITHUB_URL = "https://github.com/BobJustFry/MinerPulse";
   const TELEGRAM_URL = "https://t.me/miner_pulse";
+  const PORTAL_URL = "https://mpulse.bob4.fun/";
   const DONATE_NETWORK = "USDT TRC20";
   const DONATE_WALLET = "TAQLsXQA7WzNfoCTHvXxj8yFBXTJRKz99w";
 
@@ -114,6 +115,9 @@
         </div>
 
         <div class="about-links">
+          <button type="button" class="about-link" onclick={() => openExternal(PORTAL_URL)}>
+            {msg("about.website")}
+          </button>
           <button type="button" class="about-link" onclick={() => openExternal(GITHUB_URL)}>
             {msg("about.github")}
           </button>
@@ -121,6 +125,8 @@
             {msg("about.telegram")}
           </button>
         </div>
+
+        <p class="about-portal-hint">{msg("about.portalHint")}</p>
 
         <section class="about-donate">
           <div class="about-donate-title">{msg("about.donate.title")}</div>

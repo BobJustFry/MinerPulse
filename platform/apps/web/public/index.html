@@ -22,6 +22,7 @@
     </header>
 
     <section id="plans" class="card">
+      <div id="beta-banner" class="beta-banner" hidden></div>
       <h2 data-i18n="plans.title">Тарифы</h2>
       <div id="plans-list" class="grid"></div>
     </section>
@@ -39,6 +40,18 @@
         <p id="user-email"></p>
         <p id="user-nickname"></p>
         <p id="subscription-info"></p>
+        <section id="subscribe-section" class="subscribe-section" hidden>
+          <h3 data-i18n="subscribe.title">Подписка</h3>
+          <p class="beta-notice" data-i18n="beta.notice"></p>
+          <div id="subscribe-plans" class="subscribe-plans grid"></div>
+          <label class="field subscribe-devices-field">
+            <span class="field-label" data-i18n="subscribe.devicesLabel">Количество устройств</span>
+            <input id="subscribe-devices" type="number" min="1" max="10" value="1" inputmode="numeric" />
+            <span class="subscribe-devices-hint" data-i18n="subscribe.devicesHint"></span>
+          </label>
+          <button id="subscribe-btn" type="button" class="primary-btn" data-i18n="subscribe.activate">Активировать подписку</button>
+          <p id="subscribe-message" class="subscribe-message" hidden></p>
+        </section>
         <button id="gen-code" type="button" data-i18n="auth.genCode">Код для приложения</button>
         <pre id="activation-code"></pre>
         <section id="devices-section" class="devices-section">

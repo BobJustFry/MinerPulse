@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { prisma } from "../lib/prisma.js";
+import { betaConfig } from "../lib/beta.js";
 
 const plans = new Hono();
 
@@ -18,7 +19,7 @@ plans.get("/public", async (c) => {
       maxDevices: true,
     },
   });
-  return c.json({ plans: items });
+  return c.json({ plans: items, beta: betaConfig() });
 });
 
 export { plans };
