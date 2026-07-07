@@ -77,7 +77,6 @@
   let pendingAuthRetry = $state<(() => Promise<void>) | null>(null);
   let busy = $state(false);
   let reading = $state(false);
-  let readGeneration = 0;
   let readCooldownSec = $state(0);
   let readCooldownTimer: ReturnType<typeof setInterval> | null = null;
   let statusText = $state("");
@@ -375,8 +374,8 @@
     if (readCooldownActive) return;
 
     const hadSnapshot = snapshot !== null;
-    const gen = ++readGeneration;
     reading = true;
+    connectionLocked = true;
     dropActive = false;
     if (!hadSnapshot) {
       statusText = msg("status.reading");
@@ -390,8 +389,6 @@
           whatsminer_auth: whatsminerAuthPayload(),
         },
       });
-
-      if (gen !== readGeneration) return;
 
       if (isSnapshotEmpty(response.snapshot)) {
         if (shouldPromptWhatsminerSetup(response.snapshot)) {
@@ -415,26 +412,19 @@
         promptWhatsminerSetup(response.snapshot);
       }
     } catch (err) {
-      if (gen !== readGeneration) return;
-      const e = err as ErrorResponse;
-      if (e?.code === "OPERATION_CANCELLED") {
-        statusText = msg("status.readCancelled");
-      } else {
-        handleReadRateLimit(err);
-        statusText = formatError(err);
-      }
+      handleReadRateLimit(err);
+      statusText = formatError(err);
     } finally {
-      if (gen === readGeneration) {
-        reading = false;
-      }
+      reading = false;
+      connectionLocked = false;
     }
   }
 
   function cancelReading() {
     if (!reading) return;
-    readGeneration += 1;
     dropActive = false;
     reading = false;
+    connectionLocked = false;
     statusText = msg("status.readCancelled");
   }
 

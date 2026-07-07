@@ -2,7 +2,9 @@ import type { MinerSnapshot } from "$lib/types";
 
 /** True when the miner response carries no usable telemetry. */
 export function isSnapshotEmpty(snapshot: MinerSnapshot): boolean {
+  if (!snapshot) return true;
   const { hashrate, boards, pools, board_chips, raw_log } = snapshot;
+  if (!hashrate) return true;
   if (
     hashrate.current_ghs > 0 ||
     hashrate.avg_ghs > 0 ||
