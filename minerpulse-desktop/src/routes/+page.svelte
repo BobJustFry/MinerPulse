@@ -41,6 +41,7 @@
   import { SessionPlayer, type PlaybackSpeed } from "$lib/sessionPlayer";
   import SessionPlayerBar from "$lib/components/SessionPlayerBar.svelte";
   import { formatAppError } from "$lib/formatAppError";
+  import { isSnapshotEmpty } from "$lib/snapshotUtils";
   import { checkForAppUpdate, UPDATE_CHECK_INTERVAL_MS } from "$lib/updateCheck";
   import type { ChartsLayout } from "$lib/components/MinerChartsPanel";
   import type {
