@@ -115,6 +115,11 @@ fi
 JWT_PRIVATE_KEY="$(one_line_pem "$ROOT_DIR/secrets/jwt_private.pem")"
 JWT_PUBLIC_KEY="$(one_line_pem "$ROOT_DIR/secrets/jwt_public.pem")"
 
+if [[ ! -f "$ROOT_DIR/secrets/miner_credentials.key" ]]; then
+  openssl rand -base64 32 >"$ROOT_DIR/secrets/miner_credentials.key"
+fi
+MINER_CREDENTIALS_KEY="$(tr -d '\n' <"$ROOT_DIR/secrets/miner_credentials.key")"
+
 PUBLIC_URL_HTTPS_SUFFIX=""
 if [[ "$HTTPS_PORT" != "443" ]]; then
   PUBLIC_URL_HTTPS_SUFFIX=":${HTTPS_PORT}"
@@ -149,6 +154,7 @@ BETA_SELF_SERVICE=${BETA_SELF_SERVICE}
 BETA_MAX_DEVICES=${BETA_MAX_DEVICES}
 BOOTSTRAP_ADMIN_USERNAME=${BOOTSTRAP_ADMIN_USERNAME}
 BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_ADMIN_PASSWORD}
+MINER_CREDENTIALS_KEY=${MINER_CREDENTIALS_KEY}
 EOF
 
 export BASE_DOMAIN DEPLOY_MODE ADMIN_IP_BLOCK HTTP_TO_HTTPS_REDIRECT

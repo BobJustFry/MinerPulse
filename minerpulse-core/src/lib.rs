@@ -17,10 +17,14 @@ pub use drivers::registry::{
     detect_driver, detect_vendor, driver_available, fetch_whatsminer, fetch_with_detect,
     model_from_stats, DriverRegistry,
 };
+pub use drivers::whatsminer::access::{
+    compute_needs_setup, enable_api_switch, probe_whatsminer_access, WhatsminerAccessStatus,
+};
+pub use drivers::whatsminer::luci::test_luci_credentials;
 pub use entitlements::{EntitlementGate, SubscriptionTier};
 pub use error::{ErrorCode, ErrorResponse, MinerPulseError};
 pub use fetch_options::{FetchOptions, WhatsminerLuciAuth};
-pub use model::MinerSnapshot;
+pub use model::{MinerSnapshot, WhatsminerAccessInfo};
 pub use import::{import_file_content, ImportResult, MAX_IMPORT_BYTES};
 pub use mpulse::{
     decode_mpulse_bytes, load_mpulse, save_session, save_snapshot, MpulseFile, MpulseFrame,

@@ -5,6 +5,11 @@ import { prisma } from "../lib/prisma.js";
 import { betaConfig, betaMaxDevices, betaSelfServiceEnabled } from "../lib/beta.js";
 import { deleteUserDevice, maxDevicesForUser } from "../lib/device.js";
 import { randomActivationCode, verifyAccessToken } from "../lib/jwt.js";
+import {
+  decryptPassword,
+  encryptPassword,
+  normalizeMac,
+} from "../lib/miner-credentials-crypto.js";
 
 type AccountEnv = { Variables: { user: User } };
 
@@ -140,6 +145,80 @@ account.post("/subscribe", async (c) => {
     subscription,
     deviceLimit: body.deviceCount,
   });
+});
+
+const minerCredentialBody = z.object({
+  mac: z.string().min(1),
+  username: z.string().min(1),
+  password: z.string().min(1),
+});
+
+account.get("/miner-credentials", async (c) => {
+  const user = c.get("user");
+  const rows = await prisma.minerCredential.findMany({
+    where: { userId: user.id },
+    orderBy: { updatedAt: "desc" },
+  });
+  return c.json({
+    credentials: rows.map((row) => ({
+      mac: row.mac,
+      username: row.username,
+      updated_at: row.updatedAt,
+    })),
+  });
+});
+
+account.post("/miner-credentials/sync", async (c) => {
+  const user = c.get("user");
+  const rows = await prisma.minerCredential.findMany({
+    where: { userId: user.id },
+    orderBy: { updatedAt: "desc" },
+  });
+  const credentials = rows.map((row) => ({
+    mac: row.mac,
+    username: row.username,
+    password: decryptPassword(row.passwordEnc),
+    updated_at: row.updatedAt,
+  }));
+  return c.json({ credentials });
+});
+
+account.put("/miner-credentials", async (c) => {
+  const user = c.get("user");
+  const body = minerCredentialBody.parse(await c.req.json());
+  const mac = normalizeMac(body.mac);
+  const passwordEnc = encryptPassword(body.password);
+  const row = await prisma.minerCredential.upsert({
+    where: { userId_mac: { userId: user.id, mac } },
+    create: {
+      userId: user.id,
+      mac,
+      username: body.username.trim(),
+      passwordEnc,
+    },
+    update: {
+      username: body.username.trim(),
+      passwordEnc,
+    },
+  });
+  return c.json({
+    mac: row.mac,
+    username: row.username,
+    updated_at: row.updatedAt,
+  });
+});
+
+account.delete("/miner-credentials/:mac", async (c) => {
+  const user = c.get("user");
+  const mac = normalizeMac(c.req.param("mac"));
+  const existing = await prisma.minerCredential.findFirst({
+    where: { userId: user.id, mac },
+  });
+  if (!existing) {
+    return c.json({ error: "not_found" }, 404);
+  }
+  await prisma.minerCredential.delete({ where: { id: existing.id } });
+  return c.json({ ok: true });
 });
 
 export { account };

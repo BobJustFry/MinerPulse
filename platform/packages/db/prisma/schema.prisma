@@ -44,6 +44,7 @@ model User {
   devices      Device[]
   payments     Payment[]
   activationCodes ActivationCode[]
+  minerCredentials MinerCredential[]
 }
 
 model AdminUser {
@@ -153,5 +154,18 @@ model RefreshToken {
   expiresAt DateTime
   createdAt DateTime @default(now())
 
+  @@index([userId])
+}
+
+model MinerCredential {
+  id          String   @id @default(cuid())
+  userId      String
+  mac         String
+  username    String
+  passwordEnc String   @map("password_enc")
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mac])
   @@index([userId])
 }

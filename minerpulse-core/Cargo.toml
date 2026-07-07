@@ -15,3 +15,5 @@ flate2 = "1"
 rayon = "1"
 local-ip-address = "0.6"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+sha2 = "0.10"
+base64 = "0.22"

@@ -59,6 +59,7 @@ export interface MinerSnapshot {
     voltage_level?: number | null;
   }>;
   board_chips?: BoardChipMap[];
+  whatsminer_access?: WhatsminerAccessInfo | null;
   faults?: MinerFault[];
   pools: Array<{
     url: string;
@@ -75,6 +76,16 @@ export interface MinerSnapshot {
   uptime_sec?: number | null;
   work_mode?: number | null;
   ecmm?: number | null;
+}
+
+export interface WhatsminerAccessInfo {
+  mac?: string | null;
+  api_switch?: boolean | null;
+  luci_reachable?: boolean;
+  luci_auth_ok?: boolean;
+  api_reachable?: boolean;
+  api_auth_ok?: boolean;
+  needs_setup?: boolean;
 }
 
 export interface BoardChipMap {

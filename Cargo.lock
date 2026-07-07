@@ -2178,6 +2178,7 @@ checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 name = "minerpulse-core"
 version = "1.0.1"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "flate2",
  "local-ip-address",
@@ -2185,6 +2186,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 2.0.18",
 ]
 

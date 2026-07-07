@@ -248,6 +248,11 @@ impl LicenseState {
         store.tier
     }
 
+    pub fn access_token(&self) -> Option<String> {
+        let store = self.store.lock().unwrap();
+        store.access_token.clone()
+    }
+
     pub fn info(&self) -> LicenseInfo {
         let store = self.store.lock().unwrap();
         let tier = Self::effective_tier(&store);
@@ -274,6 +279,7 @@ impl LicenseState {
         };
         self.apply_tier(&app, tier);
         Self::notify_updated(&app);
+        crate::miner_credentials::MinerCredentialsState::schedule_sync(&app);
     }
 
     async fn refresh_remote(&self, app: &AppHandle, refresh: String) -> Result<(), ErrorResponse> {
@@ -316,6 +322,7 @@ impl LicenseState {
         self.save(&store)?;
         self.apply_tier(app, tier);
         Self::notify_updated(app);
+        crate::miner_credentials::MinerCredentialsState::schedule_sync(app);
         Ok(())
     }
 
@@ -373,6 +380,7 @@ impl LicenseState {
         self.save(&store)?;
         self.apply_tier(&app, tier);
         Self::notify_updated(&app);
+        crate::miner_credentials::MinerCredentialsState::schedule_sync(&app);
         Ok(info)
     }
 
@@ -443,6 +451,7 @@ impl LicenseState {
         self.save(&store)?;
         self.apply_tier(&app, tier);
         Self::notify_updated(&app);
+        crate::miner_credentials::MinerCredentialsState::schedule_sync(&app);
         Ok(info)
     }
 

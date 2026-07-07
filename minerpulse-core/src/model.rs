@@ -126,6 +126,24 @@ pub struct PoolInfo {
     pub rejected: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WhatsminerAccessInfo {
+    #[serde(default)]
+    pub mac: Option<String>,
+    #[serde(default)]
+    pub api_switch: Option<bool>,
+    #[serde(default)]
+    pub luci_reachable: bool,
+    #[serde(default)]
+    pub luci_auth_ok: bool,
+    #[serde(default)]
+    pub api_reachable: bool,
+    #[serde(default)]
+    pub api_auth_ok: bool,
+    #[serde(default)]
+    pub needs_setup: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MinerSnapshot {
     pub identity: MinerIdentity,
@@ -153,6 +171,8 @@ pub struct MinerSnapshot {
     pub work_mode: Option<u32>,
     #[serde(default)]
     pub ecmm: Option<u64>,
+    #[serde(default)]
+    pub whatsminer_access: Option<WhatsminerAccessInfo>,
 }
 
 impl Default for MinerSnapshot {
@@ -175,6 +195,7 @@ impl Default for MinerSnapshot {
             uptime_sec: None,
             work_mode: None,
             ecmm: None,
+            whatsminer_access: None,
         }
     }
 }

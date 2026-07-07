@@ -62,12 +62,7 @@ fn cached_log(client: &Client, host: &str, base: &str) -> Option<String> {
 }
 
 pub fn fetch_btminer_chip_data(host: &str, options: &FetchOptions) -> (Vec<BoardChipMap>, String) {
-    let client = match Client::builder()
-        .danger_accept_invalid_certs(true)
-        .timeout(HTTP_TIMEOUT)
-        .redirect(reqwest::redirect::Policy::limited(4))
-        .build()
-    {
+    let client = match build_luci_client() {
         Ok(client) => client,
         Err(_) => return (Vec::new(), String::new()),
     };
@@ -91,6 +86,105 @@ pub fn fetch_btminer_chip_data(host: &str, options: &FetchOptions) -> (Vec<Board
     (Vec::new(), String::new())
 }
 
+pub fn luci_reachable(host: &str) -> bool {
+    let client = match build_luci_client() {
+        Ok(client) => client,
+        Err(_) => return false,
+    };
+    for scheme in ["https", "http"] {
+        let base = format!("{scheme}://{host}");
+        let url = format!("{base}/cgi-bin/luci");
+        if client.get(&url).send().map(|r| r.status().is_success() || r.status().as_u16() == 302).unwrap_or(false) {
+            return true;
+        }
+    }
+    false
+}
+
+pub fn test_luci_credentials(host: &str, username: &str, password: &str) -> bool {
+    let client = match build_luci_client() {
+        Ok(client) => client,
+        Err(_) => return false,
+    };
+    for scheme in ["https", "http"] {
+        let base = format!("{scheme}://{host}");
+        let cookie = match luci_login(&client, &base, username, password) {
+            Some(cookie) => cookie,
+            None => continue,
+        };
+        let url = format!("{base}/cgi-bin/luci/admin/status/btminerapi");
+        if let Ok(response) = client.get(&url).header("Cookie", cookie).send() {
+            if response.status().is_success() {
+                if let Ok(body) = response.text() {
+                    return extract_chip_log(&body).is_some();
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Attempt to enable the WhatsMiner TCP API switch via LuCI web UI.
+pub fn enable_api_switch_luci(host: &str, username: &str, password: &str) -> bool {
+    let client = match build_luci_client() {
+        Ok(client) => client,
+        Err(_) => return false,
+    };
+
+    for scheme in ["https", "http"] {
+        let base = format!("{scheme}://{host}");
+        let cookie = match luci_login(&client, &base, username, password) {
+            Some(cookie) => cookie,
+            None => continue,
+        };
+
+        let endpoints = [
+            (
+                format!("{base}/cgi-bin/luci/admin/system/api"),
+                vec![
+                    ("cbi.submit", "1"),
+                    ("cbid.system.apiswitch", "1"),
+                    ("cbid.system.api_switch", "1"),
+                    ("apiswitch", "1"),
+                ],
+            ),
+            (
+                format!("{base}/cgi-bin/luci/admin/network/api_access"),
+                vec![("cbi.submit", "1"), ("api_switch", "1"), ("apiswitch", "1")],
+            ),
+            (
+                format!("{base}/cgi-bin/luci/admin/status/btminerapi"),
+                vec![("api_switch", "1"), ("apiswitch", "1")],
+            ),
+        ];
+
+        for (url, fields) in endpoints {
+            let response = client
+                .post(&url)
+                .header("Cookie", &cookie)
+                .header("Referer", &url)
+                .form(&fields)
+                .send();
+            if let Ok(resp) = response {
+                if resp.status().is_success() || resp.status().as_u16() == 302 {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
+}
+
+fn build_luci_client() -> Result<Client, ()> {
+    Client::builder()
+        .danger_accept_invalid_certs(true)
+        .timeout(HTTP_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::limited(4))
+        .build()
+        .map_err(|_| ())
+}
+
 fn fetch_log_anonymous(client: &Client, base: &str) -> Option<String> {
     let url = format!("{base}/cgi-bin/luci/admin/status/btminerapi");
     let response = client.get(&url).send().ok()?;
@@ -107,7 +201,7 @@ fn fetch_log_authenticated(
     username: &str,
     password: &str,
 ) -> Option<String> {
-    let cookie = luci_login(base, username, password)?;
+    let cookie = luci_login(client, base, username, password)?;
     store_session(host, base, &cookie);
     let url = format!("{base}/cgi-bin/luci/admin/status/btminerapi");
     let response = client
@@ -121,7 +215,7 @@ fn fetch_log_authenticated(
     extract_chip_log(&response.text().ok()?)
 }
 
-fn luci_login(base: &str, username: &str, password: &str) -> Option<String> {
+fn luci_login(_client: &Client, base: &str, username: &str, password: &str) -> Option<String> {
     let login_client = Client::builder()
         .danger_accept_invalid_certs(true)
         .timeout(HTTP_TIMEOUT)

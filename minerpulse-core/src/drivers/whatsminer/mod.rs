@@ -1,7 +1,8 @@
+pub mod access;
 mod btminer_log;
 mod errors;
 mod layout;
-mod luci;
+pub mod luci;
 
 use super::json_util::{array_items, json_f64, json_str, json_u64};
 use super::MinerDriver;
@@ -12,6 +13,7 @@ use crate::model::{
     PowerStats, ThermalStats,
 };
 use crate::tcp::TcpCgminerClient;
+use access::{compute_needs_setup, probe_whatsminer_access};
 use btminer_log::parse_btminer_log;
 use errors::parse_error_entries;
 use luci::fetch_btminer_chip_data;
@@ -81,7 +83,7 @@ impl MinerDriver for WhatsminerDriver {
             fetch_btminer_chip_data(host, options)
         };
 
-        Ok(parse_whatsminer_snapshot(
+        let mut snapshot = parse_whatsminer_snapshot(
             &summary,
             &pools,
             &devs,
@@ -90,7 +92,24 @@ impl MinerDriver for WhatsminerDriver {
             &device_info,
             &btminer_log,
             board_chips,
-        ))
+        );
+
+        if !options.fast_poll {
+            let access_status = probe_whatsminer_access(host, options);
+            let snapshot_empty = snapshot.hashrate.current_ghs <= 0.0
+                && snapshot.hashrate.avg_ghs <= 0.0
+                && snapshot.boards.is_empty()
+                && snapshot.pools.is_empty()
+                && snapshot.board_chips.is_empty();
+            let needs_setup = compute_needs_setup(
+                &access_status,
+                snapshot_empty,
+                snapshot.board_chips.is_empty(),
+            );
+            snapshot.whatsminer_access = Some(access_status.to_info(needs_setup));
+        }
+
+        Ok(snapshot)
     }
 }
 

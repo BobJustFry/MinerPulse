@@ -1,14 +1,16 @@
 use minerpulse_core::drivers::registry::{fetch_whatsminer, fetch_with_detect};
 use minerpulse_core::{
-    import_file_content, list_scan_subnets as discover_subnets, load_mpulse, save_session,
-    save_snapshot, scan_network, scan_network_streaming, EntitlementGate, ErrorResponse,
-    FetchOptions, MinerPulseError, MinerSnapshot, MpulseFile, RateLimiter, ScanRequest,
-    ScanResult, ScanSubnet, SubscriptionTier, TcpCgminerClient, WhatsminerLuciAuth,
+    enable_api_switch, import_file_content, list_scan_subnets as discover_subnets, load_mpulse,
+    probe_whatsminer_access, save_session, save_snapshot, scan_network, scan_network_streaming,
+    test_luci_credentials, compute_needs_setup, EntitlementGate, ErrorResponse, FetchOptions, MinerPulseError,
+    MinerSnapshot, MpulseFile, RateLimiter, ScanRequest, ScanResult, ScanSubnet, SubscriptionTier,
+    TcpCgminerClient, WhatsminerAccessInfo, WhatsminerLuciAuth,
     MAX_SESSION_DURATION_SEC, normalize_poll_rate_hz, poll_interval_ms, poll_wait_after_tick,
 };
 use minerpulse_core::model::BoardChipMap;
 
 mod license;
+mod miner_credentials;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
@@ -107,12 +109,18 @@ struct ReadMinerRequest {
     whatsminer_auth: Option<WhatsminerAuthRequest>,
 }
 
-fn fetch_options_from_request(auth: Option<WhatsminerAuthRequest>) -> FetchOptions {
-    FetchOptions {
-        whatsminer_luci: auth.map(|value| WhatsminerLuciAuth {
+fn fetch_options_from_request(
+    auth: Option<WhatsminerAuthRequest>,
+    cloud_auth: Option<WhatsminerLuciAuth>,
+) -> FetchOptions {
+    let whatsminer_luci = auth
+        .map(|value| WhatsminerLuciAuth {
             username: value.username,
             password: value.password,
-        }),
+        })
+        .or(cloud_auth);
+    FetchOptions {
+        whatsminer_luci,
         fast_poll: false,
     }
 }
@@ -249,6 +257,7 @@ fn set_tier(state: State<'_, AppState>, tier: SubscriptionTier) -> Result<(), Er
 #[tauri::command]
 fn read_miner(
     state: State<'_, AppState>,
+    creds: State<'_, miner_credentials::MinerCredentialsState>,
     request: ReadMinerRequest,
 ) -> Result<ReadMinerResponse, ErrorResponse> {
     let tier = *state.tier.lock().unwrap();
@@ -263,13 +272,122 @@ fn read_miner(
 
     let port = request.port.unwrap_or(4028);
     let client = TcpCgminerClient::default();
-    let options = fetch_options_from_request(request.whatsminer_auth);
+    let cloud_auth = if request.whatsminer_auth.is_none() {
+        creds.resolve_auth_for_ip(&request.ip)
+    } else {
+        None
+    };
+    let options = fetch_options_from_request(request.whatsminer_auth, cloud_auth);
     let snapshot =
         fetch_with_detect(&client, &request.ip, port, &options).map_err(|e| ErrorResponse::from(&e))?;
+
+    if let Some(access) = &snapshot.whatsminer_access {
+        if let Some(mac) = &access.mac {
+            creds.remember_ip_mac(&request.ip, mac);
+        }
+    }
 
     *state.last_snapshot.lock().unwrap() = Some(snapshot.clone());
 
     Ok(ReadMinerResponse { snapshot })
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct WhatsminerHostRequest {
+    ip: String,
+    #[serde(default)]
+    whatsminer_auth: Option<WhatsminerAuthRequest>,
+}
+
+#[derive(Debug, Serialize)]
+struct ProbeWhatsminerResponse {
+    access: WhatsminerAccessInfo,
+}
+
+#[tauri::command(rename = "probe_whatsminer_access")]
+fn probe_whatsminer_access_command(
+    creds: State<'_, miner_credentials::MinerCredentialsState>,
+    request: WhatsminerHostRequest,
+) -> Result<ProbeWhatsminerResponse, ErrorResponse> {
+    let cloud_auth = if request.whatsminer_auth.is_none() {
+        creds.resolve_auth_for_ip(&request.ip)
+    } else {
+        None
+    };
+    let options = fetch_options_from_request(request.whatsminer_auth, cloud_auth);
+    let status = probe_whatsminer_access(&request.ip, &options);
+    let needs_setup = compute_needs_setup(&status, true, true);
+    if let Some(mac) = &status.mac {
+        creds.remember_ip_mac(&request.ip, mac);
+    }
+    Ok(ProbeWhatsminerResponse {
+        access: status.to_info(needs_setup),
+    })
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct EnableWhatsminerApiRequest {
+    ip: String,
+    username: String,
+    password: String,
+}
+
+#[derive(Debug, Serialize)]
+struct EnableWhatsminerApiResponse {
+    enabled: bool,
+    access: WhatsminerAccessInfo,
+}
+
+#[tauri::command]
+fn enable_whatsminer_api(
+    creds: State<'_, miner_credentials::MinerCredentialsState>,
+    request: EnableWhatsminerApiRequest,
+) -> Result<EnableWhatsminerApiResponse, ErrorResponse> {
+    let enabled = enable_api_switch(&request.ip, &request.username, &request.password);
+    let options = fetch_options_from_request(
+        Some(WhatsminerAuthRequest {
+            username: request.username.clone(),
+            password: request.password.clone(),
+        }),
+        None,
+    );
+    let status = probe_whatsminer_access(&request.ip, &options);
+    if let Some(mac) = &status.mac {
+        creds.remember_ip_mac(&request.ip, mac);
+    }
+    Ok(EnableWhatsminerApiResponse {
+        enabled,
+        access: status.to_info(!enabled || !status.luci_auth_ok),
+    })
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct TestWhatsminerCredentialsRequest {
+    ip: String,
+    username: String,
+    password: String,
+}
+
+#[derive(Debug, Serialize)]
+struct TestWhatsminerCredentialsResponse {
+    ok: bool,
+    mac: Option<String>,
+}
+
+#[tauri::command(rename = "test_whatsminer_credentials")]
+fn test_whatsminer_credentials_command(
+    creds: State<'_, miner_credentials::MinerCredentialsState>,
+    request: TestWhatsminerCredentialsRequest,
+) -> Result<TestWhatsminerCredentialsResponse, ErrorResponse> {
+    let ok = test_luci_credentials(&request.ip, &request.username, &request.password);
+    let mac = minerpulse_core::drivers::whatsminer::access::fetch_device_info(&request.ip)
+        .and_then(|info| info.mac);
+    if ok {
+        if let Some(ref mac) = mac {
+            creds.remember_ip_mac(&request.ip, mac);
+        }
+    }
+    Ok(TestWhatsminerCredentialsResponse { ok, mac })
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -316,6 +434,7 @@ fn get_poll_status(state: State<'_, AppState>) -> PollStatusResponse {
 async fn start_poll(
     app: AppHandle,
     state: State<'_, AppState>,
+    creds: State<'_, miner_credentials::MinerCredentialsState>,
     request: StartPollRequest,
 ) -> Result<(), ErrorResponse> {
     let tier = *state.tier.lock().unwrap();
@@ -339,15 +458,21 @@ async fn start_poll(
     let port = request.port.unwrap_or(4028);
     let poll_rate_hz = normalize_poll_rate_hz(request.poll_rate_hz);
     let record_path = request.record_path.map(PathBuf::from);
-    let fetch_options = fetch_options_from_request(request.whatsminer_auth);
+    let cloud_auth = if request.whatsminer_auth.is_none() {
+        creds.resolve_auth_for_ip(&request.ip)
+    } else {
+        None
+    };
+    let fetch_options = fetch_options_from_request(request.whatsminer_auth, cloud_auth);
     let cancel = Arc::clone(&state.poll.cancel);
     let app_for_poll = app.clone();
+    let poll_ip = request.ip.clone();
 
     tauri::async_runtime::spawn(async move {
         let poll_result = tauri::async_runtime::spawn_blocking(move || {
             run_poll_loop(
                 &app_for_poll,
-                &request.ip,
+                &poll_ip,
                 port,
                 poll_rate_hz,
                 tier,
@@ -901,6 +1026,12 @@ pub fn run() {
             license::login_license,
             license::logout_license,
             license::refresh_license,
+            miner_credentials::sync_miner_credentials,
+            miner_credentials::save_miner_credential,
+            miner_credentials::list_miner_credentials,
+            probe_whatsminer_access_command,
+            enable_whatsminer_api,
+            test_whatsminer_credentials_command,
             read_miner,
             start_poll,
             stop_poll,
@@ -923,6 +1054,10 @@ pub fn run() {
             let license = license::LicenseState::new(app.handle())
                 .map_err(|e| format!("license init failed: {:?}", e.code))?;
             app.manage(license);
+            let miner_creds = miner_credentials::MinerCredentialsState::new(app.handle())
+                .map_err(|e| format!("miner credentials init failed: {:?}", e.code))?;
+            app.manage(miner_creds);
+            miner_credentials::MinerCredentialsState::spawn_periodic_sync(app.handle().clone());
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let sync_app = app_handle.clone();
