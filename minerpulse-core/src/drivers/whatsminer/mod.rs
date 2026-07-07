@@ -100,10 +100,10 @@ impl WhatsminerDriver {
                 .unwrap_or_default()
         };
 
-        let (board_chips, btminer_log) = if options.fast_poll {
-            (Vec::new(), String::new())
-        } else {
+        let (board_chips, btminer_log) = if options.fetch_chips || !options.fast_poll {
             fetch_btminer_chip_data(host, options)
+        } else {
+            (Vec::new(), String::new())
         };
 
         let mut snapshot = parse_whatsminer_snapshot(

@@ -14,12 +14,26 @@ pub struct WhatsminerFetchOptions {
     /// Skip slow LuCI chip dump and non-essential API calls (poll / fast read).
     #[serde(default)]
     pub fast_poll: bool,
+    /// LuCI chip matrix — independent of `fast_poll` (read path).
+    #[serde(default)]
+    pub fetch_chips: bool,
 }
 
 impl WhatsminerFetchOptions {
     pub fn fast_read() -> Self {
         Self {
             fast_poll: true,
+            fetch_chips: false,
+            ..Default::default()
+        }
+    }
+
+    /// 4028 telemetry only; LuCI chip dump when credentials are available.
+    pub fn read_once(luci_auth: Option<WhatsminerLuciAuth>) -> Self {
+        Self {
+            fast_poll: true,
+            fetch_chips: true,
+            luci_auth,
             ..Default::default()
         }
     }
@@ -64,6 +78,7 @@ mod tests {
                 password: "root".into(),
             }),
             fast_poll: false,
+            fetch_chips: false,
         };
         let pairs = options.luci_credential_pairs();
         assert_eq!(pairs, vec![("root".to_string(), "root".to_string())]);

@@ -61,6 +61,13 @@ impl MinerPulseError {
     pub fn operation_cancelled() -> Self {
         Self::with_code(ErrorCode::OperationCancelled)
     }
+
+    pub fn no_port_response(port: u16) -> Self {
+        MinerPulseError::Coded {
+            code: ErrorCode::ConnFailed,
+            message: Some(port.to_string()),
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -73,12 +80,20 @@ pub struct ErrorResponse {
 impl From<&MinerPulseError> for ErrorResponse {
     fn from(err: &MinerPulseError) -> Self {
         match err {
-            MinerPulseError::Coded { code, message } => ErrorResponse {
-                code: *code,
-                args: message
-                    .as_ref()
-                    .map(|s| serde_json::json!({ "sec": s.parse::<u64>().unwrap_or(0) })),
-            },
+            MinerPulseError::Coded { code, message } => {
+                let args = if *code == ErrorCode::ConnFailed {
+                    message
+                        .as_ref()
+                        .and_then(|m| m.parse::<u16>().ok())
+                        .map(|port| serde_json::json!({ "port": port }))
+                } else {
+                    message
+                        .as_ref()
+                        .and_then(|s| s.parse::<u64>().ok())
+                        .map(|sec| serde_json::json!({ "sec": sec }))
+                };
+                ErrorResponse { code: *code, args }
+            }
         }
     }
 }

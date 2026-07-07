@@ -133,6 +133,7 @@ fn read_miner_snapshot(
     ip: &str,
     port: u16,
     user_auth: Option<WhatsminerAuthRequest>,
+    cached_cloud: Option<WhatsminerLuciAuth>,
     cancel: &AtomicBool,
 ) -> Result<MinerSnapshot, MinerPulseError> {
     if cancel.load(Ordering::Relaxed) {
@@ -140,13 +141,13 @@ fn read_miner_snapshot(
     }
 
     let client = TcpCgminerClient::for_read();
-    let mut wm_options = FetchOptions::fast_read();
-    if let Some(auth) = user_auth {
-        wm_options.luci_auth = Some(WhatsminerLuciAuth {
+    let luci_auth = user_auth
+        .map(|auth| WhatsminerLuciAuth {
             username: auth.username,
             password: auth.password,
-        });
-    }
+        })
+        .or(cached_cloud);
+    let wm_options = FetchOptions::read_once(luci_auth);
     fetch_with_detect(&client, ip, port, &wm_options)
 }
 
@@ -179,6 +180,7 @@ fn fetch_options_from_request(
     FetchOptions {
         luci_auth,
         fast_poll: false,
+        fetch_chips: false,
     }
 }
 
@@ -330,6 +332,12 @@ async fn read_miner(
 
     let port = request.port.unwrap_or(4028);
     let user_auth = request.whatsminer_auth.clone();
+    let cached_cloud = if request.whatsminer_auth.is_none() {
+        app.state::<miner_credentials::MinerCredentialsState>()
+            .resolve_auth_for_ip(&request.ip)
+    } else {
+        None
+    };
     let ip = request.ip.clone();
 
     {
@@ -345,7 +353,7 @@ async fn read_miner(
     let snapshot_result = tokio::time::timeout(
         MINER_READ_TIMEOUT,
         tauri::async_runtime::spawn_blocking(move || {
-            read_miner_snapshot(&ip, port, user_auth, cancel.as_ref())
+            read_miner_snapshot(&ip, port, user_auth, cached_cloud, cancel.as_ref())
         }),
     )
     .await;

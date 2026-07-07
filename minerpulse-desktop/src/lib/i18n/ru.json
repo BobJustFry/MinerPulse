@@ -168,6 +168,7 @@
   "status.sessionLoaded": "Сессия загружена: {count} кадров",
   "error.RATE_LIMIT": "Подождите {sec} сек",
   "error.CONN_FAILED": "Не удалось подключиться",
+  "error.CONN_NO_RESPONSE": "Нет ответа на порту {port} (CGMiner API)",
   "error.CONN_TIMEOUT": "Таймаут подключения",
   "error.STREAM_BROKEN": "Обрыв соединения",
   "error.NOT_SUPPORTED": "Майнер не поддерживается",

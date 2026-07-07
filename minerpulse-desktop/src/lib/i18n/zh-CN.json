@@ -168,6 +168,7 @@
   "status.sessionLoaded": "会话已加载：{count} 帧",
   "error.RATE_LIMIT": "请等待 {sec} 秒",
   "error.CONN_FAILED": "连接失败",
+  "error.CONN_NO_RESPONSE": "端口 {port} 无响应（CGMiner API）",
   "error.CONN_TIMEOUT": "连接超时",
   "error.STREAM_BROKEN": "连接中断",
   "error.NOT_SUPPORTED": "不支持此矿机",

@@ -26,7 +26,16 @@ export function formatAppError(
   }
 
   const key = `error.${e.code}` as MessageKey;
+  const port = e.args?.port;
+  if (e.code === "CONN_FAILED" && port != null) {
+    const portKey = "error.CONN_NO_RESPONSE" as MessageKey;
+    const translated = t(locale, portKey, { port });
+    if (translated !== portKey) {
+      return translated;
+    }
+  }
   return t(locale, key, {
     sec: e.args?.sec ?? options?.minReadIntervalSec ?? 0,
+    port: port ?? 4028,
   });
 }

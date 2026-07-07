@@ -73,6 +73,10 @@ fn is_error_response(response: &str) -> bool {
         || response.contains("Stream broken")
 }
 
+fn is_meaningful_response(response: &str) -> bool {
+    !response.trim().is_empty() && !is_error_response(response)
+}
+
 /// Detect vendor on 4028, then delegate to **one** driver. `wm_options` is WhatsMiner-only.
 pub fn fetch_with_detect(
     client: &TcpCgminerClient,
@@ -81,37 +85,72 @@ pub fn fetch_with_detect(
     wm_options: &WhatsminerFetchOptions,
 ) -> Result<MinerSnapshot, MinerPulseError> {
     let mut last_stats = String::new();
+    let mut saw_response = false;
+    let mut last_conn_err: Option<MinerPulseError> = None;
 
     for json_mode in [true, false] {
-        if let Ok(stats) = client.send_receive(host, port, "stats", "", json_mode) {
-            if is_error_response(&stats) {
-                continue;
+        match client.send_receive(host, port, "stats", "", json_mode) {
+            Ok(stats) if is_meaningful_response(&stats) => {
+                saw_response = true;
+                last_stats = stats.clone();
+                if let Some(driver) = detect_driver(&stats) {
+                    return driver.fetch_snapshot(client, host, port);
+                }
             }
-            last_stats = stats.clone();
-            if let Some(driver) = detect_driver(&stats) {
-                return driver.fetch_snapshot(client, host, port);
-            }
+            Ok(_) => {}
+            Err(err) => last_conn_err = Some(err),
         }
     }
 
-    let summary = client
-        .send_receive(host, port, "summary", "", true)
-        .unwrap_or_default();
-    let pools_raw = client
-        .send_receive(host, port, "pools", "", true)
-        .unwrap_or_default();
-    let devs_raw = client
-        .send_receive(host, port, "devs", "", true)
-        .unwrap_or_default();
+    let summary = match client.send_receive(host, port, "summary", "", true) {
+        Ok(value) if is_meaningful_response(&value) => {
+            saw_response = true;
+            value
+        }
+        Ok(_) => String::new(),
+        Err(err) => {
+            last_conn_err = Some(err);
+            String::new()
+        }
+    };
+
+    let pools_raw = match client.send_receive(host, port, "pools", "", true) {
+        Ok(value) if is_meaningful_response(&value) => {
+            saw_response = true;
+            value
+        }
+        Ok(_) => String::new(),
+        Err(err) => {
+            last_conn_err = Some(err);
+            String::new()
+        }
+    };
+
+    let devs_raw = match client.send_receive(host, port, "devs", "", true) {
+        Ok(value) if is_meaningful_response(&value) => {
+            saw_response = true;
+            value
+        }
+        Ok(_) => String::new(),
+        Err(err) => {
+            last_conn_err = Some(err);
+            String::new()
+        }
+    };
 
     if WhatsminerDriver::detect(&summary) || WhatsminerDriver::detect(&last_stats) {
         return WhatsminerDriver::fetch_with_options(client, host, port, wm_options);
     }
 
-    if let Ok(payload_summary) = client.send_payload(host, port, r#"{"cmd":"summary"}"#) {
-        if WhatsminerDriver::detect(&payload_summary) {
-            return WhatsminerDriver::fetch_with_options(client, host, port, wm_options);
+    match client.send_payload(host, port, r#"{"cmd":"summary"}"#) {
+        Ok(payload_summary) if is_meaningful_response(&payload_summary) => {
+            saw_response = true;
+            if WhatsminerDriver::detect(&payload_summary) {
+                return WhatsminerDriver::fetch_with_options(client, host, port, wm_options);
+            }
         }
+        Err(err) => last_conn_err = Some(err),
+        _ => {}
     }
 
     if AntminerDriver::detect(&last_stats)
@@ -119,10 +158,14 @@ pub fn fetch_with_detect(
         || last_stats.contains("Antminer")
     {
         let stats = if last_stats.is_empty() {
-            client
-                .send_receive(host, port, "stats", "", true)
-                .or_else(|_| client.send_receive(host, port, "stats", "", false))
-                .unwrap_or_default()
+            match client.send_receive(host, port, "stats", "", true) {
+                Ok(value) if is_meaningful_response(&value) => value,
+                Ok(_) => String::new(),
+                Err(err) => {
+                    last_conn_err = Some(err);
+                    String::new()
+                }
+            }
         } else {
             last_stats
         };
@@ -132,6 +175,13 @@ pub fn fetch_with_detect(
             &pools_raw,
             &devs_raw,
         ));
+    }
+
+    if !saw_response {
+        if let Some(err) = last_conn_err {
+            return Err(err);
+        }
+        return Err(MinerPulseError::no_port_response(port));
     }
 
     Err(MinerPulseError::with_code(

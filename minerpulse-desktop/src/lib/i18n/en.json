@@ -168,6 +168,7 @@
   "status.sessionLoaded": "Session loaded: {count} frames",
   "error.RATE_LIMIT": "Wait {sec} sec",
   "error.CONN_FAILED": "Connection failed",
+  "error.CONN_NO_RESPONSE": "No response on port {port} (CGMiner API)",
   "error.CONN_TIMEOUT": "Connection timeout",
   "error.STREAM_BROKEN": "Stream broken",
   "error.NOT_SUPPORTED": "Miner not supported",
