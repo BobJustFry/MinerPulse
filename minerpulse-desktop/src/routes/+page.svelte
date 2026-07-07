@@ -26,7 +26,6 @@
     type ParseImportResponse,
   } from "$lib/importFile";
   import { setupFileDrop } from "$lib/setupFileDrop";
-  import { invokeWithTimeout, MINER_READ_TIMEOUT_MS } from "$lib/minerInvoke";
   import {
     DEFAULT_POLL_RATE_HZ,
     getPollStatus,
@@ -372,7 +371,7 @@
   }
 
   async function readMiner() {
-    if (polling || reading) return;
+    if (polling || connectionLocked || reading) return;
     if (readCooldownActive) return;
 
     const hadSnapshot = snapshot !== null;
@@ -384,18 +383,13 @@
     }
 
     try {
-      const response = await invokeWithTimeout<{ snapshot: MinerSnapshot }>(
-        "read_miner",
-        {
-          request: {
-            ip,
-            port: Number(port) || 4028,
-            whatsminer_auth: whatsminerAuthPayload(),
-          },
+      const response = await invoke<{ snapshot: MinerSnapshot }>("read_miner", {
+        request: {
+          ip,
+          port: Number(port) || 4028,
+          whatsminer_auth: whatsminerAuthPayload(),
         },
-        MINER_READ_TIMEOUT_MS,
-        () => invoke("cancel_read"),
-      );
+      });
 
       if (gen !== readGeneration) return;
 
@@ -440,7 +434,6 @@
     if (!reading) return;
     readGeneration += 1;
     dropActive = false;
-    void invoke("cancel_read");
     reading = false;
     statusText = msg("status.readCancelled");
   }

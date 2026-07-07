@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export const MINER_READ_TIMEOUT_MS = 10_000;
+export const MINER_READ_TIMEOUT_MS = 20_000;
 
 export async function invokeWithTimeout<T>(
   cmd: string,
@@ -9,19 +9,26 @@ export async function invokeWithTimeout<T>(
   onTimeout?: () => void | Promise<void>,
 ): Promise<T> {
   let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    void onTimeout?.();
-  }, timeoutMs);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      void onTimeout?.();
+      reject({ code: "CONN_TIMEOUT", args: null });
+    }, timeoutMs);
+  });
 
   try {
-    return await invoke<T>(cmd, args);
+    return await Promise.race([invoke<T>(cmd, args), timeoutPromise]);
   } catch (err) {
     if (timedOut) {
       throw { code: "CONN_TIMEOUT", args: null };
     }
     throw err;
   } finally {
-    clearTimeout(timer);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
   }
 }

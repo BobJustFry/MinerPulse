@@ -7,7 +7,7 @@ use minerpulse_core::{
     TcpCgminerClient, WhatsminerAccessInfo, WhatsminerLuciAuth,
     MAX_SESSION_DURATION_SEC, normalize_poll_rate_hz, poll_interval_ms, poll_wait_after_tick,
 };
-use minerpulse_core::model::BoardChipMap;
+use minerpulse_core::model::{BoardChipMap, MinerVendor};
 
 mod license;
 mod miner_credentials;
@@ -54,39 +54,6 @@ struct PollSession {
     recording: Arc<AtomicBool>,
 }
 
-struct ReadSession {
-    cancel: Arc<AtomicBool>,
-    running: Arc<AtomicBool>,
-}
-
-impl ReadSession {
-    fn new() -> Self {
-        Self {
-            cancel: Arc::new(AtomicBool::new(false)),
-            running: Arc::new(AtomicBool::new(false)),
-        }
-    }
-
-    fn try_begin(&self) -> Result<(), ErrorResponse> {
-        if self.running.swap(true, Ordering::SeqCst) {
-            return Err(ErrorResponse {
-                code: minerpulse_core::ErrorCode::InvalidInput,
-                args: None,
-            });
-        }
-        self.cancel.store(false, Ordering::SeqCst);
-        Ok(())
-    }
-
-    fn finish(&self) {
-        self.running.store(false, Ordering::SeqCst);
-    }
-
-    fn request_cancel(&self) {
-        self.cancel.store(true, Ordering::Relaxed);
-    }
-}
-
 impl PollSession {
     fn new() -> Self {
         Self {
@@ -124,31 +91,106 @@ struct AppState {
     last_snapshot: Mutex<Option<minerpulse_core::MinerSnapshot>>,
     scan: ScanSession,
     poll: PollSession,
-    read: ReadSession,
 }
 
-const MINER_READ_TIMEOUT: Duration = Duration::from_secs(10);
+const MINER_READ_TIMEOUT: Duration = Duration::from_secs(30);
 
-fn read_miner_snapshot(
-    ip: &str,
-    port: u16,
-    user_auth: Option<WhatsminerAuthRequest>,
-    cached_cloud: Option<WhatsminerLuciAuth>,
-    cancel: &AtomicBool,
-) -> Result<MinerSnapshot, MinerPulseError> {
-    if cancel.load(Ordering::Relaxed) {
-        return Err(MinerPulseError::operation_cancelled());
+#[tauri::command]
+async fn read_miner(
+    app: AppHandle,
+    request: ReadMinerRequest,
+) -> Result<ReadMinerResponse, ErrorResponse> {
+    let state_for_tier = app.state::<AppState>();
+    let tier = *state_for_tier.tier.lock().unwrap();
+    let g = gate(tier);
+
+    if !g.can_poll() {
+        let state = app.state::<AppState>();
+        let mut limiter = state.rate_limiter.lock().unwrap();
+        limiter
+            .try_acquire()
+            .map_err(|e| ErrorResponse::from(&e))?;
     }
 
-    let client = TcpCgminerClient::for_read();
+    let port = request.port.unwrap_or(4028);
+    let user_auth = request.whatsminer_auth.clone();
+    let cached_cloud = if request.whatsminer_auth.is_none() {
+        app.state::<miner_credentials::MinerCredentialsState>()
+            .resolve_auth_for_ip(&request.ip)
+    } else {
+        None
+    };
+    let ip = request.ip.clone();
     let luci_auth = user_auth
+        .as_ref()
         .map(|auth| WhatsminerLuciAuth {
-            username: auth.username,
-            password: auth.password,
+            username: auth.username.clone(),
+            password: auth.password.clone(),
         })
-        .or(cached_cloud);
-    let wm_options = FetchOptions::read_once(luci_auth);
-    fetch_with_detect(&client, ip, port, &wm_options)
+        .or(cached_cloud.clone());
+
+    let snapshot_result = tokio::time::timeout(
+        MINER_READ_TIMEOUT,
+        tauri::async_runtime::spawn_blocking(move || {
+            let client = TcpCgminerClient::default();
+            let detect_options = FetchOptions {
+                luci_auth: luci_auth.clone(),
+                fast_poll: true,
+                fetch_chips: false,
+            };
+            let mut snapshot = fetch_with_detect(&client, &ip, port, &detect_options)?;
+
+            if snapshot.identity.vendor == MinerVendor::Whatsminer && snapshot.board_chips.is_empty() {
+                let chip_options = FetchOptions {
+                    luci_auth,
+                    fast_poll: true,
+                    fetch_chips: true,
+                };
+                if let Ok(wm) = fetch_whatsminer(&client, &ip, port, &chip_options) {
+                    snapshot.board_chips = wm.board_chips;
+                }
+            }
+
+            Ok::<MinerSnapshot, MinerPulseError>(snapshot)
+        }),
+    )
+    .await;
+
+    let snapshot = match snapshot_result {
+        Err(_) => {
+            return Err(ErrorResponse {
+                code: minerpulse_core::ErrorCode::ConnTimeout,
+                args: None,
+            });
+        }
+        Ok(Ok(Ok(snapshot))) => snapshot,
+        Ok(Ok(Err(err))) => return Err(ErrorResponse::from(&err)),
+        Ok(Err(_)) => {
+            return Err(ErrorResponse {
+                code: minerpulse_core::ErrorCode::InvalidInput,
+                args: None,
+            });
+        }
+    };
+
+    if let Some(access) = &snapshot.whatsminer_access {
+        if let Some(mac) = &access.mac {
+            app.state::<miner_credentials::MinerCredentialsState>()
+                .remember_ip_mac(&request.ip, mac);
+        }
+    }
+
+    *app.state::<AppState>()
+        .last_snapshot
+        .lock()
+        .unwrap() = Some(snapshot.clone());
+
+    Ok(ReadMinerResponse { snapshot })
+}
+
+#[tauri::command]
+fn cancel_read(_app: AppHandle) {
+    // Read is not session-gated; cancel is handled on the frontend.
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -311,91 +353,6 @@ fn set_tier(state: State<'_, AppState>, tier: SubscriptionTier) -> Result<(), Er
         *state.tier.lock().unwrap() = tier;
         Ok(())
     }
-}
-
-#[tauri::command]
-async fn read_miner(
-    app: AppHandle,
-    request: ReadMinerRequest,
-) -> Result<ReadMinerResponse, ErrorResponse> {
-    let state_for_tier = app.state::<AppState>();
-    let tier = *state_for_tier.tier.lock().unwrap();
-    let g = gate(tier);
-
-    if !g.can_poll() {
-        let state = app.state::<AppState>();
-        let mut limiter = state.rate_limiter.lock().unwrap();
-        limiter
-            .try_acquire()
-            .map_err(|e| ErrorResponse::from(&e))?;
-    }
-
-    let port = request.port.unwrap_or(4028);
-    let user_auth = request.whatsminer_auth.clone();
-    let cached_cloud = if request.whatsminer_auth.is_none() {
-        app.state::<miner_credentials::MinerCredentialsState>()
-            .resolve_auth_for_ip(&request.ip)
-    } else {
-        None
-    };
-    let ip = request.ip.clone();
-
-    {
-        let state = app.state::<AppState>();
-        state.read.try_begin()?;
-    }
-
-    let cancel = {
-        let state = app.state::<AppState>();
-        Arc::clone(&state.read.cancel)
-    };
-
-    let snapshot_result = tokio::time::timeout(
-        MINER_READ_TIMEOUT,
-        tauri::async_runtime::spawn_blocking(move || {
-            read_miner_snapshot(&ip, port, user_auth, cached_cloud, cancel.as_ref())
-        }),
-    )
-    .await;
-
-    app.state::<AppState>().read.finish();
-
-    let snapshot = match snapshot_result {
-        Err(_) => {
-            app.state::<AppState>().read.request_cancel();
-            return Err(ErrorResponse {
-                code: minerpulse_core::ErrorCode::ConnTimeout,
-                args: None,
-            });
-        }
-        Ok(Ok(Ok(snapshot))) => snapshot,
-        Ok(Ok(Err(err))) => return Err(ErrorResponse::from(&err)),
-        Ok(Err(_)) => {
-            return Err(ErrorResponse {
-                code: minerpulse_core::ErrorCode::InvalidInput,
-                args: None,
-            });
-        }
-    };
-
-    if let Some(access) = &snapshot.whatsminer_access {
-        if let Some(mac) = &access.mac {
-            app.state::<miner_credentials::MinerCredentialsState>()
-                .remember_ip_mac(&request.ip, mac);
-        }
-    }
-
-    *app.state::<AppState>()
-        .last_snapshot
-        .lock()
-        .unwrap() = Some(snapshot.clone());
-
-    Ok(ReadMinerResponse { snapshot })
-}
-
-#[tauri::command]
-fn cancel_read(app: AppHandle) {
-    app.state::<AppState>().read.request_cancel();
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1112,6 +1069,30 @@ fn get_app_version() -> AppVersionInfo {
 }
 
 #[cfg(windows)]
+fn is_windows_10() -> bool {
+    let info = os_info::get();
+    if info.os_type() != os_info::Type::Windows {
+        return false;
+    }
+    info.version()
+        .to_string()
+        .rsplit('.')
+        .next()
+        .and_then(|s| s.parse::<u32>().ok())
+        .map_or(false, |build| build < 22000)
+}
+
+/// Win10: OS shadow off (colored side stripes). Win11: OS shadow on + DWM border = app bg.
+#[cfg(windows)]
+fn configure_window_chrome(window: &tauri::WebviewWindow, dark: bool) {
+    let win10 = is_windows_10();
+    let _ = window.set_shadow(!win10);
+    if !win10 {
+        apply_windows_frame(window, dark);
+    }
+}
+
+#[cfg(windows)]
 fn apply_windows_frame(window: &tauri::WebviewWindow, dark: bool) {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_BORDER_COLOR};
@@ -1120,7 +1101,7 @@ fn apply_windows_frame(window: &tauri::WebviewWindow, dark: bool) {
         return;
     };
     let hwnd = HWND(raw.0 as _);
-    // Match --bg-base in app.css (dark #0f1117, light #f5f6f8), BGR for DWM.
+    // BGR: match --bg-base so Win11 does not paint the default accent border.
     let border_color: u32 = if dark { 0x0017_110f } else { 0x00f8_f6f5 };
     unsafe {
         let _ = DwmSetWindowAttribute(
@@ -1133,6 +1114,12 @@ fn apply_windows_frame(window: &tauri::WebviewWindow, dark: bool) {
 }
 
 #[cfg(not(windows))]
+fn configure_window_chrome(window: &tauri::WebviewWindow, dark: bool) {
+    let _ = dark;
+    let _ = window.set_shadow(true);
+}
+
+#[cfg(not(windows))]
 fn apply_windows_frame(_window: &tauri::WebviewWindow, _dark: bool) {}
 
 #[tauri::command]
@@ -1140,7 +1127,7 @@ fn sync_window_frame(app: tauri::AppHandle, theme: String) {
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
-    apply_windows_frame(&window, theme == "dark");
+    configure_window_chrome(&window, theme == "dark");
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1156,7 +1143,6 @@ pub fn run() {
             last_snapshot: Mutex::new(None),
             scan: ScanSession::new(),
             poll: PollSession::new(),
-            read: ReadSession::new(),
         })
         .invoke_handler(tauri::generate_handler![
             get_entitlements,
@@ -1220,8 +1206,7 @@ pub fn run() {
                 let product = meta["product"].as_str().unwrap_or("Miner Pulse");
                 let title = format_app_display(product, version, build);
                 let _ = window.set_title(&title);
-                let _ = window.set_shadow(true);
-                apply_windows_frame(&window, true);
+                configure_window_chrome(&window, true);
             }
             Ok(())
         })

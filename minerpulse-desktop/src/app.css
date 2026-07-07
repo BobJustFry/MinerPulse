@@ -75,6 +75,17 @@ button {
   overflow: hidden;
   position: relative;
   background: var(--bg-base);
+  outline: 1px solid var(--border);
+  outline-offset: -1px;
+}
+
+[data-theme="light"] .app-shell {
+  outline-color: #b8bec8;
+  filter: drop-shadow(0 14px 36px rgba(16, 24, 40, 0.16));
+}
+
+[data-theme="dark"] .app-shell {
+  filter: drop-shadow(0 16px 44px rgba(0, 0, 0, 0.48));
 }
 
 .window-caption {
