@@ -157,9 +157,8 @@ button {
   background: #e81123;
 }
 
-.app-shell.drop-active {
-  outline: 2px dashed var(--accent);
-  outline-offset: -6px;
+.app-shell.drop-active .drop-overlay {
+  pointer-events: none;
 }
 
 .drop-overlay {
@@ -1988,9 +1987,9 @@ button {
   place-items: center;
   min-height: 320px;
   color: var(--text-muted);
-  border: 1px dashed var(--border);
+  border: none;
   border-radius: var(--radius);
-  background: var(--accent-soft);
+  background: transparent;
 }
 
 .tier-badge {

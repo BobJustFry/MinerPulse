@@ -30,6 +30,7 @@ export interface MinerSnapshot {
     firmware: string;
     driver_id: string;
     core_chip?: string | null;
+    mac?: string | null;
   };
   hashrate: {
     current_ghs: number;

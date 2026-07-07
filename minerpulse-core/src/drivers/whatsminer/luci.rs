@@ -3,12 +3,14 @@ use crate::fetch_options::FetchOptions;
 use crate::model::BoardChipMap;
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, SET_COOKIE};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 const LUCI_SESSION_TTL: Duration = Duration::from_secs(600);
 const HTTP_TIMEOUT: Duration = Duration::from_secs(4);
+const LUCI_LOGIN_TIMEOUT: Duration = Duration::from_secs(3);
 
 struct LuciSession {
     cookie: String,
@@ -101,6 +103,46 @@ pub fn luci_reachable(host: &str) -> bool {
     false
 }
 
+pub fn verify_luci_login(host: &str, username: &str, password: &str) -> bool {
+    let client = match build_luci_client_with_timeout(LUCI_LOGIN_TIMEOUT) {
+        Ok(client) => client,
+        Err(_) => return false,
+    };
+    for scheme in ["https", "http"] {
+        let base = format!("{scheme}://{host}");
+        if luci_login_with_client(&client, &base, username, password).is_some() {
+            return true;
+        }
+    }
+    false
+}
+
+/// LuCI network status — `macaddr` from `/admin/network/iface_status/lan` (amazingFarm).
+pub fn fetch_lan_macaddr(host: &str, username: &str, password: &str) -> Option<String> {
+    use crate::drivers::whatsminer::access::normalize_mac;
+
+    let client = build_luci_client_with_timeout(LUCI_LOGIN_TIMEOUT).ok()?;
+    for scheme in ["https", "http"] {
+        let base = format!("{scheme}://{host}");
+        let cookie = luci_login_with_client(&client, &base, username, password)?;
+        let url = format!("{base}/cgi-bin/luci/admin/network/iface_status/lan");
+        let response = client.get(&url).header("Cookie", cookie).send().ok()?;
+        if !response.status().is_success() {
+            continue;
+        }
+        let body = response.text().ok()?;
+        let value: Value = serde_json::from_str(&body).ok()?;
+        let mac = value
+            .as_array()
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("macaddr"))
+            .and_then(|v| v.as_str())
+            .map(normalize_mac)?;
+        return Some(mac);
+    }
+    None
+}
+
 pub fn test_luci_credentials(host: &str, username: &str, password: &str) -> bool {
     let client = match build_luci_client() {
         Ok(client) => client,
@@ -177,9 +219,13 @@ pub fn enable_api_switch_luci(host: &str, username: &str, password: &str) -> boo
 }
 
 fn build_luci_client() -> Result<Client, ()> {
+    build_luci_client_with_timeout(HTTP_TIMEOUT)
+}
+
+fn build_luci_client_with_timeout(timeout: Duration) -> Result<Client, ()> {
     Client::builder()
         .danger_accept_invalid_certs(true)
-        .timeout(HTTP_TIMEOUT)
+        .timeout(timeout)
         .redirect(reqwest::redirect::Policy::limited(4))
         .build()
         .map_err(|_| ())
@@ -222,7 +268,15 @@ fn luci_login(_client: &Client, base: &str, username: &str, password: &str) -> O
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .ok()?;
+    luci_login_with_client(&login_client, base, username, password)
+}
 
+fn luci_login_with_client(
+    login_client: &Client,
+    base: &str,
+    username: &str,
+    password: &str,
+) -> Option<String> {
     let login_url = format!("{base}/cgi-bin/luci");
     let response = login_client
         .post(&login_url)

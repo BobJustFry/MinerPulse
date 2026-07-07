@@ -239,7 +239,7 @@ mod tests {
                 model: "Avalon 1326".into(),
                 firmware: "1326".into(),
                 driver_id: "avalon".into(),
-                core_chip: None,
+                ..Default::default()
             },
             hashrate: HashrateStats {
                 current_ghs: 1000.0,

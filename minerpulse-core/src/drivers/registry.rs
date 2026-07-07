@@ -79,6 +79,7 @@ pub fn fetch_with_detect(
     port: u16,
     options: &FetchOptions,
 ) -> Result<MinerSnapshot, MinerPulseError> {
+    // Phase 1: CGMiner on `port` (4028) — detect vendor, then delegate to driver.
     let mut last_stats = String::new();
 
     for json_mode in [true, false] {

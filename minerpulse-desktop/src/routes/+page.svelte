@@ -216,11 +216,24 @@
   function shouldPromptWhatsminerSetup(nextSnapshot: MinerSnapshot) {
     if (nextSnapshot.identity.vendor !== "whatsminer") return false;
     if (whatsminerAuthPrompted) return false;
-    if (nextSnapshot.whatsminer_access?.needs_setup) return true;
-    return (
-      (nextSnapshot.board_chips?.length ?? 0) === 0 &&
-      (isSnapshotEmpty(nextSnapshot) || !nextSnapshot.whatsminer_access?.luci_auth_ok)
-    );
+    return nextSnapshot.whatsminer_access?.needs_setup === true;
+  }
+
+  async function refreshWhatsminerSetupAccess() {
+    try {
+      const response = await invoke<{ access: WhatsminerAccessInfo }>(
+        "probe_whatsminer_access",
+        {
+          request: {
+            ip,
+            whatsminer_auth: whatsminerAuthPayload(),
+          },
+        },
+      );
+      whatsminerSetupAccess = response.access;
+    } catch {
+      /* keep existing status lines */
+    }
   }
 
   function promptWhatsminerSetup(nextSnapshot?: MinerSnapshot, retry?: () => Promise<void>) {
@@ -234,6 +247,7 @@
       whatsminerPassword = "admin";
     }
     whatsminerAuthOpen = true;
+    void refreshWhatsminerSetupAccess();
   }
 
   function loadConnection() {
@@ -362,6 +376,7 @@
     const hadSnapshot = snapshot !== null;
     reading = true;
     connectionLocked = true;
+    dropActive = false;
     if (!hadSnapshot) {
       statusText = msg("status.reading");
     }

@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::time::Duration;
 
-use super::luci::{enable_api_switch_luci, test_luci_credentials};
+use super::luci::enable_api_switch_luci;
 
 pub const WHATSMINER_API_PORT: u16 = 4433;
 
@@ -50,7 +50,7 @@ pub fn probe_whatsminer_access(host: &str, options: &FetchOptions, skip_luci_pro
         status.luci_auth_ok = true;
     } else {
         for (username, password) in options.luci_credential_pairs() {
-            if test_luci_credentials(host, &username, &password) {
+            if super::luci::verify_luci_login(host, &username, &password) {
                 status.luci_reachable = true;
                 status.luci_auth_ok = true;
                 break;
@@ -59,6 +59,15 @@ pub fn probe_whatsminer_access(host: &str, options: &FetchOptions, skip_luci_pro
 
         if !status.luci_auth_ok {
             status.luci_reachable = super::luci::luci_reachable(host);
+        }
+    }
+
+    if status.mac.is_none() {
+        for (username, password) in options.luci_credential_pairs() {
+            if let Some(mac) = super::luci::fetch_lan_macaddr(host, &username, &password) {
+                status.mac = Some(mac);
+                break;
+            }
         }
     }
 
@@ -80,6 +89,10 @@ pub fn compute_needs_setup(
     board_chips_empty: bool,
 ) -> bool {
     if !snapshot_empty && !board_chips_empty {
+        return false;
+    }
+    // Telemetry works and API + LuCI credentials are valid — no blocking setup dialog.
+    if !snapshot_empty && status.api_switch == Some(true) && status.luci_auth_ok {
         return false;
     }
     let api_off = status.api_switch == Some(false);
@@ -214,6 +227,19 @@ mod tests {
         assert_eq!(info.mac.as_deref(), Some("CA:01:14:00:04:EB"));
         assert_eq!(info.api_switch, Some(true));
         assert_eq!(info.salt.as_deref(), Some("px5hoXa9"));
+    }
+
+    #[test]
+    fn needs_setup_false_when_api_on_luci_ok_and_has_telemetry() {
+        let status = WhatsminerAccessStatus {
+            api_switch: Some(true),
+            luci_auth_ok: true,
+            luci_reachable: true,
+            api_reachable: true,
+            api_auth_ok: true,
+            ..Default::default()
+        };
+        assert!(!compute_needs_setup(&status, false, true));
     }
 
     #[test]

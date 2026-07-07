@@ -13,6 +13,7 @@ pub enum ErrorCode {
     InvalidInput,
     IoError,
     NoSnapshot,
+    OperationCancelled,
 }
 
 #[derive(Debug, Error)]
@@ -55,6 +56,10 @@ impl MinerPulseError {
             code: ErrorCode::RateLimit,
             message: Some(secs.to_string()),
         }
+    }
+
+    pub fn operation_cancelled() -> Self {
+        Self::with_code(ErrorCode::OperationCancelled)
     }
 }
 

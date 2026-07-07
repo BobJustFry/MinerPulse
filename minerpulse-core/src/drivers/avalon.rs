@@ -335,6 +335,7 @@ pub fn parse_avalon_estats_log(raw: &str) -> MinerSnapshot {
             firmware: firmware.clone(),
             driver_id: "avalon".to_string(),
             core_chip: core_chip.clone(),
+            ..Default::default()
         },
         hashrate,
         thermal,

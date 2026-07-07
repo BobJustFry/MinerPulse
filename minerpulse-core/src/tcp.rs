@@ -39,6 +39,15 @@ impl TcpCgminerClient {
         }
     }
 
+    /// Bounded timeouts for one-shot miner reads (must fit within app-level deadline).
+    pub fn for_read() -> Self {
+        Self {
+            connect_timeout: Duration::from_millis(1500),
+            io_timeout: Duration::from_millis(1500),
+            try_count: 1,
+        }
+    }
+
     pub fn send_command(
         &self,
         host: &str,

@@ -79,6 +79,13 @@ export function setupFileDrop(handlers: {
   window.addEventListener("dragleave", onDragLeave, true);
   window.addEventListener("drop", onDrop, true);
   window.addEventListener("dragend", resetDrag, true);
+  const onVisibilityChange = () => {
+    if (document.visibilityState !== "visible") {
+      resetDrag();
+    }
+  };
+  window.addEventListener("blur", resetDrag);
+  document.addEventListener("visibilitychange", onVisibilityChange);
 
   return () => {
     window.removeEventListener("dragenter", onDragEnter, true);
@@ -86,5 +93,7 @@ export function setupFileDrop(handlers: {
     window.removeEventListener("dragleave", onDragLeave, true);
     window.removeEventListener("drop", onDrop, true);
     window.removeEventListener("dragend", resetDrag, true);
+    window.removeEventListener("blur", resetDrag);
+    document.removeEventListener("visibilitychange", onVisibilityChange);
   };
 }

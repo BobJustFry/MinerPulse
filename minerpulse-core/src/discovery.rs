@@ -2,6 +2,7 @@ use crate::drivers::antminer::{detect_antminer_summary, AntminerDriver};
 use crate::drivers::registry::{detect_vendor, model_from_stats};
 use crate::drivers::MinerDriver;
 use crate::drivers::whatsminer::{classify_for_discovery, classify_whatsminer};
+use crate::mac::fetch_miner_mac;
 use crate::model::MinerVendor;
 use crate::tcp::TcpCgminerClient;
 use rayon::prelude::*;
@@ -37,6 +38,8 @@ pub struct DiscoveredMiner {
     pub vendor: MinerVendor,
     pub model: String,
     pub supported: bool,
+    #[serde(default)]
+    pub mac: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -273,12 +276,18 @@ fn classify_probe_response(response: &str) -> Option<(MinerVendor, String)> {
 }
 
 fn make_discovered(ip: &str, port: u16, vendor: MinerVendor, model: String) -> DiscoveredMiner {
+    let mac = if crate::drivers::registry::driver_available(vendor) {
+        fetch_miner_mac(vendor, ip, None)
+    } else {
+        None
+    };
     DiscoveredMiner {
         ip: ip.to_string(),
         port,
         vendor,
         model,
         supported: crate::drivers::registry::driver_available(vendor),
+        mac,
     }
 }
 

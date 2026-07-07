@@ -20,6 +20,8 @@ pub struct MinerIdentity {
     pub driver_id: String,
     #[serde(default)]
     pub core_chip: Option<String>,
+    #[serde(default)]
+    pub mac: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
