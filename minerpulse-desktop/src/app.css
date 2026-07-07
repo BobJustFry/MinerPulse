@@ -301,20 +301,24 @@ button {
   display: flex;
   flex-direction: column;
   gap: calc(var(--space) * 2);
-  min-height: 100vh;
-  padding: calc(var(--space) * 3);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: calc(var(--space) * 2) calc(var(--space) * 3) calc(var(--space) * 3);
   background: var(--bg-base);
 }
 
-.scan-window-head h1 {
-  margin: 0;
-  font-size: 18px;
+.scan-window-head {
+  flex-shrink: 0;
+  padding-left: 0;
+  padding-right: 0;
 }
 
-.scan-window-head p {
+.scan-subtitle {
   margin: 6px 0 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .scan-form {
@@ -1465,13 +1469,30 @@ button {
 }
 
 .modal-close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
   width: 32px;
   height: 32px;
+  padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg-surface);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
   font-size: 20px;
   line-height: 1;
+  transition: border-color 120ms, background 120ms, color 120ms;
+}
+
+.modal-close:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-primary);
+  background: var(--accent-soft);
+}
+
+.modal-close:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .modal-body {

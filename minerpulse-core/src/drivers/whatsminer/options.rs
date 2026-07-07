@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WhatsminerLuciAuth {
@@ -7,7 +9,7 @@ pub struct WhatsminerLuciAuth {
 }
 
 /// WhatsMiner-only fetch options. Never pass to other drivers.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WhatsminerFetchOptions {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub luci_auth: Option<WhatsminerLuciAuth>,
@@ -17,9 +19,28 @@ pub struct WhatsminerFetchOptions {
     /// LuCI chip matrix — independent of `fast_poll` (read path).
     #[serde(default)]
     pub fetch_chips: bool,
+    /// Cooperative cancel for in-flight read (desktop only; not serialized).
+    #[serde(skip, default)]
+    pub cancel: Option<Arc<AtomicBool>>,
 }
 
+impl PartialEq for WhatsminerFetchOptions {
+    fn eq(&self, other: &Self) -> bool {
+        self.luci_auth == other.luci_auth
+            && self.fast_poll == other.fast_poll
+            && self.fetch_chips == other.fetch_chips
+    }
+}
+
+impl Eq for WhatsminerFetchOptions {}
+
 impl WhatsminerFetchOptions {
+    pub fn is_cancelled(&self) -> bool {
+        self.cancel
+            .as_ref()
+            .is_some_and(|flag| flag.load(Ordering::Relaxed))
+    }
+
     pub fn fast_read() -> Self {
         Self {
             fast_poll: true,
@@ -79,6 +100,7 @@ mod tests {
             }),
             fast_poll: false,
             fetch_chips: false,
+            cancel: None,
         };
         let pairs = options.luci_credential_pairs();
         assert_eq!(pairs, vec![("root".to_string(), "root".to_string())]);

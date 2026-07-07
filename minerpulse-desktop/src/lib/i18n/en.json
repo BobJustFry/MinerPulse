@@ -148,6 +148,7 @@
   "status.updateAvailable": "Update available: {version}",
   "status.updating": "Downloading update…",
   "status.ready": "Ready",
+  "status.driver": "Driver: {driver}",
   "status.reading": "Reading…",
   "status.cancellingRead": "Cancelling read…",
   "status.readCancelled": "Read cancelled",

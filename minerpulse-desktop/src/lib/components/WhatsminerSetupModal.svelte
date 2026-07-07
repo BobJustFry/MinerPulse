@@ -18,6 +18,7 @@
     onEnableApi,
     onTestLogin,
     onSaveAndRead,
+    onDismiss,
   }: {
     open?: boolean;
     locale: Locale;
@@ -34,6 +35,7 @@
     onEnableApi?: () => void | Promise<void>;
     onTestLogin?: () => void | Promise<void>;
     onSaveAndRead?: () => void | Promise<void>;
+    onDismiss?: () => void;
   } = $props();
 
   const anyBusy = $derived(busy || enableBusy || testBusy);
@@ -45,12 +47,11 @@
   function close() {
     if (anyBusy) return;
     open = false;
+    onDismiss?.();
   }
 
-  function onBackdropClick(event: MouseEvent) {
-    if (event.target === event.currentTarget) {
-      close();
-    }
+  function stopModalPointer(event: Event) {
+    event.stopPropagation();
   }
 
   function onKeydown(event: KeyboardEvent) {
@@ -95,12 +96,14 @@
 <svelte:window onkeydown={onKeydown} />
 
 {#if open}
-  <div class="modal-backdrop" onclick={onBackdropClick} role="presentation">
+  <div class="modal-backdrop whatsminer-setup-backdrop" role="presentation">
     <div
       class="modal-card whatsminer-auth-modal"
       role="dialog"
       aria-modal="true"
       aria-labelledby="whatsminer-setup-title"
+      onclick={stopModalPointer}
+      onmousedown={stopModalPointer}
     >
       <header class="modal-head">
         <div>
@@ -127,17 +130,6 @@
           {/each}
         </ul>
 
-        <div class="whatsminer-setup-actions-row">
-          <button
-            type="button"
-            class="btn"
-            disabled={anyBusy || !username.trim()}
-            onclick={() => void onEnableApi?.()}
-          >
-            {enableBusy ? msg("auth.enablingApi") : msg("auth.enableApi")}
-          </button>
-        </div>
-
         <label class="whatsminer-auth-field" for="whatsminer-setup-user">
           <span>{msg("auth.username")}</span>
           <input
@@ -162,10 +154,13 @@
         <div class="whatsminer-setup-actions-row">
           <button
             type="button"
-            class="btn"
+            class="btn btn-with-spinner"
             disabled={anyBusy || !username.trim()}
             onclick={() => void onTestLogin?.()}
           >
+            {#if testBusy}
+              <span class="btn-spinner" aria-hidden="true"></span>
+            {/if}
             {testBusy ? msg("auth.testingLogin") : msg("auth.testLogin")}
           </button>
           {#if testOk === true}
@@ -187,7 +182,10 @@
           <button type="button" class="btn" disabled={anyBusy} onclick={close}>
             {msg("auth.cancel")}
           </button>
-          <button type="submit" class="btn primary" disabled={anyBusy || !username.trim()}>
+          <button type="submit" class="btn primary btn-with-spinner" disabled={anyBusy || !username.trim()}>
+            {#if busy}
+              <span class="btn-spinner" aria-hidden="true"></span>
+            {/if}
             {busy ? msg("auth.savingAndReading") : msg("auth.saveAndRead")}
           </button>
         </div>
@@ -197,6 +195,11 @@
 {/if}
 
 <style>
+  .whatsminer-setup-backdrop {
+    /* Auth must close only via Cancel / × — not accidental backdrop clicks */
+    cursor: default;
+  }
+
   .whatsminer-setup-status {
     margin: 0 0 0.75rem;
     padding-left: 1.1rem;

@@ -18,6 +18,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tokio::time::timeout;
+
+const READ_MINER_TIMEOUT: Duration = Duration::from_secs(15);
 
 struct ScanSession {
     cancel: Arc<AtomicBool>,
@@ -85,6 +88,46 @@ impl PollSession {
     }
 }
 
+/// One active manual read; starting a new read cancels the previous job cooperatively.
+struct ReadSession {
+    active_cancel: Mutex<Option<Arc<AtomicBool>>>,
+}
+
+impl ReadSession {
+    fn new() -> Self {
+        Self {
+            active_cancel: Mutex::new(None),
+        }
+    }
+
+    fn begin(&self) -> Arc<AtomicBool> {
+        let mut guard = self.active_cancel.lock().unwrap();
+        if let Some(previous) = guard.take() {
+            previous.store(true, Ordering::SeqCst);
+        }
+        let cancel = Arc::new(AtomicBool::new(false));
+        *guard = Some(cancel.clone());
+        cancel
+    }
+
+    fn cancel_active(&self) {
+        let mut guard = self.active_cancel.lock().unwrap();
+        if let Some(active) = guard.take() {
+            active.store(true, Ordering::SeqCst);
+        }
+    }
+
+    fn finish(&self, cancel: &Arc<AtomicBool>) {
+        let mut guard = self.active_cancel.lock().unwrap();
+        if guard
+            .as_ref()
+            .is_some_and(|active| Arc::ptr_eq(active, cancel))
+        {
+            *guard = None;
+        }
+    }
+}
+
 struct AppState {
     rate_limiter: Mutex<RateLimiter>,
     tier: Mutex<SubscriptionTier>,
@@ -93,9 +136,19 @@ struct AppState {
     poll: PollSession,
 }
 
+/// One miner network operation at a time (read, probe, auth test).
+struct MinerIoGate(std::sync::Arc<std::sync::Mutex<()>>);
+
+impl MinerIoGate {
+    fn new() -> Self {
+        Self(std::sync::Arc::new(std::sync::Mutex::new(())))
+    }
+}
+
 fn read_fetch_options(
     auth: Option<WhatsminerAuthRequest>,
     cloud_auth: Option<WhatsminerLuciAuth>,
+    cancel: Option<Arc<AtomicBool>>,
 ) -> FetchOptions {
     let luci_auth = auth
         .map(|value| WhatsminerLuciAuth {
@@ -103,12 +156,17 @@ fn read_fetch_options(
             password: value.password,
         })
         .or(cloud_auth);
-    let fetch_chips = true;
     FetchOptions {
         luci_auth,
         fast_poll: true,
-        fetch_chips,
+        fetch_chips: true,
+        cancel,
     }
+}
+
+#[tauri::command]
+fn cancel_read_miner(read_session: State<ReadSession>) {
+    read_session.cancel_active();
 }
 
 #[tauri::command]
@@ -134,19 +192,33 @@ async fn read_miner(
     } else {
         None
     };
-    let options = read_fetch_options(request.whatsminer_auth, cloud_auth);
+    let read_session = app.state::<ReadSession>();
+    let cancel = read_session.begin();
+    let options = read_fetch_options(request.whatsminer_auth, cloud_auth, Some(cancel.clone()));
     let ip = request.ip.clone();
+    let gate = app.state::<MinerIoGate>().0.clone();
 
-    let snapshot = tauri::async_runtime::spawn_blocking(move || {
-        let client = TcpCgminerClient::default();
+    let join = tauri::async_runtime::spawn_blocking(move || {
+        let _io = gate.lock().unwrap_or_else(|e| e.into_inner());
+        let client = TcpCgminerClient::for_read();
         fetch_with_detect(&client, &ip, port, &options)
-    })
-    .await
-    .map_err(|_| ErrorResponse {
-        code: minerpulse_core::ErrorCode::InvalidInput,
-        args: None,
-    })?
-    .map_err(|e| ErrorResponse::from(&e))?;
+    });
+    let fetch_result = timeout(READ_MINER_TIMEOUT, join).await;
+    if fetch_result.is_err() {
+        cancel.store(true, Ordering::SeqCst);
+    }
+    read_session.finish(&cancel);
+
+    let snapshot = fetch_result
+        .map_err(|_| ErrorResponse {
+            code: minerpulse_core::ErrorCode::ConnTimeout,
+            args: None,
+        })?
+        .map_err(|_| ErrorResponse {
+            code: minerpulse_core::ErrorCode::InvalidInput,
+            args: None,
+        })?
+        .map_err(|e| ErrorResponse::from(&e))?;
 
     if let Some(access) = &snapshot.whatsminer_access {
         if let Some(mac) = &access.mac {
@@ -193,6 +265,7 @@ fn fetch_options_from_request(
         luci_auth,
         fast_poll: false,
         fetch_chips: false,
+        cancel: None,
     }
 }
 
@@ -339,17 +412,22 @@ struct ProbeWhatsminerResponse {
 
 #[tauri::command(rename = "probe_whatsminer_access")]
 async fn probe_whatsminer_access_command(
+    app: AppHandle,
     creds: State<'_, miner_credentials::MinerCredentialsState>,
     request: WhatsminerHostRequest,
 ) -> Result<ProbeWhatsminerResponse, ErrorResponse> {
     let cloud_auth = if request.whatsminer_auth.is_none() {
-        creds.resolve_auth_for_ip(&request.ip)
+        creds.try_resolve_auth_for_ip(&request.ip)
     } else {
         None
     };
     let options = fetch_options_from_request(request.whatsminer_auth, cloud_auth);
     let ip = request.ip.clone();
-    let status = tauri::async_runtime::spawn_blocking(move || probe_whatsminer_access(&ip, &options, false))
+    let gate = app.state::<MinerIoGate>().0.clone();
+    let status = tauri::async_runtime::spawn_blocking(move || {
+        let _io = gate.lock().unwrap_or_else(|e| e.into_inner());
+        probe_whatsminer_access(&ip, &options, false)
+    })
         .await
         .map_err(|_| ErrorResponse {
             code: minerpulse_core::ErrorCode::InvalidInput,
@@ -379,14 +457,23 @@ struct EnableWhatsminerApiResponse {
 
 #[tauri::command]
 async fn enable_whatsminer_api(
+    app: AppHandle,
     creds: State<'_, miner_credentials::MinerCredentialsState>,
     request: EnableWhatsminerApiRequest,
 ) -> Result<EnableWhatsminerApiResponse, ErrorResponse> {
     let ip = request.ip.clone();
     let username = request.username.clone();
     let password = request.password.clone();
-    let enabled = tauri::async_runtime::spawn_blocking(move || {
-        enable_api_switch(&ip, &username, &password)
+    let gate = app.state::<MinerIoGate>().0.clone();
+    let enabled = tauri::async_runtime::spawn_blocking({
+        let gate = gate.clone();
+        let ip = ip.clone();
+        let username = username.clone();
+        let password = password.clone();
+        move || {
+            let _io = gate.lock().unwrap_or_else(|e| e.into_inner());
+            enable_api_switch(&ip, &username, &password)
+        }
     })
     .await
     .map_err(|_| ErrorResponse {
@@ -399,9 +486,13 @@ async fn enable_whatsminer_api(
             password: request.password.clone(),
         }),
         None,
+        None,
     );
     let ip = request.ip.clone();
-    let status = tauri::async_runtime::spawn_blocking(move || probe_whatsminer_access(&ip, &options, false))
+    let status = tauri::async_runtime::spawn_blocking(move || {
+        let _io = gate.lock().unwrap_or_else(|e| e.into_inner());
+        probe_whatsminer_access(&ip, &options, false)
+    })
         .await
         .map_err(|_| ErrorResponse {
             code: minerpulse_core::ErrorCode::InvalidInput,
@@ -431,13 +522,16 @@ struct TestWhatsminerCredentialsResponse {
 
 #[tauri::command(rename = "test_whatsminer_credentials")]
 async fn test_whatsminer_credentials_command(
+    app: AppHandle,
     creds: State<'_, miner_credentials::MinerCredentialsState>,
     request: TestWhatsminerCredentialsRequest,
 ) -> Result<TestWhatsminerCredentialsResponse, ErrorResponse> {
     let ip = request.ip.clone();
     let username = request.username.clone();
     let password = request.password.clone();
+    let gate = app.state::<MinerIoGate>().0.clone();
     let (ok, mac) = tauri::async_runtime::spawn_blocking(move || {
+        let _io = gate.lock().unwrap_or_else(|e| e.into_inner());
         let ok = test_luci_credentials(&ip, &username, &password);
         let mac = minerpulse_core::drivers::whatsminer::access::fetch_device_info(&ip)
             .and_then(|info| info.mac);
@@ -765,17 +859,33 @@ async fn open_scan_window(app: AppHandle) -> Result<(), ErrorResponse> {
         .get_webview_window(MAIN_WINDOW_LABEL)
         .ok_or_else(io_error)?;
 
+    let version_meta = serde_json::from_str::<Value>(env!("MINERPULSE_VERSION_JSON")).unwrap_or_else(|_| {
+        serde_json::json!({
+            "version": "0.0.0",
+            "build": 0,
+            "product": "Miner Pulse"
+        })
+    });
+    let scan_title = format_app_display(
+        version_meta["product"].as_str().unwrap_or("Miner Pulse"),
+        version_meta["version"].as_str().unwrap_or("0.0.0"),
+        version_meta["build"].as_u64().unwrap_or(0) as u32,
+    );
+
     let scan_window = WebviewWindowBuilder::new(&app, SCAN_WINDOW_LABEL, WebviewUrl::App("/scan".into()))
-        .title("MinerPulse — Scan")
+        .title(&scan_title)
         .inner_size(540.0, 680.0)
         .min_inner_size(420.0, 480.0)
         .center()
+        .decorations(false)
         .parent(&main)
         .map_err(|_| io_error())?
         .always_on_top(true)
         .shadow(true)
         .build()
         .map_err(|_| io_error())?;
+
+    configure_window_chrome(&scan_window, true);
 
     block_main_window(&app)?;
     attach_scan_window_cleanup(app.clone(), scan_window);
@@ -1094,10 +1204,12 @@ fn apply_windows_frame(_window: &tauri::WebviewWindow, _dark: bool) {}
 
 #[tauri::command]
 fn sync_window_frame(app: tauri::AppHandle, theme: String) {
-    let Some(window) = app.get_webview_window("main") else {
-        return;
-    };
-    configure_window_chrome(&window, theme == "dark");
+    let dark = theme == "dark";
+    for label in [MAIN_WINDOW_LABEL, SCAN_WINDOW_LABEL] {
+        if let Some(window) = app.get_webview_window(label) {
+            configure_window_chrome(&window, dark);
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1107,6 +1219,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .manage(MinerIoGate::new())
+        .manage(ReadSession::new())
         .manage(AppState {
             rate_limiter: Mutex::new(RateLimiter::new(10)),
             tier: Mutex::new(default_tier()),
@@ -1128,6 +1242,7 @@ pub fn run() {
             probe_whatsminer_access_command,
             enable_whatsminer_api,
             test_whatsminer_credentials_command,
+            cancel_read_miner,
             read_miner,
             start_poll,
             stop_poll,

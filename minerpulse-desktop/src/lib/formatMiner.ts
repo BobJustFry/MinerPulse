@@ -98,6 +98,18 @@ export function vendorLabel(vendor: string): string {
   return map[vendor] ?? vendor;
 }
 
+export function driverLabel(driverId: string): string {
+  const map: Record<string, string> = {
+    antminer: "Antminer",
+    whatsminer: "WhatsMiner",
+    avalon: "Avalon",
+    innosilicon: "Innosilicon",
+    generic: "CGMiner",
+    unknown: "?",
+  };
+  return map[driverId] ?? driverId;
+}
+
 export function statusTone(status: string): "ok" | "warn" | "muted" {
   const value = status.trim().toLowerCase();
   if (!value) return "muted";

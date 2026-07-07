@@ -14,7 +14,7 @@ use crate::model::{
     PowerStats, ThermalStats,
 };
 use crate::tcp::TcpCgminerClient;
-use access::{compute_needs_setup, probe_whatsminer_access};
+use access::{compute_needs_setup, probe_whatsminer_access, probe_whatsminer_access_fast};
 use btminer_log::parse_btminer_log;
 use errors::parse_error_entries;
 use luci::fetch_btminer_chip_data;
@@ -63,7 +63,10 @@ impl WhatsminerDriver {
         port: u16,
         options: &WhatsminerFetchOptions,
     ) -> Result<MinerSnapshot, MinerPulseError> {
+        ensure_active(options)?;
+
         let summary = client.send_payload(host, port, r#"{"cmd":"summary"}"#)?;
+        ensure_active(options)?;
         let pools = if options.fast_poll {
             String::new()
         } else {
@@ -81,6 +84,7 @@ impl WhatsminerDriver {
         let edevs = client
             .send_payload(host, port, r#"{"cmd":"edevs"}"#)
             .unwrap_or_default();
+        ensure_active(options)?;
         let error_codes = if options.fast_poll {
             String::new()
         } else {
@@ -100,11 +104,15 @@ impl WhatsminerDriver {
                 .unwrap_or_default()
         };
 
+        ensure_active(options)?;
+
         let (board_chips, btminer_log) = if options.fetch_chips || !options.fast_poll {
             fetch_btminer_chip_data(host, options)
         } else {
             (Vec::new(), String::new())
         };
+
+        ensure_active(options)?;
 
         let mut snapshot = parse_whatsminer_snapshot(
             &summary,
@@ -117,24 +125,39 @@ impl WhatsminerDriver {
             board_chips,
         );
 
-        if !options.fast_poll {
-            let chips_ok = !snapshot.board_chips.is_empty();
-            let access_status = probe_whatsminer_access(host, options, chips_ok);
+        let should_probe_access =
+            !options.fast_poll || snapshot.board_chips.is_empty();
+        if should_probe_access {
+            ensure_active(options)?;
+            let board_chips_empty = snapshot.board_chips.is_empty();
             let snapshot_empty = snapshot.hashrate.current_ghs <= 0.0
                 && snapshot.hashrate.avg_ghs <= 0.0
                 && snapshot.boards.is_empty()
                 && snapshot.pools.is_empty()
                 && snapshot.board_chips.is_empty();
+            let access_status = if options.fast_poll && board_chips_empty {
+                probe_whatsminer_access_fast(host)
+            } else {
+                let skip_luci_probe = !board_chips_empty;
+                probe_whatsminer_access(host, options, skip_luci_probe)
+            };
             let needs_setup = compute_needs_setup(
                 &access_status,
                 snapshot_empty,
-                snapshot.board_chips.is_empty(),
+                board_chips_empty,
             );
             snapshot.whatsminer_access = Some(access_status.to_info(needs_setup));
         }
 
         Ok(snapshot)
     }
+}
+
+fn ensure_active(options: &WhatsminerFetchOptions) -> Result<(), MinerPulseError> {
+    if options.is_cancelled() {
+        return Err(MinerPulseError::operation_cancelled());
+    }
+    Ok(())
 }
 
 pub fn classify_whatsminer(json: &str) -> Option<(MinerVendor, String)> {

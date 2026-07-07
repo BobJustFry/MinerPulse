@@ -148,6 +148,7 @@
   "status.updateAvailable": "Доступно обновление {version}",
   "status.updating": "Загрузка обновления…",
   "status.ready": "Готов",
+  "status.driver": "Драйвер: {driver}",
   "status.reading": "Чтение…",
   "status.cancellingRead": "Отмена чтения…",
   "status.readCancelled": "Чтение отменено",

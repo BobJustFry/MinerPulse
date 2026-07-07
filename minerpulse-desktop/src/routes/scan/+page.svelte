@@ -3,7 +3,9 @@
   import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { onMount } from "svelte";
+  import WindowCaption from "$lib/components/WindowCaption.svelte";
   import { t, type Locale, type MessageKey } from "$lib/i18n";
+  import type { Theme } from "$lib/types";
   import type {
     DiscoveredMiner,
     ErrorResponse,
@@ -38,6 +40,10 @@
   }
 
   let locale = $state<Locale>("ru");
+  let theme = $state<Theme>("dark");
+  let appProduct = $state("Miner Pulse");
+  let appVersionNumber = $state("0.0.0");
+  let appBuild = $state(0);
   let subnets = $state<ScanSubnet[]>([]);
   let selectedSubnetId = $state("");
   let customStart = $state("192.168.0.1");
@@ -67,12 +73,17 @@
     try {
       const parsed = JSON.parse(saved);
       locale = parsed.locale ?? locale;
-      document.documentElement.dataset.theme = parsed.theme ?? "light";
+      theme = parsed.theme === "light" ? "light" : "dark";
+      document.documentElement.dataset.theme = theme;
       document.documentElement.dataset.density = parsed.density ?? "comfortable";
       document.documentElement.lang = locale === "zh-CN" ? "zh-CN" : locale;
     } catch {
       /* ignore */
     }
+  }
+
+  async function closeWindow() {
+    await getCurrentWindow().close();
   }
 
   function loadScanPrefs(subnetList: ScanSubnet[]) {
@@ -288,6 +299,16 @@
 
   onMount(async () => {
     applyUiPrefs();
+    try {
+      const v = await invoke<{ display: string; version: string; build: number; product: string }>(
+        "get_app_version",
+      );
+      appProduct = v.product;
+      appVersionNumber = v.version;
+      appBuild = v.build;
+    } catch {
+      /* ignore in web preview */
+    }
     subnets = await invoke<ScanSubnet[]>("list_scan_subnets");
     selectedSubnetId = subnets[0]?.id ?? CUSTOM_SUBNET_ID;
     loadScanPrefs(subnets);
@@ -313,11 +334,25 @@
   });
 </script>
 
-<div class="scan-window">
-  <header class="scan-window-head">
-    <h1>{msg("scan.title")}</h1>
-    <p>{msg("scan.subtitle")}</p>
-  </header>
+<div class="app-shell">
+  <WindowCaption {locale} {theme} product={appProduct} version={appVersionNumber} build={appBuild} />
+
+  <div class="scan-window">
+    <header class="modal-head scan-window-head">
+      <div>
+        <div class="modal-kicker">{appProduct}</div>
+        <h1 class="modal-title">{msg("scan.title")}</h1>
+        <p class="scan-subtitle">{msg("scan.subtitle")}</p>
+      </div>
+      <button
+        type="button"
+        class="modal-close"
+        onclick={closeWindow}
+        aria-label={msg("scan.close")}
+      >
+        ×
+      </button>
+    </header>
 
   <section class="scan-form">
     <label class="scan-field">
@@ -399,4 +434,5 @@
       <div class="scan-empty">{msg("scan.noMiners")}</div>
     {/if}
   </section>
+  </div>
 </div>

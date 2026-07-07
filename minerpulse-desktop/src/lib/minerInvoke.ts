@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export const MINER_READ_TIMEOUT_MS = 20_000;
+export const WHATSMINER_AUTH_TEST_TIMEOUT_MS = 10_000;
 
 export async function invokeWithTimeout<T>(
   cmd: string,

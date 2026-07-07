@@ -41,6 +41,8 @@
   import { SessionPlayer, type PlaybackSpeed } from "$lib/sessionPlayer";
   import SessionPlayerBar from "$lib/components/SessionPlayerBar.svelte";
   import { formatAppError } from "$lib/formatAppError";
+  import { driverLabel } from "$lib/formatMiner";
+  import { invokeWithTimeout, MINER_READ_TIMEOUT_MS, WHATSMINER_AUTH_TEST_TIMEOUT_MS } from "$lib/minerInvoke";
   import { isSnapshotEmpty } from "$lib/snapshotUtils";
   import { checkForAppUpdate, UPDATE_CHECK_INTERVAL_MS } from "$lib/updateCheck";
   import type { ChartsLayout } from "$lib/components/MinerChartsPanel";
@@ -72,15 +74,17 @@
   let whatsminerTestBusy = $state(false);
   let whatsminerTestOk = $state<boolean | null>(null);
   let whatsminerSetupAccess = $state<WhatsminerAccessInfo | null>(null);
-  let whatsminerAuthPrompted = $state(false);
+  let whatsminerAuthSession = $state(0);
+  let whatsminerAuthDismissedIp = $state("");
+  let readGeneration = 0;
+  let connectionIp = $state("");
   let licenseInfo = $state<LicenseInfo>({ tier: "free", licensed: false });
   let pendingAuthRetry = $state<(() => Promise<void>) | null>(null);
   let busy = $state(false);
   let reading = $state(false);
-  let readCooldownSec = $state(0);
-  let readCooldownTimer: ReturnType<typeof setInterval> | null = null;
   let statusText = $state("");
   let snapshot = $state<MinerSnapshot | null>(null);
+  let snapshotSourceIp = $state("");
   let appVersion = $state("Miner Pulse 1.0.1 (26)");
   let appVersionNumber = $state("1.0.1");
   let appBuild = $state(26);
@@ -142,12 +146,7 @@
     }),
   );
   const chartsLiveNow = $derived(chartsLive || polling || recording);
-  const readCooldownActive = $derived(
-    !entitlements.can_poll && readCooldownSec > 0,
-  );
-  const readActionDisabled = $derived(
-    reading || polling || connectionLocked || readCooldownActive,
-  );
+  const readActionDisabled = $derived(reading || polling || connectionLocked);
   const readActionLabel = $derived(
     readActionMode === "read"
       ? msg("toolbar.read")
@@ -202,6 +201,24 @@
     );
   }
 
+  function bumpReadGeneration(): number {
+    readGeneration += 1;
+    return readGeneration;
+  }
+
+  function invalidateRead() {
+    bumpReadGeneration();
+    void invoke("cancel_read_miner");
+  }
+
+  function isStaleRead(gen: number) {
+    return gen !== readGeneration;
+  }
+
+  function isOperationCancelled(err: unknown) {
+    return (err as { code?: string })?.code === "OPERATION_CANCELLED";
+  }
+
   function whatsminerAuthPayload(): { username: string; password: string } | null {
     if (!whatsminerCustomAuth) return null;
     const username = whatsminerUser.trim();
@@ -213,31 +230,33 @@
     return (user === "admin" && pass === "admin") || (user === "root" && pass === "root");
   }
 
-  function shouldPromptWhatsminerSetup(nextSnapshot: MinerSnapshot) {
-    if (nextSnapshot.identity.vendor !== "whatsminer") return false;
-    if (whatsminerAuthPrompted) return false;
-    return nextSnapshot.whatsminer_access?.needs_setup === true;
+  function whatsminerNeedsAuth(data: MinerSnapshot | null): boolean {
+    if (!data || data.identity.vendor !== "whatsminer") return false;
+    if ((data.board_chips?.length ?? 0) > 0) return false;
+    if (isSnapshotEmpty(data)) {
+      return data.whatsminer_access?.needs_setup === true;
+    }
+    // Telemetry without chips — always offer LuCI auth.
+    return true;
   }
 
-  async function refreshWhatsminerSetupAccess() {
-    try {
-      const response = await invoke<{ access: WhatsminerAccessInfo }>(
-        "probe_whatsminer_access",
-        {
-          request: {
-            ip,
-            whatsminer_auth: whatsminerAuthPayload(),
-          },
-        },
-      );
-      whatsminerSetupAccess = response.access;
-    } catch {
-      /* keep existing status lines */
-    }
+  function maybePromptWhatsminerAuth(
+    nextSnapshot: MinerSnapshot,
+    retry?: () => Promise<void>,
+  ) {
+    if (!whatsminerNeedsAuth(nextSnapshot)) return;
+    if (whatsminerAuthBusy || whatsminerEnableBusy || whatsminerTestBusy) return;
+    promptWhatsminerSetup(nextSnapshot, retry);
+  }
+
+  function dismissWhatsminerSetup() {
+    whatsminerAuthDismissedIp = ip.trim();
+    whatsminerAuthOpen = false;
+    whatsminerTestOk = null;
+    whatsminerAuthError = "";
   }
 
   function promptWhatsminerSetup(nextSnapshot?: MinerSnapshot, retry?: () => Promise<void>) {
-    whatsminerAuthPrompted = true;
     pendingAuthRetry = retry ?? null;
     whatsminerAuthError = "";
     whatsminerTestOk = null;
@@ -246,8 +265,8 @@
       whatsminerUser = "admin";
       whatsminerPassword = "admin";
     }
+    whatsminerAuthSession += 1;
     whatsminerAuthOpen = true;
-    void refreshWhatsminerSetupAccess();
   }
 
   function loadConnection() {
@@ -314,31 +333,8 @@
   }
 
   function snapshotStatusText(data: MinerSnapshot): string {
-    return `${data.identity.model} · ${data.status}`;
-  }
-
-  function startReadCooldown(sec?: number) {
-    const duration = Math.max(1, sec ?? entitlements.min_read_interval_sec);
-    readCooldownSec = duration;
-    if (readCooldownTimer) clearInterval(readCooldownTimer);
-    readCooldownTimer = setInterval(() => {
-      if (readCooldownSec <= 1) {
-        readCooldownSec = 0;
-        if (readCooldownTimer) {
-          clearInterval(readCooldownTimer);
-          readCooldownTimer = null;
-        }
-      } else {
-        readCooldownSec -= 1;
-      }
-    }, 1000);
-  }
-
-  function handleReadRateLimit(err: unknown) {
-    const e = err as ErrorResponse;
-    if (e?.code === "RATE_LIMIT") {
-      startReadCooldown(Number(e.args?.sec ?? entitlements.min_read_interval_sec));
-    }
+    const driver = driverLabel(data.identity.driver_id);
+    return `${data.identity.model} · ${data.status} · ${msg("status.driver", { driver })}`;
   }
 
   async function refreshEntitlements() {
@@ -370,58 +366,76 @@
   }
 
   async function readMiner() {
-    if (polling || connectionLocked || reading) return;
-    if (readCooldownActive) return;
+    if (polling) return;
 
-    const hadSnapshot = snapshot !== null;
+    const targetIp = ip.trim();
+
+    // Reopen auth after dismiss only — never skip a real read otherwise.
+    if (
+      !whatsminerAuthOpen &&
+      whatsminerAuthDismissedIp === targetIp &&
+      snapshot &&
+      snapshotSourceIp === targetIp &&
+      whatsminerNeedsAuth(snapshot)
+    ) {
+      maybePromptWhatsminerAuth(snapshot);
+      statusText = snapshotStatusText(snapshot);
+      return;
+    }
+
+    const gen = bumpReadGeneration();
+    const targetPort = Number(port) || 4028;
     reading = true;
     connectionLocked = true;
     dropActive = false;
-    if (!hadSnapshot) {
-      statusText = msg("status.reading");
-    }
+    statusText = msg("status.reading");
 
     try {
       const response = await invoke<{ snapshot: MinerSnapshot }>("read_miner", {
         request: {
-          ip,
-          port: Number(port) || 4028,
+          ip: targetIp,
+          port: targetPort,
           whatsminer_auth: whatsminerAuthPayload(),
         },
       });
 
+      if (isStaleRead(gen)) return;
+
       if (isSnapshotEmpty(response.snapshot)) {
-        if (shouldPromptWhatsminerSetup(response.snapshot)) {
+        if (whatsminerNeedsAuth(response.snapshot)) {
           snapshot = response.snapshot;
-          promptWhatsminerSetup(response.snapshot);
+          snapshotSourceIp = targetIp;
+          maybePromptWhatsminerAuth(response.snapshot);
         }
         statusText = msg("status.readEmpty");
         return;
       }
 
       snapshot = response.snapshot;
+      snapshotSourceIp = targetIp;
       clearCharts();
       pushChartPoint(response.snapshot, 0);
       statusText = snapshotStatusText(response.snapshot);
 
-      if (!entitlements.can_poll) {
-        startReadCooldown();
+      if ((response.snapshot.board_chips?.length ?? 0) > 0) {
+        whatsminerAuthDismissedIp = "";
       }
 
-      if (shouldPromptWhatsminerSetup(response.snapshot)) {
-        promptWhatsminerSetup(response.snapshot);
-      }
+      maybePromptWhatsminerAuth(response.snapshot);
     } catch (err) {
-      handleReadRateLimit(err);
+      if (isStaleRead(gen) || isOperationCancelled(err)) return;
       statusText = formatError(err);
     } finally {
-      reading = false;
-      connectionLocked = false;
+      if (!isStaleRead(gen)) {
+        reading = false;
+        connectionLocked = false;
+      }
     }
   }
 
   function cancelReading() {
     if (!reading) return;
+    invalidateRead();
     dropActive = false;
     reading = false;
     connectionLocked = false;
@@ -434,11 +448,12 @@
     whatsminerEnableBusy = true;
     whatsminerAuthError = "";
     try {
-      const response = await invoke<{ enabled: boolean; access: WhatsminerAccessInfo }>(
+      const response = await invokeWithTimeout<{ enabled: boolean; access: WhatsminerAccessInfo }>(
         "enable_whatsminer_api",
         {
           request: { ip, username, password: whatsminerPassword },
         },
+        WHATSMINER_AUTH_TEST_TIMEOUT_MS,
       );
       whatsminerSetupAccess = response.access;
       if (!response.enabled) {
@@ -457,15 +472,29 @@
     whatsminerTestBusy = true;
     whatsminerAuthError = "";
     try {
-      const response = await invoke<{ ok: boolean; mac: string | null }>(
+      const response = await invokeWithTimeout<{ ok: boolean; mac: string | null }>(
         "test_whatsminer_credentials",
         {
           request: { ip, username, password: whatsminerPassword },
         },
+        WHATSMINER_AUTH_TEST_TIMEOUT_MS,
       );
       whatsminerTestOk = response.ok;
       if (response.mac && whatsminerSetupAccess) {
         whatsminerSetupAccess = { ...whatsminerSetupAccess, mac: response.mac };
+      } else if (response.mac) {
+        whatsminerSetupAccess = {
+          mac: response.mac,
+          api_switch: null,
+          luci_reachable: response.ok,
+          luci_auth_ok: response.ok,
+          api_reachable: false,
+          api_auth_ok: false,
+          needs_setup: !response.ok,
+        };
+      }
+      if (!response.ok) {
+        whatsminerAuthError = msg("auth.testFail");
       }
     } catch (err) {
       whatsminerTestOk = false;
@@ -492,30 +521,39 @@
       const mac =
         whatsminerSetupAccess?.mac ??
         (
-          await invoke<{ ok: boolean; mac: string | null }>("test_whatsminer_credentials", {
-            request: { ip, username, password: whatsminerPassword },
-          })
+          await invokeWithTimeout<{ ok: boolean; mac: string | null }>(
+            "test_whatsminer_credentials",
+            {
+              request: { ip, username, password: whatsminerPassword },
+            },
+            WHATSMINER_AUTH_TEST_TIMEOUT_MS,
+          )
         ).mac;
 
-      if (
-        mac &&
-        licenseInfo.user_email &&
-        !isDefaultWhatsminerCredentials(username, whatsminerPassword)
-      ) {
+      if (mac && !isDefaultWhatsminerCredentials(username, whatsminerPassword)) {
         try {
-          await invoke("save_miner_credential", { mac, username, password: whatsminerPassword });
+          await invoke("save_miner_credential", {
+            mac,
+            username,
+            password: whatsminerPassword,
+            ip,
+          });
         } catch {
-          /* cloud save is optional */
+          /* local save is best-effort */
         }
       }
 
-      const response = await invoke<{ snapshot: MinerSnapshot }>("read_miner", {
-        request: {
-          ip,
-          port: Number(port) || 4028,
-          whatsminer_auth: { username, password: whatsminerPassword },
+      const response = await invokeWithTimeout<{ snapshot: MinerSnapshot }>(
+        "read_miner",
+        {
+          request: {
+            ip,
+            port: Number(port) || 4028,
+            whatsminer_auth: { username, password: whatsminerPassword },
+          },
         },
-      });
+        MINER_READ_TIMEOUT_MS,
+      );
 
       if ((response.snapshot.board_chips?.length ?? 0) === 0 && !isSnapshotEmpty(response.snapshot)) {
         whatsminerAuthError = msg("auth.invalid");
@@ -523,7 +561,7 @@
         return;
       }
 
-      if (isSnapshotEmpty(response.snapshot) && shouldPromptWhatsminerSetup(response.snapshot)) {
+      if (isSnapshotEmpty(response.snapshot) && whatsminerNeedsAuth(response.snapshot)) {
         whatsminerAuthError = msg("auth.invalid");
         whatsminerSetupAccess = response.snapshot.whatsminer_access ?? whatsminerSetupAccess;
         return;
@@ -678,7 +716,7 @@
   function runReadAction() {
     if (polling || connectionLocked) return;
     if (readActionMode === "read") {
-      if (reading || readCooldownActive) return;
+      if (reading) return;
       void readMiner();
       return;
     }
@@ -1007,12 +1045,14 @@
           : msg("status.polling", { frame: pollFrame });
         if (
           event.payload.frame_index === 0 &&
-          shouldPromptWhatsminerSetup(event.payload.snapshot)
+          whatsminerNeedsAuth(event.payload.snapshot)
         ) {
           void (async () => {
             const wasRecording = event.payload.recording;
             await stopPoll();
-            promptWhatsminerSetup(event.payload.snapshot, () => startPolling(wasRecording));
+            maybePromptWhatsminerAuth(event.payload.snapshot, () =>
+              startPolling(wasRecording),
+            );
           })();
         }
       });
@@ -1053,14 +1093,26 @@
       unlistenLicense?.();
       if (updateCheckTimer) clearInterval(updateCheckTimer);
       sessionPlayer?.pause();
-      if (readCooldownTimer) clearInterval(readCooldownTimer);
     };
   });
 
   $effect(() => {
     if (!connectionLoaded) return;
-    ip;
-    whatsminerAuthPrompted = false;
+    const nextIp = ip.trim();
+    if (connectionIp && connectionIp !== nextIp) {
+      invalidateRead();
+      reading = false;
+      connectionLocked = false;
+      whatsminerAuthDismissedIp = "";
+      whatsminerAuthOpen = false;
+      whatsminerTestOk = null;
+      whatsminerAuthError = "";
+      snapshot = null;
+      snapshotSourceIp = "";
+      clearCharts();
+      statusText = msg("status.ready");
+    }
+    connectionIp = nextIp;
   });
 
   $effect(() => {
@@ -1228,7 +1280,6 @@
       <button
         class="btn primary btn-with-spinner"
         disabled={readActionDisabled}
-        title={readCooldownActive ? msg("status.readCooldown", { sec: readCooldownSec }) : undefined}
         onclick={readMiner}
       >
         {#if reading}
@@ -1462,21 +1513,24 @@
     }}
   />
 
-  <WhatsminerSetupModal
-    bind:open={whatsminerAuthOpen}
-    {locale}
-    {ip}
-    access={whatsminerSetupAccess}
-    bind:username={whatsminerUser}
-    bind:password={whatsminerPassword}
-    busy={whatsminerAuthBusy}
-    enableBusy={whatsminerEnableBusy}
-    testBusy={whatsminerTestBusy}
-    testOk={whatsminerTestOk}
-    errorText={whatsminerAuthError}
-    cloudAvailable={!!licenseInfo.user_email}
-    onEnableApi={enableWhatsminerApi}
-    onTestLogin={testWhatsminerLogin}
-    onSaveAndRead={saveAndReadWhatsminer}
-  />
+  {#key whatsminerAuthSession}
+    <WhatsminerSetupModal
+      bind:open={whatsminerAuthOpen}
+      {locale}
+      {ip}
+      access={whatsminerSetupAccess}
+      bind:username={whatsminerUser}
+      bind:password={whatsminerPassword}
+      busy={whatsminerAuthBusy}
+      enableBusy={whatsminerEnableBusy}
+      testBusy={whatsminerTestBusy}
+      testOk={whatsminerTestOk}
+      errorText={whatsminerAuthError}
+      cloudAvailable={!!licenseInfo.user_email}
+      onEnableApi={enableWhatsminerApi}
+      onTestLogin={testWhatsminerLogin}
+      onSaveAndRead={saveAndReadWhatsminer}
+      onDismiss={dismissWhatsminerSetup}
+    />
+  {/key}
 </div>

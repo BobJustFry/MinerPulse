@@ -11,6 +11,7 @@ fn main() {
         luci_auth: None,
         fast_poll: true,
         fetch_chips: false,
+        cancel: None,
     };
     let t = std::time::Instant::now();
     match fetch_with_detect(&client, &ip, port, &detect) {

@@ -148,6 +148,7 @@
   "status.updateAvailable": "有可用更新 {version}",
   "status.updating": "正在下载更新…",
   "status.ready": "就绪",
+  "status.driver": "驱动：{driver}",
   "status.reading": "读取中…",
   "status.cancellingRead": "正在取消读取…",
   "status.readCancelled": "读取已取消",

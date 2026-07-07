@@ -297,8 +297,16 @@ pub async fn save_miner_credential(
     mac: String,
     username: String,
     password: String,
+    ip: Option<String>,
 ) -> Result<(), ErrorResponse> {
-    state.push_remote(&app, &mac, &username, &password).await
+    state.upsert_local(&mac, &username, &password)?;
+    if let Some(ip) = ip {
+        state.remember_ip_mac(&ip, &mac);
+    }
+    if MinerCredentialsState::access_token(&app).is_some() {
+        let _ = state.push_remote(&app, &mac, &username, &password).await;
+    }
+    Ok(())
 }
 
 #[tauri::command]

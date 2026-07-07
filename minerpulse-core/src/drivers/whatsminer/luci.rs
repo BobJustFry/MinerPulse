@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 const LUCI_SESSION_TTL: Duration = Duration::from_secs(600);
 const HTTP_TIMEOUT: Duration = Duration::from_secs(4);
+const LUCI_FAST_TIMEOUT: Duration = Duration::from_secs(2);
 const LUCI_LOGIN_TIMEOUT: Duration = Duration::from_secs(3);
 
 struct LuciSession {
@@ -64,21 +65,41 @@ fn cached_log(client: &Client, host: &str, base: &str) -> Option<String> {
 }
 
 pub fn fetch_btminer_chip_data(host: &str, options: &WhatsminerFetchOptions) -> (Vec<BoardChipMap>, String) {
-    let client = match build_luci_client() {
+    if options.is_cancelled() {
+        return (Vec::new(), String::new());
+    }
+
+    let timeout = if options.fast_poll {
+        LUCI_FAST_TIMEOUT
+    } else {
+        HTTP_TIMEOUT
+    };
+    let client = match build_luci_client_with_timeout(timeout) {
         Ok(client) => client,
         Err(_) => return (Vec::new(), String::new()),
     };
 
-    for scheme in ["https", "http"] {
+    let schemes: &[&str] = if options.fast_poll {
+        &["https"]
+    } else {
+        &["https", "http"]
+    };
+
+    for scheme in schemes {
         let base = format!("{scheme}://{host}");
         if let Some(log) = cached_log(&client, host, &base) {
             return (parse_btminer_log(&log), log);
         }
-        if let Some(log) = fetch_log_anonymous(&client, &base) {
-            return (parse_btminer_log(&log), log);
+        if !options.fast_poll {
+            if let Some(log) = fetch_log_anonymous(&client, &base) {
+                return (parse_btminer_log(&log), log);
+            }
         }
 
         for (username, password) in options.luci_credential_pairs() {
+            if options.is_cancelled() {
+                return (Vec::new(), String::new());
+            }
             if let Some(log) = fetch_log_authenticated(&client, host, &base, &username, &password) {
                 return (parse_btminer_log(&log), log);
             }

@@ -95,12 +95,23 @@ pub fn compute_needs_setup(
     if !snapshot_empty && !board_chips_empty {
         return false;
     }
-    // Telemetry works and API + LuCI credentials are valid — no blocking setup dialog.
-    if !snapshot_empty && status.api_switch == Some(true) && status.luci_auth_ok {
-        return false;
+    if !snapshot_empty && board_chips_empty {
+        return true;
     }
     let api_off = status.api_switch == Some(false);
     !status.luci_auth_ok || api_off || snapshot_empty
+}
+
+/// Minimal access probe after a fast read with empty chips (avoids slow LuCI login loops).
+pub fn probe_whatsminer_access_fast(host: &str) -> WhatsminerAccessStatus {
+    let mut status = WhatsminerAccessStatus::default();
+    if let Some(info) = fetch_device_info_fast(host) {
+        status.api_reachable = true;
+        status.api_auth_ok = info.code_ok;
+        status.mac = info.mac;
+        status.api_switch = info.api_switch;
+    }
+    status
 }
 
 #[derive(Debug, Clone)]
@@ -112,7 +123,19 @@ pub struct DeviceInfoProbe {
 }
 
 pub fn fetch_device_info(host: &str) -> Option<DeviceInfoProbe> {
-    let response = api_request(host, r#"{"cmd":"get.device.info"}"#)?;
+    fetch_device_info_timed(host, Duration::from_secs(2), Duration::from_secs(3))
+}
+
+pub fn fetch_device_info_fast(host: &str) -> Option<DeviceInfoProbe> {
+    fetch_device_info_timed(host, Duration::from_millis(1200), Duration::from_millis(1200))
+}
+
+fn fetch_device_info_timed(
+    host: &str,
+    connect_timeout: Duration,
+    io_timeout: Duration,
+) -> Option<DeviceInfoProbe> {
+    let response = api_transact_timed(host, r#"{"cmd":"get.device.info"}"#, connect_timeout, io_timeout).ok()?;
     parse_device_info(&response)
 }
 
@@ -131,14 +154,28 @@ pub fn api_request(host: &str, json_payload: &str) -> Option<String> {
 }
 
 fn api_transact(host: &str, json_payload: &str) -> Result<String, ()> {
+    api_transact_timed(
+        host,
+        json_payload,
+        Duration::from_secs(2),
+        Duration::from_secs(3),
+    )
+}
+
+fn api_transact_timed(
+    host: &str,
+    json_payload: &str,
+    connect_timeout: Duration,
+    io_timeout: Duration,
+) -> Result<String, ()> {
     let addr = format!("{host}:{WHATSMINER_API_PORT}");
     let mut stream = TcpStream::connect_timeout(
         &addr.parse().map_err(|_| ())?,
-        Duration::from_secs(2),
+        connect_timeout,
     )
     .map_err(|_| ())?;
-    stream.set_read_timeout(Some(Duration::from_secs(3))).ok();
-    stream.set_write_timeout(Some(Duration::from_secs(3))).ok();
+    stream.set_read_timeout(Some(io_timeout)).ok();
+    stream.set_write_timeout(Some(io_timeout)).ok();
 
     let bytes = json_payload.as_bytes();
     let len = bytes.len() as u32;
@@ -232,7 +269,7 @@ mod tests {
     }
 
     #[test]
-    fn needs_setup_false_when_api_on_luci_ok_and_has_telemetry() {
+    fn needs_setup_true_when_telemetry_but_chips_missing() {
         let status = WhatsminerAccessStatus {
             api_switch: Some(true),
             luci_auth_ok: true,
@@ -241,7 +278,7 @@ mod tests {
             api_auth_ok: true,
             ..Default::default()
         };
-        assert!(!compute_needs_setup(&status, false, true));
+        assert!(compute_needs_setup(&status, false, true));
     }
 
     #[test]
