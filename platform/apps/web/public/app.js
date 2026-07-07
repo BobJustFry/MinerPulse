@@ -94,18 +94,7 @@ function renderBetaBanner() {
 }
 
 function renderPlansList() {
-  const root = document.getElementById("plans-list");
-  if (!root) return;
-  root.innerHTML = publicPlans
-    .map(
-      (p) => `<div class="plan">
-        <strong>${p.name}</strong>
-        <div>${p.tier}</div>
-        <div class="plan-price">${(p.priceCents / 100).toFixed(0)} ${p.currency}</div>
-        <div class="plan-meta">${t("plans.duration", { days: p.durationDays, devices: p.maxDevices })}</div>
-      </div>`,
-    )
-    .join("");
+  /* Public tariffs list hidden on client site; plans load for subscribe section only. */
 }
 
 async function loadPlans() {
