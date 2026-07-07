@@ -93,13 +93,30 @@ struct AppState {
     poll: PollSession,
 }
 
+fn read_fetch_options(
+    auth: Option<WhatsminerAuthRequest>,
+    cloud_auth: Option<WhatsminerLuciAuth>,
+) -> FetchOptions {
+    let luci_auth = auth
+        .map(|value| WhatsminerLuciAuth {
+            username: value.username,
+            password: value.password,
+        })
+        .or(cloud_auth);
+    let fetch_chips = true;
+    FetchOptions {
+        luci_auth,
+        fast_poll: true,
+        fetch_chips,
+    }
+}
+
 #[tauri::command]
 async fn read_miner(
     app: AppHandle,
     request: ReadMinerRequest,
 ) -> Result<ReadMinerResponse, ErrorResponse> {
-    let state_for_tier = app.state::<AppState>();
-    let tier = *state_for_tier.tier.lock().unwrap();
+    let tier = *app.state::<AppState>().tier.lock().unwrap();
     let g = gate(tier);
 
     if !g.can_poll() {
@@ -113,11 +130,11 @@ async fn read_miner(
     let port = request.port.unwrap_or(4028);
     let cloud_auth = if request.whatsminer_auth.is_none() {
         app.state::<miner_credentials::MinerCredentialsState>()
-            .resolve_auth_for_ip(&request.ip)
+            .try_resolve_auth_for_ip(&request.ip)
     } else {
         None
     };
-    let options = fetch_options_from_request(request.whatsminer_auth, cloud_auth);
+    let options = read_fetch_options(request.whatsminer_auth, cloud_auth);
     let ip = request.ip.clone();
 
     let snapshot = tauri::async_runtime::spawn_blocking(move || {
@@ -145,9 +162,6 @@ async fn read_miner(
 
     Ok(ReadMinerResponse { snapshot })
 }
-
-#[tauri::command]
-fn cancel_read(_app: AppHandle) {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct WhatsminerAuthRequest {
@@ -379,7 +393,7 @@ async fn enable_whatsminer_api(
         code: minerpulse_core::ErrorCode::InvalidInput,
         args: None,
     })?;
-    let options = fetch_options_from_request(
+    let options = read_fetch_options(
         Some(WhatsminerAuthRequest {
             username: request.username.clone(),
             password: request.password.clone(),
@@ -1115,7 +1129,6 @@ pub fn run() {
             enable_whatsminer_api,
             test_whatsminer_credentials_command,
             read_miner,
-            cancel_read,
             start_poll,
             stop_poll,
             get_poll_status,
@@ -1163,62 +1176,6 @@ pub fn run() {
                 let title = format_app_display(product, version, build);
                 let _ = window.set_title(&title);
                 configure_window_chrome(&window, true);
-            }
-
-            #[cfg(debug_assertions)]
-            if std::env::var("MINERPULSE_AUTO_READ_WEBVIEW").is_ok() {
-                let window = app.get_webview_window("main").unwrap();
-                let app_handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    tokio::time::sleep(Duration::from_secs(4)).await;
-                    let js = r#"
-                      (async () => {
-                        try {
-                          const { invoke } = window.__TAURI__.core;
-                          const t0 = performance.now();
-                          const r = await invoke('read_miner', { request: { ip: '192.168.35.42', port: 4028, whatsminer_auth: null } });
-                          console.error('[webview-read] OK ghs=' + r?.snapshot?.hashrate?.current_ghs + ' ms=' + Math.round(performance.now()-t0));
-                        } catch (e) {
-                          console.error('[webview-read] ERR', e);
-                        }
-                      })();
-                    "#;
-                    let _ = window.eval(js);
-                    tokio::time::sleep(Duration::from_secs(15)).await;
-                    app_handle.exit(0);
-                });
-            }
-
-            #[cfg(debug_assertions)]
-            if std::env::var("MINERPULSE_AUTO_READ").is_ok() {
-                let app_handle = app.handle().clone();
-                let ip = std::env::var("MINERPULSE_AUTO_READ_IP")
-                    .unwrap_or_else(|_| "192.168.35.42".to_string());
-                tauri::async_runtime::spawn(async move {
-                    tokio::time::sleep(Duration::from_secs(2)).await;
-                    eprintln!("[auto-read] starting read_miner for {ip}");
-                    let started = Instant::now();
-                    let result = read_miner(
-                        app_handle.clone(),
-                        ReadMinerRequest {
-                            ip,
-                            port: Some(4028),
-                            whatsminer_auth: None,
-                        },
-                    )
-                    .await;
-                    match &result {
-                        Ok(r) => eprintln!(
-                            "[auto-read] OK vendor={:?} model={} ghs={} {:?}",
-                            r.snapshot.identity.vendor,
-                            r.snapshot.identity.model,
-                            r.snapshot.hashrate.current_ghs,
-                            started.elapsed()
-                        ),
-                        Err(e) => eprintln!("[auto-read] ERR {:?} {:?}", e, started.elapsed()),
-                    }
-                    app_handle.exit(0);
-                });
             }
 
             Ok(())

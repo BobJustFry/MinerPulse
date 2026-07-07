@@ -122,6 +122,24 @@ impl MinerCredentialsState {
         let _ = self.save(&store);
     }
 
+    pub fn try_resolve_auth_for_ip(&self, ip: &str) -> Option<WhatsminerLuciAuth> {
+        let mac = self.store.try_lock().ok()?.ip_mac.get(ip).cloned()?;
+        self.try_resolve_auth_for_mac(&mac)
+    }
+
+    pub fn try_resolve_auth_for_mac(&self, mac: &str) -> Option<WhatsminerLuciAuth> {
+        let mac = normalize_mac(mac);
+        let store = self.store.try_lock().ok()?;
+        store
+            .credentials
+            .iter()
+            .find(|entry| entry.mac == mac)
+            .map(|entry| WhatsminerLuciAuth {
+                username: entry.username.clone(),
+                password: entry.password.clone(),
+            })
+    }
+
     pub fn resolve_auth_for_ip(&self, ip: &str) -> Option<WhatsminerLuciAuth> {
         let mac = self.store.lock().unwrap().ip_mac.get(ip).cloned()?;
         self.resolve_auth_for_mac(&mac)
