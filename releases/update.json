@@ -1,12 +1,12 @@
 {
-  "version": "1.0.85",
-  "build": 85,
-  "notes": "Miner Pulse 1.0.1 (85) — fix miner read crash (missing isSnapshotEmpty import).",
-  "pub_date": "2026-07-07T11:24:31Z",
+  "version": "1.0.88",
+  "build": 88,
+  "notes": "Miner Pulse 1.0.1 (88) — WhatsMiner API probe, setup modal, and cloud credentials sync.",
+  "pub_date": "2026-07-07T12:12:20Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRFlhNlM0SWtoTWsyRmJZaWZtaTQ4dEhoWUJOQW04OG5HNXlzRlhLWlZEeS8xa3hyT2wyMUthYzQwdHJyWVVjdnpuOEg0cTdJVHBFRWlyNkEyZWU1OGdBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzNDIzNDY1CWZpbGU6TWluZXJQdWxzZV8xLjAuODVfeDY0LXNldHVwLmV4ZQpXMDlHeXBMNFVJQWtJdlFUNXJkc0lGK3FYcU1qdk5sVmpNVE0rd0Q1OW4yS2FVZkVoeUpaK2F6SG14T0grUDUwZ1hia2poUE1lMW9QN0xwVTIvWmhBdz09Cg==",
-      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build85/MinerPulse_1.0.85_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRGM2Q1VLTjE0QXp6dWMxSVJSTmlUN0VubDQwQTRUUGpmSjlBZjR3QWZTNkR0Tmptdm9BQTAzNzBGVHZTTXNHN1kvUkxXQmZRbi9zM2lzM0M3b3B3QkE0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzNDI2MzM1CWZpbGU6TWluZXJQdWxzZV8xLjAuODhfeDY0LXNldHVwLmV4ZQp3amNkVW9Tb3FGUGxzQnBRUGlMa3JPTlJLRDQ5d2szalNCRmpsWDJGbWQvUTdsaFFVNDdvcVQybWt4MEczc0VObWx6QWVwYW1ETVEwcVJmQWpUcFpEdz09Cg==",
+      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build88/MinerPulse_1.0.88_x64-setup.exe"
     }
   }
 }
