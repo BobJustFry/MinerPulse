@@ -256,9 +256,10 @@ mod tests {
         use crate::fetch_with_detect;
         use std::time::Instant;
 
-        let client = TcpCgminerClient::default();
-        let options = FetchOptions::default();
-        for ip in ["192.168.35.42", "192.168.35.35"] {
+        let client = TcpCgminerClient::for_read();
+        let mut options = FetchOptions::default();
+        options.fast_poll = true;
+        for ip in ["192.168.35.42", "192.168.35.35", "192.168.35.33"] {
             let t = Instant::now();
             match fetch_with_detect(&client, ip, 4028, &options) {
                 Ok(s) => eprintln!(

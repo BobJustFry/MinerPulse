@@ -26,6 +26,7 @@
     type ParseImportResponse,
   } from "$lib/importFile";
   import { setupFileDrop } from "$lib/setupFileDrop";
+  import { invokeWithTimeout, MINER_READ_TIMEOUT_MS } from "$lib/minerInvoke";
   import {
     DEFAULT_POLL_RATE_HZ,
     getPollStatus,
@@ -77,6 +78,7 @@
   let pendingAuthRetry = $state<(() => Promise<void>) | null>(null);
   let busy = $state(false);
   let reading = $state(false);
+  let readGeneration = 0;
   let readCooldownSec = $state(0);
   let readCooldownTimer: ReturnType<typeof setInterval> | null = null;
   let statusText = $state("");
@@ -370,25 +372,32 @@
   }
 
   async function readMiner() {
-    if (polling || connectionLocked || reading) return;
+    if (polling || reading) return;
     if (readCooldownActive) return;
 
     const hadSnapshot = snapshot !== null;
+    const gen = ++readGeneration;
     reading = true;
-    connectionLocked = true;
     dropActive = false;
     if (!hadSnapshot) {
       statusText = msg("status.reading");
     }
 
     try {
-      const response = await invoke<{ snapshot: MinerSnapshot }>("read_miner", {
-        request: {
-          ip,
-          port: Number(port) || 4028,
-          whatsminer_auth: whatsminerAuthPayload(),
+      const response = await invokeWithTimeout<{ snapshot: MinerSnapshot }>(
+        "read_miner",
+        {
+          request: {
+            ip,
+            port: Number(port) || 4028,
+            whatsminer_auth: whatsminerAuthPayload(),
+          },
         },
-      });
+        MINER_READ_TIMEOUT_MS,
+        () => invoke("cancel_read"),
+      );
+
+      if (gen !== readGeneration) return;
 
       if (isSnapshotEmpty(response.snapshot)) {
         if (shouldPromptWhatsminerSetup(response.snapshot)) {
@@ -412,12 +421,28 @@
         promptWhatsminerSetup(response.snapshot);
       }
     } catch (err) {
-      handleReadRateLimit(err);
-      statusText = formatError(err);
+      if (gen !== readGeneration) return;
+      const e = err as ErrorResponse;
+      if (e?.code === "OPERATION_CANCELLED") {
+        statusText = msg("status.readCancelled");
+      } else {
+        handleReadRateLimit(err);
+        statusText = formatError(err);
+      }
     } finally {
-      reading = false;
-      connectionLocked = false;
+      if (gen === readGeneration) {
+        reading = false;
+      }
     }
+  }
+
+  function cancelReading() {
+    if (!reading) return;
+    readGeneration += 1;
+    dropActive = false;
+    void invoke("cancel_read");
+    reading = false;
+    statusText = msg("status.readCancelled");
   }
 
   async function enableWhatsminerApi() {
@@ -1143,6 +1168,10 @@
         <button class="btn danger" disabled={busy} onclick={stopPolling}>
           {msg("toolbar.stop")}
         </button>
+      {:else if reading}
+        <button class="btn danger" onclick={cancelReading}>
+          {msg("toolbar.cancel")}
+        </button>
       {:else}
         {#if readActionMode !== "read"}
           <div class="field poll-rate-field">
@@ -1208,6 +1237,11 @@
         </div>
       {/if}
     {:else}
+      {#if reading}
+        <button class="btn danger" onclick={cancelReading}>
+          {msg("toolbar.cancel")}
+        </button>
+      {:else}
       <button
         class="btn primary btn-with-spinner"
         disabled={readActionDisabled}
@@ -1219,6 +1253,7 @@
         {/if}
         {msg("toolbar.read")}
       </button>
+      {/if}
     {/if}
 
     <div class="open-file-control action-control" class:open={openFileMenuOpen}>

@@ -29,7 +29,7 @@ sha2 = "0.10"
 hex = "0.4"
 machine-uid = "0.5"
 os_info = "3"
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Graphics_Dwm"] }

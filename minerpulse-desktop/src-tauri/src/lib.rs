@@ -54,6 +54,39 @@ struct PollSession {
     recording: Arc<AtomicBool>,
 }
 
+struct ReadSession {
+    cancel: Arc<AtomicBool>,
+    running: Arc<AtomicBool>,
+}
+
+impl ReadSession {
+    fn new() -> Self {
+        Self {
+            cancel: Arc::new(AtomicBool::new(false)),
+            running: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    fn try_begin(&self) -> Result<(), ErrorResponse> {
+        if self.running.swap(true, Ordering::SeqCst) {
+            return Err(ErrorResponse {
+                code: minerpulse_core::ErrorCode::InvalidInput,
+                args: None,
+            });
+        }
+        self.cancel.store(false, Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn finish(&self) {
+        self.running.store(false, Ordering::SeqCst);
+    }
+
+    fn request_cancel(&self) {
+        self.cancel.store(true, Ordering::Relaxed);
+    }
+}
+
 impl PollSession {
     fn new() -> Self {
         Self {
@@ -91,9 +124,29 @@ struct AppState {
     last_snapshot: Mutex<Option<minerpulse_core::MinerSnapshot>>,
     scan: ScanSession,
     poll: PollSession,
+    read: ReadSession,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+const MINER_READ_TIMEOUT: Duration = Duration::from_secs(10);
+
+fn read_miner_snapshot(
+    ip: &str,
+    port: u16,
+    user_auth: Option<WhatsminerAuthRequest>,
+    cancel: &AtomicBool,
+) -> Result<MinerSnapshot, MinerPulseError> {
+    if cancel.load(Ordering::Relaxed) {
+        return Err(MinerPulseError::operation_cancelled());
+    }
+
+    let client = TcpCgminerClient::for_read();
+    // Read path: 4028 only, fast_poll — per-driver logic stays inside each driver.
+    let mut options = fetch_options_from_request(user_auth, None);
+    options.fast_poll = true;
+    fetch_with_detect(&client, ip, port, &options)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct WhatsminerAuthRequest {
     #[serde(default)]
     username: String,
@@ -256,14 +309,15 @@ fn set_tier(state: State<'_, AppState>, tier: SubscriptionTier) -> Result<(), Er
 
 #[tauri::command]
 async fn read_miner(
-    state: State<'_, AppState>,
-    creds: State<'_, miner_credentials::MinerCredentialsState>,
+    app: AppHandle,
     request: ReadMinerRequest,
 ) -> Result<ReadMinerResponse, ErrorResponse> {
-    let tier = *state.tier.lock().unwrap();
+    let state_for_tier = app.state::<AppState>();
+    let tier = *state_for_tier.tier.lock().unwrap();
     let g = gate(tier);
 
     if !g.can_poll() {
+        let state = app.state::<AppState>();
         let mut limiter = state.rate_limiter.lock().unwrap();
         limiter
             .try_acquire()
@@ -271,34 +325,65 @@ async fn read_miner(
     }
 
     let port = request.port.unwrap_or(4028);
-    let cloud_auth = if request.whatsminer_auth.is_none() {
-        creds.resolve_auth_for_ip(&request.ip)
-    } else {
-        None
-    };
-    let options = fetch_options_from_request(request.whatsminer_auth, cloud_auth);
+    let user_auth = request.whatsminer_auth.clone();
     let ip = request.ip.clone();
 
-    let snapshot = tauri::async_runtime::spawn_blocking(move || {
-        let client = TcpCgminerClient::default();
-        fetch_with_detect(&client, &ip, port, &options)
-    })
-    .await
-    .map_err(|_| ErrorResponse {
-        code: minerpulse_core::ErrorCode::InvalidInput,
-        args: None,
-    })?
-    .map_err(|e| ErrorResponse::from(&e))?;
+    {
+        let state = app.state::<AppState>();
+        state.read.try_begin()?;
+    }
+
+    let cancel = {
+        let state = app.state::<AppState>();
+        Arc::clone(&state.read.cancel)
+    };
+
+    let snapshot_result = tokio::time::timeout(
+        MINER_READ_TIMEOUT,
+        tauri::async_runtime::spawn_blocking(move || {
+            read_miner_snapshot(&ip, port, user_auth, cancel.as_ref())
+        }),
+    )
+    .await;
+
+    app.state::<AppState>().read.finish();
+
+    let snapshot = match snapshot_result {
+        Err(_) => {
+            app.state::<AppState>().read.request_cancel();
+            return Err(ErrorResponse {
+                code: minerpulse_core::ErrorCode::ConnTimeout,
+                args: None,
+            });
+        }
+        Ok(Ok(Ok(snapshot))) => snapshot,
+        Ok(Ok(Err(err))) => return Err(ErrorResponse::from(&err)),
+        Ok(Err(_)) => {
+            return Err(ErrorResponse {
+                code: minerpulse_core::ErrorCode::InvalidInput,
+                args: None,
+            });
+        }
+    };
 
     if let Some(access) = &snapshot.whatsminer_access {
         if let Some(mac) = &access.mac {
-            creds.remember_ip_mac(&request.ip, mac);
+            app.state::<miner_credentials::MinerCredentialsState>()
+                .remember_ip_mac(&request.ip, mac);
         }
     }
 
-    *state.last_snapshot.lock().unwrap() = Some(snapshot.clone());
+    *app.state::<AppState>()
+        .last_snapshot
+        .lock()
+        .unwrap() = Some(snapshot.clone());
 
     Ok(ReadMinerResponse { snapshot })
+}
+
+#[tauri::command]
+fn cancel_read(app: AppHandle) {
+    app.state::<AppState>().read.request_cancel();
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1059,6 +1144,7 @@ pub fn run() {
             last_snapshot: Mutex::new(None),
             scan: ScanSession::new(),
             poll: PollSession::new(),
+            read: ReadSession::new(),
         })
         .invoke_handler(tauri::generate_handler![
             get_entitlements,
@@ -1075,6 +1161,7 @@ pub fn run() {
             enable_whatsminer_api,
             test_whatsminer_credentials_command,
             read_miner,
+            cancel_read,
             start_poll,
             stop_poll,
             get_poll_status,
