@@ -1,5 +1,5 @@
 use minerpulse_core::{
-    drivers::whatsminer::access::{fetch_device_info, normalize_mac},
+    drivers::whatsminer::access::normalize_mac,
     ErrorCode, ErrorResponse, WhatsminerLuciAuth,
 };
 use serde::{Deserialize, Serialize};
@@ -123,17 +123,7 @@ impl MinerCredentialsState {
     }
 
     pub fn resolve_auth_for_ip(&self, ip: &str) -> Option<WhatsminerLuciAuth> {
-        let mac = {
-            let store = self.store.lock().unwrap();
-            if let Some(mac) = store.ip_mac.get(ip) {
-                mac.clone()
-            } else {
-                drop(store);
-                let probed = fetch_device_info(ip).and_then(|info| info.mac)?;
-                self.remember_ip_mac(ip, &probed);
-                probed
-            }
-        };
+        let mac = self.store.lock().unwrap().ip_mac.get(ip).cloned()?;
         self.resolve_auth_for_mac(&mac)
     }
 

@@ -255,7 +255,7 @@ fn set_tier(state: State<'_, AppState>, tier: SubscriptionTier) -> Result<(), Er
 }
 
 #[tauri::command]
-fn read_miner(
+async fn read_miner(
     state: State<'_, AppState>,
     creds: State<'_, miner_credentials::MinerCredentialsState>,
     request: ReadMinerRequest,
@@ -271,15 +271,24 @@ fn read_miner(
     }
 
     let port = request.port.unwrap_or(4028);
-    let client = TcpCgminerClient::default();
     let cloud_auth = if request.whatsminer_auth.is_none() {
         creds.resolve_auth_for_ip(&request.ip)
     } else {
         None
     };
     let options = fetch_options_from_request(request.whatsminer_auth, cloud_auth);
-    let snapshot =
-        fetch_with_detect(&client, &request.ip, port, &options).map_err(|e| ErrorResponse::from(&e))?;
+    let ip = request.ip.clone();
+
+    let snapshot = tauri::async_runtime::spawn_blocking(move || {
+        let client = TcpCgminerClient::default();
+        fetch_with_detect(&client, &ip, port, &options)
+    })
+    .await
+    .map_err(|_| ErrorResponse {
+        code: minerpulse_core::ErrorCode::InvalidInput,
+        args: None,
+    })?
+    .map_err(|e| ErrorResponse::from(&e))?;
 
     if let Some(access) = &snapshot.whatsminer_access {
         if let Some(mac) = &access.mac {
@@ -305,7 +314,7 @@ struct ProbeWhatsminerResponse {
 }
 
 #[tauri::command(rename = "probe_whatsminer_access")]
-fn probe_whatsminer_access_command(
+async fn probe_whatsminer_access_command(
     creds: State<'_, miner_credentials::MinerCredentialsState>,
     request: WhatsminerHostRequest,
 ) -> Result<ProbeWhatsminerResponse, ErrorResponse> {
@@ -315,7 +324,13 @@ fn probe_whatsminer_access_command(
         None
     };
     let options = fetch_options_from_request(request.whatsminer_auth, cloud_auth);
-    let status = probe_whatsminer_access(&request.ip, &options);
+    let ip = request.ip.clone();
+    let status = tauri::async_runtime::spawn_blocking(move || probe_whatsminer_access(&ip, &options, false))
+        .await
+        .map_err(|_| ErrorResponse {
+            code: minerpulse_core::ErrorCode::InvalidInput,
+            args: None,
+        })?;
     let needs_setup = compute_needs_setup(&status, true, true);
     if let Some(mac) = &status.mac {
         creds.remember_ip_mac(&request.ip, mac);
@@ -339,11 +354,21 @@ struct EnableWhatsminerApiResponse {
 }
 
 #[tauri::command]
-fn enable_whatsminer_api(
+async fn enable_whatsminer_api(
     creds: State<'_, miner_credentials::MinerCredentialsState>,
     request: EnableWhatsminerApiRequest,
 ) -> Result<EnableWhatsminerApiResponse, ErrorResponse> {
-    let enabled = enable_api_switch(&request.ip, &request.username, &request.password);
+    let ip = request.ip.clone();
+    let username = request.username.clone();
+    let password = request.password.clone();
+    let enabled = tauri::async_runtime::spawn_blocking(move || {
+        enable_api_switch(&ip, &username, &password)
+    })
+    .await
+    .map_err(|_| ErrorResponse {
+        code: minerpulse_core::ErrorCode::InvalidInput,
+        args: None,
+    })?;
     let options = fetch_options_from_request(
         Some(WhatsminerAuthRequest {
             username: request.username.clone(),
@@ -351,7 +376,13 @@ fn enable_whatsminer_api(
         }),
         None,
     );
-    let status = probe_whatsminer_access(&request.ip, &options);
+    let ip = request.ip.clone();
+    let status = tauri::async_runtime::spawn_blocking(move || probe_whatsminer_access(&ip, &options, false))
+        .await
+        .map_err(|_| ErrorResponse {
+            code: minerpulse_core::ErrorCode::InvalidInput,
+            args: None,
+        })?;
     if let Some(mac) = &status.mac {
         creds.remember_ip_mac(&request.ip, mac);
     }
@@ -375,13 +406,24 @@ struct TestWhatsminerCredentialsResponse {
 }
 
 #[tauri::command(rename = "test_whatsminer_credentials")]
-fn test_whatsminer_credentials_command(
+async fn test_whatsminer_credentials_command(
     creds: State<'_, miner_credentials::MinerCredentialsState>,
     request: TestWhatsminerCredentialsRequest,
 ) -> Result<TestWhatsminerCredentialsResponse, ErrorResponse> {
-    let ok = test_luci_credentials(&request.ip, &request.username, &request.password);
-    let mac = minerpulse_core::drivers::whatsminer::access::fetch_device_info(&request.ip)
-        .and_then(|info| info.mac);
+    let ip = request.ip.clone();
+    let username = request.username.clone();
+    let password = request.password.clone();
+    let (ok, mac) = tauri::async_runtime::spawn_blocking(move || {
+        let ok = test_luci_credentials(&ip, &username, &password);
+        let mac = minerpulse_core::drivers::whatsminer::access::fetch_device_info(&ip)
+            .and_then(|info| info.mac);
+        (ok, mac)
+    })
+    .await
+    .map_err(|_| ErrorResponse {
+        code: minerpulse_core::ErrorCode::InvalidInput,
+        args: None,
+    })?;
     if ok {
         if let Some(ref mac) = mac {
             creds.remember_ip_mac(&request.ip, mac);

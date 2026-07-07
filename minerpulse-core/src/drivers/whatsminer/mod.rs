@@ -95,7 +95,8 @@ impl MinerDriver for WhatsminerDriver {
         );
 
         if !options.fast_poll {
-            let access_status = probe_whatsminer_access(host, options);
+            let chips_ok = !snapshot.board_chips.is_empty();
+            let access_status = probe_whatsminer_access(host, options, chips_ok);
             let snapshot_empty = snapshot.hashrate.current_ghs <= 0.0
                 && snapshot.hashrate.avg_ghs <= 0.0
                 && snapshot.boards.is_empty()

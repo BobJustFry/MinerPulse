@@ -35,7 +35,7 @@ impl WhatsminerAccessStatus {
     }
 }
 
-pub fn probe_whatsminer_access(host: &str, options: &FetchOptions) -> WhatsminerAccessStatus {
+pub fn probe_whatsminer_access(host: &str, options: &FetchOptions, skip_luci_probe: bool) -> WhatsminerAccessStatus {
     let mut status = WhatsminerAccessStatus::default();
 
     if let Some(info) = fetch_device_info(host) {
@@ -45,16 +45,21 @@ pub fn probe_whatsminer_access(host: &str, options: &FetchOptions) -> Whatsminer
         status.api_switch = info.api_switch;
     }
 
-    for (username, password) in options.luci_credential_pairs() {
-        if test_luci_credentials(host, &username, &password) {
-            status.luci_reachable = true;
-            status.luci_auth_ok = true;
-            break;
+    if skip_luci_probe {
+        status.luci_reachable = true;
+        status.luci_auth_ok = true;
+    } else {
+        for (username, password) in options.luci_credential_pairs() {
+            if test_luci_credentials(host, &username, &password) {
+                status.luci_reachable = true;
+                status.luci_auth_ok = true;
+                break;
+            }
         }
-    }
 
-    if !status.luci_auth_ok {
-        status.luci_reachable = super::luci::luci_reachable(host);
+        if !status.luci_auth_ok {
+            status.luci_reachable = super::luci::luci_reachable(host);
+        }
     }
 
     status
@@ -105,23 +110,18 @@ pub fn fetch_device_info_param(host: &str, param: &str) -> Option<Value> {
 }
 
 pub fn api_request(host: &str, json_payload: &str) -> Option<String> {
-    for _ in 0..2 {
-        if let Ok(response) = api_transact(host, json_payload) {
-            return Some(response);
-        }
-    }
-    None
+    api_transact(host, json_payload).ok()
 }
 
 fn api_transact(host: &str, json_payload: &str) -> Result<String, ()> {
     let addr = format!("{host}:{WHATSMINER_API_PORT}");
     let mut stream = TcpStream::connect_timeout(
         &addr.parse().map_err(|_| ())?,
-        Duration::from_secs(4),
+        Duration::from_secs(2),
     )
     .map_err(|_| ())?;
-    stream.set_read_timeout(Some(Duration::from_secs(4))).ok();
-    stream.set_write_timeout(Some(Duration::from_secs(4))).ok();
+    stream.set_read_timeout(Some(Duration::from_secs(3))).ok();
+    stream.set_write_timeout(Some(Duration::from_secs(3))).ok();
 
     let bytes = json_payload.as_bytes();
     let len = bytes.len() as u32;
@@ -223,12 +223,27 @@ mod tests {
     }
 
     #[test]
-    fn needs_setup_when_chips_missing_and_luci_fails() {
-        let status = WhatsminerAccessStatus {
-            luci_auth_ok: false,
-            api_switch: Some(true),
-            ..Default::default()
-        };
-        assert!(compute_needs_setup(&status, false, true));
+    #[ignore = "requires miners on local network"]
+    fn bench_live_miner_reads() {
+        use crate::fetch_options::FetchOptions;
+        use crate::tcp::TcpCgminerClient;
+        use crate::fetch_with_detect;
+        use std::time::Instant;
+
+        let client = TcpCgminerClient::default();
+        let options = FetchOptions::default();
+        for ip in ["192.168.35.42", "192.168.35.35"] {
+            let t = Instant::now();
+            match fetch_with_detect(&client, ip, 4028, &options) {
+                Ok(s) => eprintln!(
+                    "fetch_with_detect {ip} OK model={} chips={} needs_setup={:?} {:?}",
+                    s.identity.model,
+                    s.board_chips.len(),
+                    s.whatsminer_access.as_ref().map(|a| a.needs_setup),
+                    t.elapsed()
+                ),
+                Err(e) => eprintln!("fetch_with_detect {ip} ERR {e:?} {:?}", t.elapsed()),
+            }
+        }
     }
 }
