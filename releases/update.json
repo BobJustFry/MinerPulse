@@ -1,12 +1,12 @@
 {
-  "version": "1.0.82",
-  "build": 82,
-  "notes": "Miner Pulse 1.0.1 (82) — WhatsMiner chip map metrics (freq, nonce, error, crc, repeat, pct) from btminer log.",
-  "pub_date": "2026-07-06T06:17:52Z",
+  "version": "1.0.85",
+  "build": 85,
+  "notes": "Miner Pulse 1.0.1 (85) — fix miner read crash (missing isSnapshotEmpty import).",
+  "pub_date": "2026-07-07T11:24:31Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRFZVUERUeUZWM2toVno3bSs4NmIvajJ3WmQyV3d3VytZRXVsTXRqd3huVTZva0dHQXpuMVpncnlyeWVuK3lib2J3czZZK0EwWEZwWUFmUmwycHdGZGdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzMzE4NjY3CWZpbGU6TWluZXJQdWxzZV8xLjAuODJfeDY0LXNldHVwLmV4ZQoxaUhMenpkVVhjVElEdUhESVdCQndMKzFBUC84QlRBbGluSzN1bWRYSjlsQXo1Wm1MblNTejFIYTU4enRDaWNEeStJT2xjbktvMXlXd1hjUTNQZURCUT09Cg==",
-      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build82/MinerPulse_1.0.82_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRFlhNlM0SWtoTWsyRmJZaWZtaTQ4dEhoWUJOQW04OG5HNXlzRlhLWlZEeS8xa3hyT2wyMUthYzQwdHJyWVVjdnpuOEg0cTdJVHBFRWlyNkEyZWU1OGdBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzNDIzNDY1CWZpbGU6TWluZXJQdWxzZV8xLjAuODVfeDY0LXNldHVwLmV4ZQpXMDlHeXBMNFVJQWtJdlFUNXJkc0lGK3FYcU1qdk5sVmpNVE0rd0Q1OW4yS2FVZkVoeUpaK2F6SG14T0grUDUwZ1hia2poUE1lMW9QN0xwVTIvWmhBdz09Cg==",
+      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build85/MinerPulse_1.0.85_x64-setup.exe"
     }
   }
 }
