@@ -9,6 +9,9 @@ use crate::model::{
 };
 use crate::tcp::TcpCgminerClient;
 
+#[path = "avalon/mac.rs"]
+pub mod mac;
+
 pub struct AvalonDriver;
 
 impl MinerDriver for AvalonDriver {
@@ -37,7 +40,6 @@ impl MinerDriver for AvalonDriver {
         client: &TcpCgminerClient,
         host: &str,
         port: u16,
-        _options: &crate::fetch_options::FetchOptions,
     ) -> Result<MinerSnapshot, MinerPulseError> {
         let pools_raw = client
             .send_receive(host, port, "pools", "", true)

@@ -2,7 +2,9 @@ use crate::drivers::antminer::{detect_antminer_summary, AntminerDriver};
 use crate::drivers::registry::{detect_vendor, model_from_stats};
 use crate::drivers::MinerDriver;
 use crate::drivers::whatsminer::{classify_for_discovery, classify_whatsminer};
-use crate::mac::fetch_miner_mac;
+use crate::drivers::antminer::mac as antminer_mac;
+use crate::drivers::avalon::mac as avalon_mac;
+use crate::drivers::whatsminer::mac as whatsminer_mac;
 use crate::model::MinerVendor;
 use crate::tcp::TcpCgminerClient;
 use rayon::prelude::*;
@@ -275,9 +277,18 @@ fn classify_probe_response(response: &str) -> Option<(MinerVendor, String)> {
     classify_cgminer_response(response)
 }
 
+fn fetch_discovered_mac(vendor: MinerVendor, ip: &str) -> Option<String> {
+    match vendor {
+        MinerVendor::Antminer => antminer_mac::fetch_mac_address(ip),
+        MinerVendor::Avalon => avalon_mac::fetch_mac_address(ip),
+        MinerVendor::Whatsminer => whatsminer_mac::fetch_mac_address(ip, None),
+        _ => None,
+    }
+}
+
 fn make_discovered(ip: &str, port: u16, vendor: MinerVendor, model: String) -> DiscoveredMiner {
     let mac = if crate::drivers::registry::driver_available(vendor) {
-        fetch_miner_mac(vendor, ip, None)
+        fetch_discovered_mac(vendor, ip)
     } else {
         None
     };

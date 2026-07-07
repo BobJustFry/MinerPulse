@@ -3,11 +3,12 @@ mod btminer_log;
 mod errors;
 mod layout;
 pub mod luci;
+pub mod mac;
+pub mod options;
 
 use super::json_util::{array_items, json_f64, json_str, json_u64};
 use super::MinerDriver;
 use crate::error::MinerPulseError;
-use crate::fetch_options::FetchOptions;
 use crate::model::{
     BoardStats, FanStats, HashrateStats, MinerIdentity, MinerSnapshot, MinerVendor, PoolInfo,
     PowerStats, ThermalStats,
@@ -17,9 +18,21 @@ use access::{compute_needs_setup, probe_whatsminer_access};
 use btminer_log::parse_btminer_log;
 use errors::parse_error_entries;
 use luci::fetch_btminer_chip_data;
+use options::WhatsminerFetchOptions;
 use serde_json::Value;
 
 pub struct WhatsminerDriver;
+
+impl WhatsminerDriver {
+    pub fn fetch_with_options(
+        client: &TcpCgminerClient,
+        host: &str,
+        port: u16,
+        options: &WhatsminerFetchOptions,
+    ) -> Result<MinerSnapshot, MinerPulseError> {
+        WhatsminerDriver::fetch_snapshot_impl(client, host, port, options)
+    }
+}
 
 impl MinerDriver for WhatsminerDriver {
     fn id(&self) -> &'static str {
@@ -38,7 +51,17 @@ impl MinerDriver for WhatsminerDriver {
         client: &TcpCgminerClient,
         host: &str,
         port: u16,
-        options: &FetchOptions,
+    ) -> Result<MinerSnapshot, MinerPulseError> {
+        WhatsminerDriver::fetch_snapshot_impl(client, host, port, &WhatsminerFetchOptions::default())
+    }
+}
+
+impl WhatsminerDriver {
+    fn fetch_snapshot_impl(
+        client: &TcpCgminerClient,
+        host: &str,
+        port: u16,
+        options: &WhatsminerFetchOptions,
     ) -> Result<MinerSnapshot, MinerPulseError> {
         let summary = client.send_payload(host, port, r#"{"cmd":"summary"}"#)?;
         let pools = if options.fast_poll {

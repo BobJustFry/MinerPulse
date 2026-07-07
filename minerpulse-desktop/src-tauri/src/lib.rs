@@ -140,10 +140,14 @@ fn read_miner_snapshot(
     }
 
     let client = TcpCgminerClient::for_read();
-    // Read path: 4028 only, fast_poll — per-driver logic stays inside each driver.
-    let mut options = fetch_options_from_request(user_auth, None);
-    options.fast_poll = true;
-    fetch_with_detect(&client, ip, port, &options)
+    let mut wm_options = FetchOptions::fast_read();
+    if let Some(auth) = user_auth {
+        wm_options.luci_auth = Some(WhatsminerLuciAuth {
+            username: auth.username,
+            password: auth.password,
+        });
+    }
+    fetch_with_detect(&client, ip, port, &wm_options)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,14 +170,14 @@ fn fetch_options_from_request(
     auth: Option<WhatsminerAuthRequest>,
     cloud_auth: Option<WhatsminerLuciAuth>,
 ) -> FetchOptions {
-    let whatsminer_luci = auth
+    let luci_auth = auth
         .map(|value| WhatsminerLuciAuth {
             username: value.username,
             password: value.password,
         })
         .or(cloud_auth);
     FetchOptions {
-        whatsminer_luci,
+        luci_auth,
         fast_poll: false,
     }
 }

@@ -1,4 +1,4 @@
-use crate::fetch_options::FetchOptions;
+use super::options::WhatsminerFetchOptions;
 use crate::model::WhatsminerAccessInfo;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use serde_json::Value;
@@ -35,7 +35,11 @@ impl WhatsminerAccessStatus {
     }
 }
 
-pub fn probe_whatsminer_access(host: &str, options: &FetchOptions, skip_luci_probe: bool) -> WhatsminerAccessStatus {
+pub fn probe_whatsminer_access(
+    host: &str,
+    options: &WhatsminerFetchOptions,
+    skip_luci_probe: bool,
+) -> WhatsminerAccessStatus {
     let mut status = WhatsminerAccessStatus::default();
 
     if let Some(info) = fetch_device_info(host) {
@@ -190,9 +194,7 @@ pub fn generate_api_token(cmd: &str, password: &str, salt: &str, ts: i64) -> Str
 }
 
 pub fn normalize_mac(raw: &str) -> String {
-    raw.trim()
-        .to_uppercase()
-        .replace('-', ":")
+    crate::drivers::parse::normalize_mac_address(raw)
 }
 
 fn parse_switch_flag(value: &Value) -> Option<bool> {
@@ -251,14 +253,13 @@ mod tests {
     #[test]
     #[ignore = "requires miners on local network"]
     fn bench_live_miner_reads() {
-        use crate::fetch_options::FetchOptions;
+        use crate::drivers::whatsminer::options::WhatsminerFetchOptions;
         use crate::tcp::TcpCgminerClient;
         use crate::fetch_with_detect;
         use std::time::Instant;
 
         let client = TcpCgminerClient::for_read();
-        let mut options = FetchOptions::default();
-        options.fast_poll = true;
+        let options = WhatsminerFetchOptions::fast_read();
         for ip in ["192.168.35.42", "192.168.35.35", "192.168.35.33"] {
             let t = Instant::now();
             match fetch_with_detect(&client, ip, 4028, &options) {

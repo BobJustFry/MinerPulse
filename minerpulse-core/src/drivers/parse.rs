@@ -45,6 +45,13 @@ pub fn parse_i32(value: &str) -> Option<i32> {
     value.trim().parse().ok()
 }
 
+/// Vendor-neutral MAC string normalization (uppercase, colon-separated).
+pub fn normalize_mac_address(raw: &str) -> String {
+    raw.trim()
+        .to_uppercase()
+        .replace('-', ":")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,5 +1,4 @@
 use crate::error::MinerPulseError;
-use crate::fetch_options::FetchOptions;
 use crate::model::MinerSnapshot;
 use crate::tcp::TcpCgminerClient;
 
@@ -25,6 +24,5 @@ pub trait MinerDriver: Send + Sync {
         client: &TcpCgminerClient,
         host: &str,
         port: u16,
-        options: &FetchOptions,
     ) -> Result<MinerSnapshot, MinerPulseError>;
 }

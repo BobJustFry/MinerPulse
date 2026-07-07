@@ -13,6 +13,9 @@ use crate::model::{
 use crate::tcp::TcpCgminerClient;
 use serde_json::Value;
 
+#[path = "antminer/mac.rs"]
+pub mod mac;
+
 const HASHRATE_KEYS: [&str; 8] = [
     "GHS 5s",
     "GHS av",
@@ -57,7 +60,6 @@ impl MinerDriver for AntminerDriver {
         client: &TcpCgminerClient,
         host: &str,
         port: u16,
-        _options: &crate::fetch_options::FetchOptions,
     ) -> Result<MinerSnapshot, MinerPulseError> {
         let stats = client
             .send_receive(host, port, "stats", "", true)
@@ -217,10 +219,6 @@ fn json_temp_from_dev(dev: &Value) -> Option<f64> {
 }
 
 pub fn detect_antminer_summary(raw: &str) -> bool {
-    if crate::drivers::whatsminer::classify_for_discovery(raw).is_some() {
-        return false;
-    }
-
     let trimmed = raw.trim();
     if !trimmed.starts_with('{') {
         return false;

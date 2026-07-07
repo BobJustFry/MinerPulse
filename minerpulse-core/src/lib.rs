@@ -4,7 +4,6 @@ pub mod entitlements;
 pub mod error;
 pub mod fetch_options;
 pub mod import;
-pub mod mac;
 pub mod model;
 pub mod mpulse;
 pub mod rate_limit;
@@ -27,7 +26,6 @@ pub use error::{ErrorCode, ErrorResponse, MinerPulseError};
 pub use fetch_options::{FetchOptions, WhatsminerLuciAuth};
 pub use model::{MinerSnapshot, WhatsminerAccessInfo};
 pub use import::{import_file_content, ImportResult, MAX_IMPORT_BYTES};
-pub use mac::{enrich_snapshot_mac, fetch_miner_mac};
 pub use mpulse::{
     decode_mpulse_bytes, load_mpulse, save_session, save_snapshot, MpulseFile, MpulseFrame,
     MpulseKind, DEFAULT_POLL_INTERVAL_SEC, DEFAULT_POLL_RATE_HZ, MAX_SESSION_DURATION_SEC,

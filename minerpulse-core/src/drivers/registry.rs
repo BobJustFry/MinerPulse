@@ -1,9 +1,9 @@
 use super::antminer::{detect_antminer_summary, parse_antminer_snapshot, AntminerDriver};
 use super::avalon::AvalonDriver;
+use super::whatsminer::options::WhatsminerFetchOptions;
 use super::whatsminer::WhatsminerDriver;
 use super::MinerDriver;
 use crate::error::MinerPulseError;
-use crate::fetch_options::FetchOptions;
 use crate::model::{MinerSnapshot, MinerVendor};
 use crate::tcp::TcpCgminerClient;
 
@@ -73,13 +73,13 @@ fn is_error_response(response: &str) -> bool {
         || response.contains("Stream broken")
 }
 
+/// Detect vendor on 4028, then delegate to **one** driver. `wm_options` is WhatsMiner-only.
 pub fn fetch_with_detect(
     client: &TcpCgminerClient,
     host: &str,
     port: u16,
-    options: &FetchOptions,
+    wm_options: &WhatsminerFetchOptions,
 ) -> Result<MinerSnapshot, MinerPulseError> {
-    // Phase 1: CGMiner on `port` (4028) — detect vendor, then delegate to driver.
     let mut last_stats = String::new();
 
     for json_mode in [true, false] {
@@ -89,7 +89,7 @@ pub fn fetch_with_detect(
             }
             last_stats = stats.clone();
             if let Some(driver) = detect_driver(&stats) {
-                return driver.fetch_snapshot(client, host, port, options);
+                return driver.fetch_snapshot(client, host, port);
             }
         }
     }
@@ -104,11 +104,19 @@ pub fn fetch_with_detect(
         .send_receive(host, port, "devs", "", true)
         .unwrap_or_default();
 
-    if (AntminerDriver::detect(&last_stats)
+    if WhatsminerDriver::detect(&summary) || WhatsminerDriver::detect(&last_stats) {
+        return WhatsminerDriver::fetch_with_options(client, host, port, wm_options);
+    }
+
+    if let Ok(payload_summary) = client.send_payload(host, port, r#"{"cmd":"summary"}"#) {
+        if WhatsminerDriver::detect(&payload_summary) {
+            return WhatsminerDriver::fetch_with_options(client, host, port, wm_options);
+        }
+    }
+
+    if AntminerDriver::detect(&last_stats)
         || detect_antminer_summary(&summary)
-        || last_stats.contains("Antminer"))
-        && crate::drivers::whatsminer::classify_for_discovery(&summary).is_none()
-        && crate::drivers::whatsminer::classify_for_discovery(&last_stats).is_none()
+        || last_stats.contains("Antminer")
     {
         let stats = if last_stats.is_empty() {
             client
@@ -126,18 +134,6 @@ pub fn fetch_with_detect(
         ));
     }
 
-    if WhatsminerDriver::detect(&summary) || WhatsminerDriver::detect(&last_stats) {
-        let driver = WhatsminerDriver;
-        return driver.fetch_snapshot(client, host, port, options);
-    }
-
-    if let Ok(summary) = client.send_payload(host, port, r#"{"cmd":"summary"}"#) {
-        if WhatsminerDriver::detect(&summary) {
-            let driver = WhatsminerDriver;
-            return driver.fetch_snapshot(client, host, port, options);
-        }
-    }
-
     Err(MinerPulseError::with_code(
         crate::error::ErrorCode::NotSupported,
     ))
@@ -147,9 +143,9 @@ pub fn fetch_whatsminer(
     client: &TcpCgminerClient,
     host: &str,
     port: u16,
-    options: &FetchOptions,
+    wm_options: &WhatsminerFetchOptions,
 ) -> Result<MinerSnapshot, MinerPulseError> {
-    WhatsminerDriver.fetch_snapshot(client, host, port, options)
+    WhatsminerDriver::fetch_with_options(client, host, port, wm_options)
 }
 
 pub fn detect_vendor(stats_response: &str) -> MinerVendor {

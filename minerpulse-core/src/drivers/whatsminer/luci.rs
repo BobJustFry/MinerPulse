@@ -1,5 +1,5 @@
 use super::btminer_log::{parse_btminer_html, parse_btminer_log};
-use crate::fetch_options::FetchOptions;
+use super::options::WhatsminerFetchOptions;
 use crate::model::BoardChipMap;
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, SET_COOKIE};
@@ -63,7 +63,7 @@ fn cached_log(client: &Client, host: &str, base: &str) -> Option<String> {
     extract_chip_log(&response.text().ok()?)
 }
 
-pub fn fetch_btminer_chip_data(host: &str, options: &FetchOptions) -> (Vec<BoardChipMap>, String) {
+pub fn fetch_btminer_chip_data(host: &str, options: &WhatsminerFetchOptions) -> (Vec<BoardChipMap>, String) {
     let client = match build_luci_client() {
         Ok(client) => client,
         Err(_) => return (Vec::new(), String::new()),
@@ -342,7 +342,7 @@ mod tests {
     #[test]
     #[ignore = "requires WhatsMiner on local network"]
     fn fetches_chip_data_from_live_whatsminer() {
-        let options = FetchOptions::default();
+        let options = WhatsminerFetchOptions::default();
         let (boards, log) = fetch_btminer_chip_data("192.168.35.35", &options);
         assert!(!log.is_empty(), "expected btminer log text");
         assert!(!boards.is_empty(), "expected parsed chip boards");
