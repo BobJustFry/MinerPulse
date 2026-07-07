@@ -161,10 +161,7 @@ pub fn fetch_with_detect(
             match client.send_receive(host, port, "stats", "", true) {
                 Ok(value) if is_meaningful_response(&value) => value,
                 Ok(_) => String::new(),
-                Err(err) => {
-                    last_conn_err = Some(err);
-                    String::new()
-                }
+                Err(_) => String::new(),
             }
         } else {
             last_stats
