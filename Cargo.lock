@@ -2328,7 +2328,7 @@ dependencies = [
 
 [[package]]
 name = "minerpulse-core"
-version = "1.0.1"
+version = "1.2.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",

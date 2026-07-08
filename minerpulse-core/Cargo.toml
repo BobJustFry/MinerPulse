@@ -1,6 +1,6 @@
 [package]
 name = "minerpulse-core"
-version = "1.0.1"
+version = "1.2.0"
 edition = "2021"
 description = "MinerPulse core: miner drivers, TCP, snapshots, logs"
 license = "LicenseRef-Proprietary"
