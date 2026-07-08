@@ -41,7 +41,7 @@
   import { SessionPlayer, type PlaybackSpeed } from "$lib/sessionPlayer";
   import SessionPlayerBar from "$lib/components/SessionPlayerBar.svelte";
   import { formatAppError } from "$lib/formatAppError";
-  import { driverLabel } from "$lib/formatMiner";
+  import { driverLabel, statusMessageKey } from "$lib/formatMiner";
   import { invokeWithTimeout, MINER_READ_TIMEOUT_MS, WHATSMINER_AUTH_TEST_TIMEOUT_MS } from "$lib/minerInvoke";
   import { isSnapshotEmpty } from "$lib/snapshotUtils";
   import { checkForAppUpdate, UPDATE_CHECK_INTERVAL_MS } from "$lib/updateCheck";
@@ -254,6 +254,13 @@
     whatsminerAuthOpen = false;
     whatsminerTestOk = null;
     whatsminerAuthError = "";
+    // Cancel of the auth window: drop the partial (chip-less) snapshot and reset status.
+    if (snapshot && whatsminerNeedsAuth(snapshot)) {
+      snapshot = null;
+      snapshotSourceIp = "";
+      clearCharts();
+      statusText = msg("status.ready");
+    }
   }
 
   function promptWhatsminerSetup(nextSnapshot?: MinerSnapshot, retry?: () => Promise<void>) {
@@ -332,9 +339,14 @@
     return formatAppError(locale, err, { minReadIntervalSec: entitlements.min_read_interval_sec });
   }
 
+  function minerStatusLabel(status: string): string {
+    const key = statusMessageKey(status);
+    return key ? msg(key as MessageKey) : status;
+  }
+
   function snapshotStatusText(data: MinerSnapshot): string {
     const driver = driverLabel(data.identity.driver_id);
-    return `${data.identity.model} · ${data.status} · ${msg("status.driver", { driver })}`;
+    return `${data.identity.model} · ${minerStatusLabel(data.status)} · ${msg("status.driver", { driver })}`;
   }
 
   async function refreshEntitlements() {

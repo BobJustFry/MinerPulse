@@ -19,6 +19,10 @@ pub struct WhatsminerAccessStatus {
     pub luci_auth_ok: bool,
     pub api_reachable: bool,
     pub api_auth_ok: bool,
+    /// Miner model from `get.device.info` → `msg.miner.type` (e.g. "M30S++").
+    pub model: Option<String>,
+    /// Mining state from `get.device.info` → `msg.miner.working`.
+    pub working: Option<bool>,
 }
 
 impl WhatsminerAccessStatus {
@@ -47,6 +51,8 @@ pub fn probe_whatsminer_access(
         status.api_auth_ok = info.code_ok;
         status.mac = info.mac;
         status.api_switch = info.api_switch;
+        status.model = info.model;
+        status.working = info.working;
     }
 
     if skip_luci_probe {
@@ -110,6 +116,8 @@ pub fn probe_whatsminer_access_fast(host: &str) -> WhatsminerAccessStatus {
         status.api_auth_ok = info.code_ok;
         status.mac = info.mac;
         status.api_switch = info.api_switch;
+        status.model = info.model;
+        status.working = info.working;
     }
     status
 }
@@ -120,6 +128,8 @@ pub struct DeviceInfoProbe {
     pub mac: Option<String>,
     pub api_switch: Option<bool>,
     pub salt: Option<String>,
+    pub model: Option<String>,
+    pub working: Option<bool>,
 }
 
 pub fn fetch_device_info(host: &str) -> Option<DeviceInfoProbe> {
@@ -215,12 +225,34 @@ pub fn parse_device_info(json: &str) -> Option<DeviceInfoProbe> {
         .and_then(|v| v.as_str())
         .map(str::to_string);
 
+    let miner = msg.get("miner");
+    let model = miner
+        .and_then(|m| m.get("type"))
+        .and_then(|v| v.as_str())
+        .map(clean_model);
+    let working = miner
+        .and_then(|m| m.get("working"))
+        .and_then(parse_switch_flag);
+
     Some(DeviceInfoProbe {
         code_ok,
         mac,
         api_switch,
         salt,
+        model,
+        working,
     })
+}
+
+/// `M30S++_VH70` → `M30S++` (drop the hash-board suffix after `_`).
+fn clean_model(raw: &str) -> String {
+    let trimmed = raw.trim();
+    trimmed
+        .split('_')
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or(trimmed)
+        .to_string()
 }
 
 pub fn generate_api_token(cmd: &str, password: &str, salt: &str, ts: i64) -> String {

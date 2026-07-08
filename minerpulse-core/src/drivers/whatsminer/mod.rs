@@ -151,16 +151,68 @@ impl WhatsminerDriver {
                 let skip_luci_probe = !board_chips_empty;
                 probe_whatsminer_access(host, options, skip_luci_probe)
             };
+            apply_identity(&mut snapshot, access_status.model.as_deref(), access_status.working);
             let needs_setup = compute_needs_setup(
                 &access_status,
                 snapshot_empty,
                 board_chips_empty,
             );
             snapshot.whatsminer_access = Some(access_status.to_info(needs_setup));
+        } else if options.fetch_chips && model_is_generic(&snapshot.identity.model) {
+            // Read path with chips present but generic model — cheap device.info lookup.
+            ensure_active(options)?;
+            trace("whatsminer", "identity_fast", host);
+            let info = probe_whatsminer_access_fast(host);
+            apply_identity(&mut snapshot, info.model.as_deref(), info.working);
         }
+
+        finalize_status(&mut snapshot);
 
         Ok(snapshot)
     }
+}
+
+fn model_is_generic(model: &str) -> bool {
+    model.is_empty() || model.eq_ignore_ascii_case("whatsminer")
+}
+
+/// Fill model/status from `get.device.info` when the cgminer summary lacked them.
+fn apply_identity(snapshot: &mut MinerSnapshot, model: Option<&str>, working: Option<bool>) {
+    if let Some(model) = model {
+        if !model.is_empty() && model_is_generic(&snapshot.identity.model) {
+            snapshot.identity.model = model.to_string();
+        }
+    }
+    if status_is_unknown(&snapshot.status) {
+        match working {
+            Some(true) => snapshot.status = "mining".to_string(),
+            Some(false) => snapshot.status = "idle".to_string(),
+            None => {}
+        }
+    }
+}
+
+fn status_is_unknown(status: &str) -> bool {
+    status.is_empty() || status.eq_ignore_ascii_case("unknown")
+}
+
+/// Last-resort status when neither summary nor device.info reported one.
+fn finalize_status(snapshot: &mut MinerSnapshot) {
+    if !status_is_unknown(&snapshot.status) {
+        return;
+    }
+    let has_hash = snapshot.hashrate.current_ghs > 0.0 || snapshot.hashrate.avg_ghs > 0.0;
+    let has_telemetry = has_hash
+        || !snapshot.boards.is_empty()
+        || !snapshot.board_chips.is_empty()
+        || !snapshot.pools.is_empty();
+    snapshot.status = if has_hash {
+        "mining".to_string()
+    } else if has_telemetry {
+        "idle".to_string()
+    } else {
+        "offline".to_string()
+    };
 }
 
 fn ensure_active(options: &WhatsminerFetchOptions) -> Result<(), MinerPulseError> {

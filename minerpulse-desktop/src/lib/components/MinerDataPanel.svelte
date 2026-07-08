@@ -9,6 +9,7 @@
     formatPercent,
     formatUptime,
     shortPoolUrl,
+    statusMessageKey,
     statusTone,
     vendorLabel,
   } from "$lib/formatMiner";
@@ -109,7 +110,11 @@
     </div>
     <div class="data-hero-side">
       <span class="data-status-pill tone-{statusTone(snapshot.status)}">
-        {snapshot.status || "—"}
+        {#if statusMessageKey(snapshot.status)}
+          {msg(statusMessageKey(snapshot.status) as MessageKey)}
+        {:else}
+          {snapshot.status || "—"}
+        {/if}
       </span>
       {#if hasHashrateData()}
         <div class="data-hero-hash">{formatHashrate(snapshot.hashrate.avg5s_ghs)}</div>

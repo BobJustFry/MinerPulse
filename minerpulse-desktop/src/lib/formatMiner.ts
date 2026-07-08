@@ -117,14 +117,37 @@ export function statusTone(status: string): "ok" | "warn" | "muted" {
     value === "s" ||
     value === "alive" ||
     value === "ok" ||
+    value === "mining" ||
     value.includes("running") ||
     value.includes("work") ||
     value.includes("active")
   ) {
     return "ok";
   }
-  if (value.includes("dead") || value.includes("fail") || value.includes("error")) {
+  if (
+    value === "offline" ||
+    value.includes("dead") ||
+    value.includes("fail") ||
+    value.includes("error")
+  ) {
     return "warn";
   }
   return "muted";
+}
+
+/// Canonical status tokens set by the WhatsMiner driver map to i18n keys.
+export function statusMessageKey(status: string): string | null {
+  switch (status.trim().toLowerCase()) {
+    case "mining":
+      return "minerStatus.mining";
+    case "idle":
+      return "minerStatus.idle";
+    case "offline":
+      return "minerStatus.offline";
+    case "unknown":
+    case "":
+      return "minerStatus.unknown";
+    default:
+      return null;
+  }
 }
