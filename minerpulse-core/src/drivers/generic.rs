@@ -73,6 +73,7 @@ fn pools_from(pools_raw: &str) -> Vec<PoolInfo> {
                 status: json_str(pool, "Status").unwrap_or("Unknown").to_string(),
                 accepted: json_u64(pool, "Accepted").unwrap_or(0),
                 rejected: json_u64(pool, "Rejected").unwrap_or(0),
+                ..Default::default()
             })
         })
         .collect()

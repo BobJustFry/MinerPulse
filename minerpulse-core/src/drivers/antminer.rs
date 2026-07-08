@@ -151,6 +151,10 @@ fn parse_pools_json(raw: &str) -> Vec<PoolInfo> {
                         status: json_str(pool, "Status").unwrap_or("Unknown").to_string(),
                         accepted: json_u64(pool, "Accepted").unwrap_or(0),
                         rejected: json_u64(pool, "Rejected").unwrap_or(0),
+                        priority: json_u64(pool, "Priority").map(|v| v as u32),
+                        stratum_active: pool.get("Stratum Active").and_then(|v| v.as_bool()),
+                        diff: json_str(pool, "Last Share Difficulty").map(str::to_string),
+                        stale_pct: json_f64(pool, "Pool Stale%"),
                     })
                 })
                 .collect();
@@ -709,7 +713,39 @@ pub fn parse_antminer_snapshot(
             crate::drivers::parse::derive_run_status(has_hashrate, has_telemetry).to_string();
     }
 
+    enrich_antminer_params(&mut snapshot, stats_raw, summary_raw);
+
     snapshot
+}
+
+/// Extra operational params available over cgminer 4028 for Antminer/BMMiner.
+fn enrich_antminer_params(snapshot: &mut MinerSnapshot, stats_raw: &str, summary_raw: &str) {
+    if let Ok(value) = serde_json::from_str::<Value>(stats_raw.trim()) {
+        if let Some(stats) = merge_stats_objects(&value) {
+            if snapshot.params.frequency_mhz.is_none() {
+                snapshot.params.frequency_mhz = json_f64(&stats, "total_freqavg")
+                    .or_else(|| json_f64(&stats, "frequency"))
+                    .filter(|f| *f > 0.0);
+            }
+            // Overall chip temps from per-chain sensors already collected into boards.
+            let maxs: Vec<f64> = snapshot.boards.iter().filter_map(|b| b.chip_temp_max_c).collect();
+            if snapshot.params.chip_temp_max_c.is_none() && !maxs.is_empty() {
+                snapshot.params.chip_temp_max_c =
+                    maxs.iter().cloned().fold(None, |acc, v| Some(acc.map_or(v, |a: f64| a.max(v))));
+            }
+        }
+    }
+    if let Ok(value) = serde_json::from_str::<Value>(summary_raw.trim()) {
+        if let Some(item) = value.get("SUMMARY").and_then(|s| s.as_array()).and_then(|a| a.first()) {
+            if snapshot.params.device_hardware_pct.is_none() {
+                snapshot.params.device_hardware_pct = json_f64(item, "Device Hardware%");
+            }
+            if snapshot.params.device_reject_pct.is_none() {
+                snapshot.params.device_reject_pct = json_f64(item, "Pool Rejected%")
+                    .or_else(|| json_f64(item, "Device Rejected%"));
+            }
+        }
+    }
 }
 
 fn enrich_from_summary(snapshot: &mut MinerSnapshot, summary_raw: &str) {

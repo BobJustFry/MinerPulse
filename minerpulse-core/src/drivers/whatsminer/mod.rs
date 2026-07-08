@@ -153,23 +153,113 @@ impl WhatsminerDriver {
                 probe_whatsminer_access(host, options, skip_luci_probe)
             };
             apply_identity(&mut snapshot, access_status.model.as_deref(), access_status.working);
+            apply_params(&mut snapshot, &access_status.params);
             let needs_setup = compute_needs_setup(
                 &access_status,
                 snapshot_empty,
                 board_chips_empty,
             );
             snapshot.whatsminer_access = Some(access_status.to_info(needs_setup));
-        } else if options.fetch_chips && model_is_generic(&snapshot.identity.model) {
-            // Read path with chips present but generic model — cheap device.info lookup.
+        } else if options.fetch_chips {
+            // Read path with chips present — one device.info for model + params.
             ensure_active(options)?;
             trace("whatsminer", "identity_fast", host);
             let info = probe_whatsminer_access_fast(host);
             apply_identity(&mut snapshot, info.model.as_deref(), info.working);
+            apply_params(&mut snapshot, &info.params);
         }
 
+        enrich_params(&mut snapshot, &summary);
         finalize_status(&mut snapshot);
 
         Ok(snapshot)
+    }
+}
+
+/// Copy device.info-sourced params into the snapshot (device.info is authoritative).
+fn apply_params(snapshot: &mut MinerSnapshot, src: &crate::model::MinerParams) {
+    let p = &mut snapshot.params;
+    macro_rules! set_if_some {
+        ($field:ident) => {
+            if src.$field.is_some() {
+                p.$field = src.$field.clone();
+            }
+        };
+    }
+    set_if_some!(power_mode);
+    set_if_some!(rated_ghs);
+    set_if_some!(power_limit_w);
+    set_if_some!(cooling_mode);
+    set_if_some!(psu_input_voltage);
+    set_if_some!(psu_input_current);
+    set_if_some!(psu_output_voltage);
+    set_if_some!(psu_watts);
+    set_if_some!(psu_temp_c);
+    set_if_some!(psu_fan_rpm);
+    set_if_some!(psu_model);
+}
+
+/// Derive extra params from parsed telemetry and the raw summary (defensive keys).
+fn enrich_params(snapshot: &mut MinerSnapshot, summary_raw: &str) {
+    // Overall chip temperatures from per-board min/avg/max.
+    let mins: Vec<f64> = snapshot.boards.iter().filter_map(|b| b.chip_temp_min_c).collect();
+    let avgs: Vec<f64> = snapshot.boards.iter().filter_map(|b| b.chip_temp_avg_c).collect();
+    let maxs: Vec<f64> = snapshot.boards.iter().filter_map(|b| b.chip_temp_max_c).collect();
+    if snapshot.params.chip_temp_min_c.is_none() {
+        snapshot.params.chip_temp_min_c = mins.iter().cloned().fold(None, |acc, v| {
+            Some(acc.map_or(v, |a: f64| a.min(v)))
+        });
+    }
+    if snapshot.params.chip_temp_max_c.is_none() {
+        snapshot.params.chip_temp_max_c = maxs.iter().cloned().fold(None, |acc, v| {
+            Some(acc.map_or(v, |a: f64| a.max(v)))
+        });
+    }
+    if snapshot.params.chip_temp_avg_c.is_none() && !avgs.is_empty() {
+        snapshot.params.chip_temp_avg_c = Some(avgs.iter().sum::<f64>() / avgs.len() as f64);
+    }
+
+    // Frequency: average of per-board frequency domains, when present.
+    if snapshot.params.frequency_mhz.is_none() {
+        let freqs: Vec<f64> = snapshot
+            .boards
+            .iter()
+            .flat_map(|b| b.freq_domains_mhz.iter().map(|f| *f as f64))
+            .filter(|f| *f > 0.0)
+            .collect();
+        if !freqs.is_empty() {
+            snapshot.params.frequency_mhz = Some(freqs.iter().sum::<f64>() / freqs.len() as f64);
+        }
+    }
+
+    // Defensive summary fields (key names vary across firmware).
+    let value: Value = serde_json::from_str(summary_raw.trim()).unwrap_or(Value::Null);
+    let summary = value
+        .get("SUMMARY")
+        .and_then(|s| s.as_array())
+        .and_then(|items| items.first())
+        .or_else(|| value.get("msg").and_then(|m| m.get("summary")));
+    if let Some(item) = summary {
+        if snapshot.params.env_temp_c.is_none() {
+            snapshot.params.env_temp_c = json_f64(item, "Env Temp")
+                .or_else(|| json_f64(item, "Environment Temp"))
+                .or_else(|| json_f64(item, "environment-temperature"));
+        }
+        if snapshot.params.power_mode.is_none() {
+            snapshot.params.power_mode = json_str(item, "Power Mode")
+                .or_else(|| json_str(item, "power-mode"))
+                .map(str::to_string);
+        }
+        if snapshot.params.device_hardware_pct.is_none() {
+            snapshot.params.device_hardware_pct = json_f64(item, "Device Hardware%");
+        }
+        if snapshot.params.device_reject_pct.is_none() {
+            snapshot.params.device_reject_pct =
+                json_f64(item, "Pool Rejected%").or_else(|| json_f64(item, "Device Rejected%"));
+        }
+        if snapshot.params.rated_ghs.is_none() {
+            snapshot.params.rated_ghs = json_f64(item, "Factory GHS");
+        }
     }
 }
 
@@ -382,6 +472,10 @@ fn parse_pools_json(raw: &str) -> Vec<PoolInfo> {
                     status: json_str(pool, "Status").unwrap_or("Unknown").to_string(),
                     accepted: json_u64(pool, "Accepted").unwrap_or(0),
                     rejected: json_u64(pool, "Rejected").unwrap_or(0),
+                    priority: json_u64(pool, "Priority").map(|v| v as u32),
+                    stratum_active: pool.get("Stratum Active").and_then(|v| v.as_bool()),
+                    diff: json_str(pool, "Last Share Difficulty").map(str::to_string),
+                    stale_pct: json_f64(pool, "Pool Stale%"),
                 })
             })
             .collect();
@@ -401,6 +495,7 @@ fn parse_pools_json(raw: &str) -> Vec<PoolInfo> {
                         status: json_str(pool, "status").unwrap_or("Unknown").to_string(),
                         accepted: json_u64(pool, "accepted").unwrap_or(0),
                         rejected: json_u64(pool, "rejected").unwrap_or(0),
+                        ..Default::default()
                     })
                 })
                 .collect()

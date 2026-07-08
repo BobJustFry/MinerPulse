@@ -126,6 +126,59 @@ pub struct PoolInfo {
     pub status: String,
     pub accepted: u64,
     pub rejected: u64,
+    #[serde(default)]
+    pub priority: Option<u32>,
+    #[serde(default)]
+    pub stratum_active: Option<bool>,
+    #[serde(default)]
+    pub diff: Option<String>,
+    #[serde(default)]
+    pub stale_pct: Option<f64>,
+}
+
+/// Extended operational parameters affecting miner behaviour.
+/// All optional — populated per-vendor when the API exposes them.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MinerParams {
+    // A. Mode & targets
+    #[serde(default)]
+    pub power_mode: Option<String>,
+    #[serde(default)]
+    pub frequency_mhz: Option<f64>,
+    #[serde(default)]
+    pub rated_ghs: Option<f64>,
+    #[serde(default)]
+    pub power_limit_w: Option<f64>,
+    #[serde(default)]
+    pub cooling_mode: Option<String>,
+    // B. PSU / power supply
+    #[serde(default)]
+    pub psu_input_voltage: Option<f64>,
+    #[serde(default)]
+    pub psu_input_current: Option<f64>,
+    #[serde(default)]
+    pub psu_output_voltage: Option<f64>,
+    #[serde(default)]
+    pub psu_watts: Option<f64>,
+    #[serde(default)]
+    pub psu_temp_c: Option<f64>,
+    #[serde(default)]
+    pub psu_fan_rpm: Option<u32>,
+    #[serde(default)]
+    pub psu_model: Option<String>,
+    // C. Thermal & quality
+    #[serde(default)]
+    pub env_temp_c: Option<f64>,
+    #[serde(default)]
+    pub chip_temp_min_c: Option<f64>,
+    #[serde(default)]
+    pub chip_temp_avg_c: Option<f64>,
+    #[serde(default)]
+    pub chip_temp_max_c: Option<f64>,
+    #[serde(default)]
+    pub device_hardware_pct: Option<f64>,
+    #[serde(default)]
+    pub device_reject_pct: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -174,6 +227,8 @@ pub struct MinerSnapshot {
     #[serde(default)]
     pub ecmm: Option<u64>,
     #[serde(default)]
+    pub params: MinerParams,
+    #[serde(default)]
     pub whatsminer_access: Option<WhatsminerAccessInfo>,
 }
 
@@ -197,6 +252,7 @@ impl Default for MinerSnapshot {
             uptime_sec: None,
             work_mode: None,
             ecmm: None,
+            params: MinerParams::default(),
             whatsminer_access: None,
         }
     }

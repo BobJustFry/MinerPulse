@@ -70,6 +70,10 @@ export interface MinerSnapshot {
     status: string;
     accepted: number;
     rejected: number;
+    priority?: number | null;
+    stratum_active?: boolean | null;
+    diff?: string | null;
+    stale_pct?: number | null;
   }>;
   shares_accepted?: number | null;
   shares_rejected?: number | null;
@@ -79,6 +83,28 @@ export interface MinerSnapshot {
   uptime_sec?: number | null;
   work_mode?: number | null;
   ecmm?: number | null;
+  params?: MinerParams;
+}
+
+export interface MinerParams {
+  power_mode?: string | null;
+  frequency_mhz?: number | null;
+  rated_ghs?: number | null;
+  power_limit_w?: number | null;
+  cooling_mode?: string | null;
+  psu_input_voltage?: number | null;
+  psu_input_current?: number | null;
+  psu_output_voltage?: number | null;
+  psu_watts?: number | null;
+  psu_temp_c?: number | null;
+  psu_fan_rpm?: number | null;
+  psu_model?: string | null;
+  env_temp_c?: number | null;
+  chip_temp_min_c?: number | null;
+  chip_temp_avg_c?: number | null;
+  chip_temp_max_c?: number | null;
+  device_hardware_pct?: number | null;
+  device_reject_pct?: number | null;
 }
 
 export interface WhatsminerAccessInfo {

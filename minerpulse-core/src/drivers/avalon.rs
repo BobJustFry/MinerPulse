@@ -221,6 +221,7 @@ fn parse_avalon_pools_from_lcd(raw: &str) -> Vec<PoolInfo> {
             status: "Active".to_string(),
             accepted: 0,
             rejected: 0,
+            ..Default::default()
         }]
     })
     .unwrap_or_default()
@@ -450,6 +451,7 @@ fn parse_avalon_pools(raw: &str) -> Vec<PoolInfo> {
                                 .get("Rejected")
                                 .and_then(|v| v.as_u64())
                                 .unwrap_or(0),
+                            ..Default::default()
                         })
                     })
                     .collect();

@@ -1046,6 +1046,28 @@ button {
   background: var(--bg-elevated);
 }
 
+.data-params-summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.data-params-summary::before {
+  content: "▸";
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+
+.data-params-details[open] .data-params-summary::before {
+  transform: rotate(90deg);
+}
+
+.data-params-details:not([open]) .data-section-head {
+  border-bottom: none;
+}
+
 .data-metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));

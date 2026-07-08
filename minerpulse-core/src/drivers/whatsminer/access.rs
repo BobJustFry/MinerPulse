@@ -23,6 +23,8 @@ pub struct WhatsminerAccessStatus {
     pub model: Option<String>,
     /// Mining state from `get.device.info` → `msg.miner.working`.
     pub working: Option<bool>,
+    /// Operational parameters (PSU, rated hashrate, power limit, cooling).
+    pub params: crate::model::MinerParams,
 }
 
 impl WhatsminerAccessStatus {
@@ -53,6 +55,7 @@ pub fn probe_whatsminer_access(
         status.api_switch = info.api_switch;
         status.model = info.model;
         status.working = info.working;
+        status.params = info.params;
     }
 
     if skip_luci_probe {
@@ -118,6 +121,7 @@ pub fn probe_whatsminer_access_fast(host: &str) -> WhatsminerAccessStatus {
         status.api_switch = info.api_switch;
         status.model = info.model;
         status.working = info.working;
+        status.params = info.params;
     }
     status
 }
@@ -130,6 +134,59 @@ pub struct DeviceInfoProbe {
     pub salt: Option<String>,
     pub model: Option<String>,
     pub working: Option<bool>,
+    pub params: crate::model::MinerParams,
+}
+
+fn value_f64(obj: &Value, key: &str) -> Option<f64> {
+    obj.get(key).and_then(|v| {
+        v.as_f64()
+            .or_else(|| v.as_i64().map(|n| n as f64))
+            .or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))
+    })
+}
+
+fn value_str<'a>(obj: &'a Value, key: &str) -> Option<&'a str> {
+    obj.get(key).and_then(|v| v.as_str())
+}
+
+/// `"33780:33484:34102:0"` → summed rated hashrate in GH/s (ignores zero boards).
+fn parse_rated_hashrate(raw: &str) -> Option<f64> {
+    let sum: f64 = raw
+        .split(':')
+        .filter_map(|p| p.trim().parse::<f64>().ok())
+        .filter(|v| *v > 0.0)
+        .sum();
+    (sum > 0.0).then_some(sum)
+}
+
+/// `get.device.info` → `msg.power`/`msg.miner` operational parameters.
+fn parse_device_params(msg: &Value) -> crate::model::MinerParams {
+    let mut params = crate::model::MinerParams::default();
+
+    if let Some(power) = msg.get("power") {
+        params.psu_input_voltage = value_f64(power, "vin");
+        params.psu_input_current = value_f64(power, "iin");
+        // vout is reported in 100mV units (e.g. 1209 => 12.09 V).
+        params.psu_output_voltage = value_f64(power, "vout").map(|v| v / 100.0);
+        params.psu_watts = value_f64(power, "pin");
+        params.psu_temp_c = value_f64(power, "temp0").or_else(|| value_f64(power, "temp"));
+        params.psu_fan_rpm = value_f64(power, "fanspeed").map(|v| v as u32);
+        params.psu_model = value_str(power, "model").map(str::to_string);
+    }
+
+    if let Some(miner) = msg.get("miner") {
+        params.rated_ghs = value_str(miner, "detect-hash-rate").and_then(parse_rated_hashrate);
+        params.power_limit_w = value_f64(miner, "power-limit-set");
+        params.cooling_mode = value_str(miner, "eeprom-liquid-cooling").map(|v| {
+            if v.chars().any(|c| c != '0' && c != '-') {
+                "liquid".to_string()
+            } else {
+                "air".to_string()
+            }
+        });
+    }
+
+    params
 }
 
 pub fn fetch_device_info(host: &str) -> Option<DeviceInfoProbe> {
@@ -234,6 +291,8 @@ pub fn parse_device_info(json: &str) -> Option<DeviceInfoProbe> {
         .and_then(|m| m.get("working"))
         .and_then(parse_switch_flag);
 
+    let params = parse_device_params(msg);
+
     Some(DeviceInfoProbe {
         code_ok,
         mac,
@@ -241,6 +300,7 @@ pub fn parse_device_info(json: &str) -> Option<DeviceInfoProbe> {
         salt,
         model,
         working,
+        params,
     })
 }
 

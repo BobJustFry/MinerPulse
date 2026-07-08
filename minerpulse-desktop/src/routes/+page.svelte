@@ -1438,7 +1438,7 @@
   >
     {#if activeTab === "data"}
       {#if snapshot}
-        <MinerDataPanel {snapshot} {locale} />
+        <MinerDataPanel {snapshot} {locale} {density} />
       {:else}
         <div class="locked-panel">{msg("status.noData")}</div>
       {/if}

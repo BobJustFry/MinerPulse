@@ -21,7 +21,11 @@
   } from "$lib/whatsminerErrors";
   import type { MinerSnapshot } from "$lib/types";
 
-  let { snapshot, locale }: { snapshot: MinerSnapshot; locale: Locale } = $props();
+  let {
+    snapshot,
+    locale,
+    density = "comfortable",
+  }: { snapshot: MinerSnapshot; locale: Locale; density?: "comfortable" | "compact" } = $props();
 
   let errorCatalog = $state<WhatsminerErrorCatalog | null>(null);
   let errorModalOpen = $state(false);
@@ -83,6 +87,44 @@
     if (total <= 0) return null;
     return rejected;
   }
+
+  function coolingLabel(mode: string): string {
+    if (mode === "air") return msg("data.param.coolingAir");
+    if (mode === "liquid") return msg("data.param.coolingLiquid");
+    return mode;
+  }
+
+  type ParamItem = { label: string; value: string };
+
+  function paramItems(): ParamItem[] {
+    const p = snapshot.params;
+    if (!p) return [];
+    const items: ParamItem[] = [];
+    const add = (label: MessageKey, value: string | null | undefined) => {
+      if (value != null && value !== "") items.push({ label: msg(label), value });
+    };
+    const n = (v: number | null | undefined, d: number, s: string) =>
+      v == null ? null : formatNumber(v, d, s);
+    add("data.param.powerMode", p.power_mode ?? null);
+    add("data.param.frequency", n(p.frequency_mhz, 0, " MHz"));
+    add("data.param.rated", p.rated_ghs != null ? formatHashrate(p.rated_ghs) : null);
+    add("data.param.powerLimit", n(p.power_limit_w, 0, " W"));
+    add("data.param.cooling", p.cooling_mode ? coolingLabel(p.cooling_mode) : null);
+    add("data.param.envTemp", n(p.env_temp_c, 1, " °C"));
+    add("data.param.chipMin", n(p.chip_temp_min_c, 1, " °C"));
+    add("data.param.chipAvg", n(p.chip_temp_avg_c, 1, " °C"));
+    add("data.param.chipMax", n(p.chip_temp_max_c, 1, " °C"));
+    add("data.param.hwErrPct", n(p.device_hardware_pct, 2, "%"));
+    add("data.param.rejectPct", n(p.device_reject_pct, 2, "%"));
+    add("data.param.psuModel", p.psu_model ?? null);
+    add("data.param.psuInV", n(p.psu_input_voltage, 1, " V"));
+    add("data.param.psuInA", n(p.psu_input_current, 1, " A"));
+    add("data.param.psuOutV", n(p.psu_output_voltage, 2, " V"));
+    add("data.param.psuWatts", n(p.psu_watts, 0, " W"));
+    add("data.param.psuTemp", n(p.psu_temp_c, 1, " °C"));
+    add("data.param.psuFan", n(p.psu_fan_rpm, 0, " RPM"));
+    return items;
+  }
 </script>
 
 <div class="data-dashboard">
@@ -124,6 +166,34 @@
   </section>
 
   <div class="data-sections">
+    {#if paramItems().length > 0}
+      {#if density === "compact"}
+        <details class="data-section span-2 data-params-details">
+          <summary class="data-section-head data-params-summary">{msg("data.group.params")}</summary>
+          <div class="data-metrics">
+            {#each paramItems() as item}
+              <div class="data-metric">
+                <div class="data-metric-label">{item.label}</div>
+                <div class="data-metric-value">{item.value}</div>
+              </div>
+            {/each}
+          </div>
+        </details>
+      {:else}
+        <section class="data-section span-2">
+          <header class="data-section-head">{msg("data.group.params")}</header>
+          <div class="data-metrics">
+            {#each paramItems() as item}
+              <div class="data-metric">
+                <div class="data-metric-label">{item.label}</div>
+                <div class="data-metric-value">{item.value}</div>
+              </div>
+            {/each}
+          </div>
+        </section>
+      {/if}
+    {/if}
+
     {#if hasHashrateData()}
       <section class="data-section span-2">
         <header class="data-section-head">{msg("data.group.hashrate")}</header>
