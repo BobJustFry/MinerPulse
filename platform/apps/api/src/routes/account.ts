@@ -257,7 +257,7 @@ account.get("/logs/:id/download", async (c) => {
   });
   if (!row) return c.json({ error: "not_found" }, 404);
   const bytes = await readClientLogFile(row.storagePath);
-  return new Response(bytes, {
+  return new Response(new Uint8Array(bytes), {
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="${row.filename}"`,
