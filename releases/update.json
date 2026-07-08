@@ -1,12 +1,12 @@
 {
-  "version": "1.0.104",
-  "build": 104,
-  "notes": "Miner Pulse 1.0.1 (104) — WhatsMiner read cancel, fast detect, auth modal fixes.",
-  "pub_date": "2026-07-07T16:54:05Z",
+  "version": "1.2.117",
+  "build": 117,
+  "notes": "Miner Pulse 1.2.0 (117) — diagnostic logs, DPAPI-encrypted credentials, per-HWID cloud backup, generic cgminer driver, WhatsMiner model/status fixes.",
+  "pub_date": "2026-07-08T07:37:00Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRGUrZ1AxWWJuUVFHYlFLU2dsRHJCbE9hSkNQSVpxWmVXWWNYUDQ0YVBYUjhOdzc5SnpOazcvY3NQRFh2ZVJ5akljT0Rhc1p4MmVmMGd5UG8yTWVsd0FzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzNDQzMjM5CWZpbGU6TWluZXJQdWxzZV8xLjAuMTA0X3g2NC1zZXR1cC5leGUKOEtOZ2JDUjRaWUE4Sm9LWS84U0o1bDl0WDN6Q1dTU211b05EMy9xeFBuYjVXSy9NeVhrbUM0WGh0dnVJSjN1M0FmWDR6bVMzdW1DOGVoR2VUZ1hzQmc9PQo=",
-      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.0.1-build104/MinerPulse_1.0.104_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRFJxazBOcnROamF3YlVXNCttcEtxa1RESFdyUnc0KzFMa2ZzSUlrMmNST3MrM2hCNEJZM2ExZGdVbmpkTmcvSC9TWmdPdmNxR2tsWUhKSnlxMW5NbGd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzNDk2MjY2CWZpbGU6TWluZXJQdWxzZV8xLjIuMTE3X3g2NC1zZXR1cC5leGUKL01OUzJ1UERxS0MrdEprNGtvNTNiazBxRys3d3EwUHY1VkpRKzJOR0dDK3I1Tytid2lQbE1NbCs3THkzT0RYUEFsSlh2R1hlQnlueG9IeHJCRTZVQlE9PQo=",
+      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.2.0-build117/MinerPulse_1.2.117_x64-setup.exe"
     }
   }
 }
