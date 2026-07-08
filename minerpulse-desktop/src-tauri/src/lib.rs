@@ -9,6 +9,7 @@ use minerpulse_core::{
 };
 use minerpulse_core::model::BoardChipMap;
 
+mod diagnostic_log;
 mod license;
 mod miner_credentials;
 use serde::{Deserialize, Serialize};
@@ -165,7 +166,8 @@ fn read_fetch_options(
 }
 
 #[tauri::command]
-fn cancel_read_miner(read_session: State<ReadSession>) {
+fn cancel_read_miner(app: AppHandle, read_session: State<ReadSession>) {
+    diagnostic_log::event(&app, "INFO", "read", "cancel_requested", "");
     read_session.cancel_active();
 }
 
@@ -174,6 +176,21 @@ async fn read_miner(
     app: AppHandle,
     request: ReadMinerRequest,
 ) -> Result<ReadMinerResponse, ErrorResponse> {
+    let started = Instant::now();
+    let port = request.port.unwrap_or(4028);
+    let custom_auth = request.whatsminer_auth.is_some();
+    diagnostic_log::event(
+        &app,
+        "INFO",
+        "read",
+        "start",
+        &format!(
+            "ip={} port={} custom_auth={custom_auth}",
+            request.ip.trim(),
+            port
+        ),
+    );
+
     let tier = *app.state::<AppState>().tier.lock().unwrap();
     let g = gate(tier);
 
@@ -185,40 +202,79 @@ async fn read_miner(
             .map_err(|e| ErrorResponse::from(&e))?;
     }
 
-    let port = request.port.unwrap_or(4028);
     let cloud_auth = if request.whatsminer_auth.is_none() {
-        app.state::<miner_credentials::MinerCredentialsState>()
-            .try_resolve_auth_for_ip(&request.ip)
+        let resolved = app
+            .state::<miner_credentials::MinerCredentialsState>()
+            .try_resolve_auth_for_ip(&request.ip);
+        if resolved.is_some() {
+            diagnostic_log::event(&app, "INFO", "read", "cloud_creds", &request.ip);
+        }
+        resolved
     } else {
         None
     };
     let read_session = app.state::<ReadSession>();
     let cancel = read_session.begin();
+    diagnostic_log::event(&app, "INFO", "read", "session_begin", "prior cancelled if any");
     let options = read_fetch_options(request.whatsminer_auth, cloud_auth, Some(cancel.clone()));
     let ip = request.ip.clone();
     let gate = app.state::<MinerIoGate>().0.clone();
+    let app_log = app.clone();
 
     let join = tauri::async_runtime::spawn_blocking(move || {
+        diagnostic_log::event(&app_log, "INFO", "read", "io_gate_acquired", &ip);
         let _io = gate.lock().unwrap_or_else(|e| e.into_inner());
         let client = TcpCgminerClient::for_read();
-        fetch_with_detect(&client, &ip, port, &options)
+        let fetch_started = Instant::now();
+        let result = fetch_with_detect(&client, &ip, port, &options);
+        diagnostic_log::event(
+            &app_log,
+            "INFO",
+            "read",
+            "fetch_done",
+            &format!("ms={} ok={}", fetch_started.elapsed().as_millis(), result.is_ok()),
+        );
+        result
     });
     let fetch_result = timeout(READ_MINER_TIMEOUT, join).await;
     if fetch_result.is_err() {
         cancel.store(true, Ordering::SeqCst);
+        diagnostic_log::event(
+            &app,
+            "WARN",
+            "read",
+            "timeout",
+            &format!("ms={}", started.elapsed().as_millis()),
+        );
     }
     read_session.finish(&cancel);
 
-    let snapshot = fetch_result
-        .map_err(|_| ErrorResponse {
-            code: minerpulse_core::ErrorCode::ConnTimeout,
-            args: None,
-        })?
-        .map_err(|_| ErrorResponse {
-            code: minerpulse_core::ErrorCode::InvalidInput,
-            args: None,
-        })?
-        .map_err(|e| ErrorResponse::from(&e))?;
+    let snapshot = match fetch_result {
+        Ok(Ok(Ok(snapshot))) => snapshot,
+        Ok(Ok(Err(e))) => {
+            diagnostic_log::event(
+                &app,
+                "WARN",
+                "read",
+                "fetch_error",
+                &format!("code={:?} ms={}", e.code(), started.elapsed().as_millis()),
+            );
+            return Err(ErrorResponse::from(&e));
+        }
+        Ok(Err(_)) => {
+            diagnostic_log::event(&app, "ERROR", "read", "join_error", "");
+            return Err(ErrorResponse {
+                code: minerpulse_core::ErrorCode::InvalidInput,
+                args: None,
+            });
+        }
+        Err(_) => {
+            return Err(ErrorResponse {
+                code: minerpulse_core::ErrorCode::ConnTimeout,
+                args: None,
+            });
+        }
+    };
 
     if let Some(access) = &snapshot.whatsminer_access {
         if let Some(mac) = &access.mac {
@@ -231,6 +287,25 @@ async fn read_miner(
         .last_snapshot
         .lock()
         .unwrap() = Some(snapshot.clone());
+
+    diagnostic_log::event(
+        &app,
+        "INFO",
+        "read",
+        "ok",
+        &format!(
+            "vendor={:?} model={} chips={} needs_setup={} ms={}",
+            snapshot.identity.vendor,
+            snapshot.identity.model,
+            snapshot.board_chips.len(),
+            snapshot
+                .whatsminer_access
+                .as_ref()
+                .map(|a| a.needs_setup)
+                .unwrap_or(false),
+            started.elapsed().as_millis()
+        ),
+    );
 
     Ok(ReadMinerResponse { snapshot })
 }
@@ -1244,6 +1319,7 @@ pub fn run() {
             test_whatsminer_credentials_command,
             cancel_read_miner,
             read_miner,
+            diagnostic_log::upload_diagnostic_log,
             start_poll,
             stop_poll,
             get_poll_status,
@@ -1262,6 +1338,8 @@ pub fn run() {
             sync_window_frame,
         ])
         .setup(|app| {
+            diagnostic_log::init(app.handle())
+                .map_err(|e| format!("diagnostic log init failed: {e}"))?;
             let license = license::LicenseState::new(app.handle())
                 .map_err(|e| format!("license init failed: {:?}", e.code))?;
             app.manage(license);

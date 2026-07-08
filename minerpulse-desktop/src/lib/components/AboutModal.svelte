@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { invoke } from "@tauri-apps/api/core";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { t, type Locale, type MessageKey } from "$lib/i18n";
+  import { formatAppError } from "$lib/formatAppError";
 
   const GITHUB_URL = "https://github.com/BobJustFry/MinerPulse";
   const TELEGRAM_URL = "https://t.me/miner_pulse";
@@ -15,6 +17,8 @@
     version,
     build,
     product,
+    signedIn = false,
+    hwid = "",
   }: {
     open?: boolean;
     updateProgressOpen?: boolean;
@@ -22,9 +26,14 @@
     version: string;
     build: number;
     product: string;
+    signedIn?: boolean;
+    hwid?: string;
   } = $props();
   let donateCopied = $state(false);
   let donateCopyTimer: ReturnType<typeof setTimeout> | undefined;
+  let logUploadBusy = $state(false);
+  let logUploadMessage = $state("");
+  let logUploadError = $state(false);
 
   function msg(key: MessageKey, args?: Record<string, string | number>) {
     return t(locale, key, args);
@@ -71,10 +80,40 @@
     updateProgressOpen = true;
   }
 
+  function diagnosticLogFilename(): string {
+    const now = new Date();
+    const pad = (value: number) => String(value).padStart(2, "0");
+    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+    const hw = hwid.replace(/[^a-zA-Z0-9]/g, "").slice(0, 16) || "unknown";
+    return `MinerPulse-log-${stamp}_${hw}.zip`;
+  }
+
+  async function uploadDiagnosticLog() {
+    if (!signedIn || logUploadBusy) return;
+    logUploadBusy = true;
+    logUploadMessage = "";
+    logUploadError = false;
+    try {
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "local";
+      await invoke<{ id: string; filename: string }>("upload_diagnostic_log", {
+        localFilename: diagnosticLogFilename(),
+        timezone,
+      });
+      logUploadMessage = msg("about.uploadLogOk");
+    } catch (err) {
+      logUploadError = true;
+      logUploadMessage = formatAppError(locale, err);
+    } finally {
+      logUploadBusy = false;
+    }
+  }
+
   $effect(() => {
     if (!open) {
       donateCopied = false;
       clearTimeout(donateCopyTimer);
+      logUploadMessage = "";
+      logUploadError = false;
     }
   });
 </script>
@@ -182,7 +221,20 @@
           <button type="button" class="btn primary" disabled={updateProgressOpen} onclick={startUpdateCheck}>
             {msg("about.checkUpdates")}
           </button>
+          {#if signedIn}
+            <button
+              type="button"
+              class="btn"
+              disabled={updateProgressOpen || logUploadBusy}
+              onclick={uploadDiagnosticLog}
+            >
+              {logUploadBusy ? msg("about.uploadLogBusy") : msg("about.uploadLog")}
+            </button>
+          {/if}
         </div>
+        {#if logUploadMessage}
+          <p class="about-upload-status" class:about-upload-error={logUploadError}>{logUploadMessage}</p>
+        {/if}
       </div>
     </div>
   </div>

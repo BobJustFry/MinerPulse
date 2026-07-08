@@ -20,6 +20,7 @@ use errors::parse_error_entries;
 use luci::fetch_btminer_chip_data;
 use options::WhatsminerFetchOptions;
 use serde_json::Value;
+use crate::trace;
 
 pub struct WhatsminerDriver;
 
@@ -65,6 +66,7 @@ impl WhatsminerDriver {
     ) -> Result<MinerSnapshot, MinerPulseError> {
         ensure_active(options)?;
 
+        trace("whatsminer", "tcp_summary", host);
         let summary = client.send_payload(host, port, r#"{"cmd":"summary"}"#)?;
         ensure_active(options)?;
         let pools = if options.fast_poll {
@@ -107,12 +109,18 @@ impl WhatsminerDriver {
         ensure_active(options)?;
 
         let (board_chips, btminer_log) = if options.fetch_chips || !options.fast_poll {
+            trace("whatsminer", "luci_chips", host);
             fetch_btminer_chip_data(host, options)
         } else {
             (Vec::new(), String::new())
         };
 
         ensure_active(options)?;
+        trace(
+            "whatsminer",
+            "chips_result",
+            &format!("{host} count={}", board_chips.len()),
+        );
 
         let mut snapshot = parse_whatsminer_snapshot(
             &summary,
@@ -136,8 +144,10 @@ impl WhatsminerDriver {
                 && snapshot.pools.is_empty()
                 && snapshot.board_chips.is_empty();
             let access_status = if options.fast_poll && board_chips_empty {
+                trace("whatsminer", "probe_fast", host);
                 probe_whatsminer_access_fast(host)
             } else {
+                trace("whatsminer", "probe_full", host);
                 let skip_luci_probe = !board_chips_empty;
                 probe_whatsminer_access(host, options, skip_luci_probe)
             };

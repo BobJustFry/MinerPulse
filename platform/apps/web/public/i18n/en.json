@@ -66,5 +66,13 @@
   "devices.col.name": "Device",
   "devices.col.lastSeen": "Last seen",
   "devices.delete": "Remove",
-  "devices.deleteConfirm": "Remove this device? You will need to sign in again in the desktop app on that PC."
+  "devices.deleteConfirm": "Remove this device? You will need to sign in again in the desktop app on that PC.",
+  "logs.title": "Diagnostic logs",
+  "logs.hint": "Logs uploaded from the app (About → Upload diagnostic log).",
+  "logs.empty": "No logs yet.",
+  "logs.loadError": "Could not load logs.",
+  "logs.col.date": "Date",
+  "logs.col.file": "File",
+  "logs.col.hwid": "HWID",
+  "logs.download": "Download"
 }

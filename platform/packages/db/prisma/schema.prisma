@@ -45,6 +45,7 @@ model User {
   payments     Payment[]
   activationCodes ActivationCode[]
   minerCredentials MinerCredential[]
+  clientLogs       ClientLog[]
 }
 
 model AdminUser {
@@ -168,4 +169,21 @@ model MinerCredential {
 
   @@unique([userId, mac])
   @@index([userId])
+}
+
+model ClientLog {
+  id          String   @id @default(cuid())
+  userId      String
+  hwid        String
+  filename    String
+  sizeBytes   Int      @map("size_bytes")
+  storagePath String   @map("storage_path")
+  appVersion  String?  @map("app_version")
+  appBuild    Int?     @map("app_build")
+  timezone    String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([hwid])
 }

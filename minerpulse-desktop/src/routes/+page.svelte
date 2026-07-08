@@ -78,7 +78,7 @@
   let whatsminerAuthDismissedIp = $state("");
   let readGeneration = 0;
   let connectionIp = $state("");
-  let licenseInfo = $state<LicenseInfo>({ tier: "free", licensed: false });
+  let licenseInfo = $state<LicenseInfo>({ tier: "free", licensed: false, signed_in: false, hwid: "" });
   let pendingAuthRetry = $state<(() => Promise<void>) | null>(null);
   let busy = $state(false);
   let reading = $state(false);
@@ -975,7 +975,7 @@
         try {
           licenseInfo = await invoke<LicenseInfo>("get_license_info");
         } catch {
-          licenseInfo = { tier: "free", licensed: false };
+          licenseInfo = { tier: "free", licensed: false, signed_in: false, hwid: "" };
         }
       }
 
@@ -1503,6 +1503,8 @@
     version={appVersionNumber}
     build={appBuild}
     product={appProduct}
+    signedIn={licenseInfo.signed_in}
+    hwid={licenseInfo.hwid}
   />
 
   <SubscriptionModal

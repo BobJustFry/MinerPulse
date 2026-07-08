@@ -8,6 +8,7 @@ pub mod model;
 pub mod mpulse;
 pub mod rate_limit;
 pub mod tcp;
+pub mod trace;
 
 pub use discovery::{
     list_scan_subnets, preview_scan_ranges, scan_network, scan_network_streaming, DiscoveredMiner,
@@ -34,4 +35,5 @@ pub use mpulse::{
 };
 pub use rate_limit::RateLimiter;
 pub use tcp::TcpCgminerClient;
+pub use trace::{set_trace_hook, trace};
 pub use drivers::avalon_commands::send_ascset;

@@ -1694,10 +1694,23 @@ button {
 
 .about-actions {
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .about-actions .btn {
   width: 100%;
+}
+
+.about-upload-status {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.about-upload-status.about-upload-error {
+  color: var(--danger);
 }
 
 .update-progress-backdrop {

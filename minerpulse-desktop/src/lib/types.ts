@@ -21,6 +21,8 @@ export interface LicenseInfo {
   user_email?: string | null;
   user_nickname?: string | null;
   licensed: boolean;
+  signed_in: boolean;
+  hwid: string;
 }
 
 export interface MinerSnapshot {

@@ -413,6 +413,41 @@ async function loadSubsForm() {
   });
 }
 
+async function loadClientLogs() {
+  const { logs } = await api("/v1/admin/client-logs");
+  document.getElementById("content").innerHTML = `<table><tr><th>When</th><th>User</th><th>HWID</th><th>File</th><th>App</th><th></th></tr>${logs
+    .map(
+      (row) => `<tr>
+        <td>${esc(row.created_at)}</td>
+        <td>${esc(row.user_email)}</td>
+        <td><code>${esc(row.hwid)}</code></td>
+        <td><code>${esc(row.filename)}</code></td>
+        <td>${esc(row.app_version ?? "-")} (${esc(row.app_build ?? "-")})</td>
+        <td><button type="button" class="secondary-btn" data-log-id="${esc(row.id)}">Скачать</button></td>
+      </tr>`,
+    )
+    .join("")}</table>`;
+  document.querySelectorAll("[data-log-id]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.getAttribute("data-log-id");
+      const response = await fetch(`${window.MPULSE_API}/v1/admin/client-logs/${id}/download`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        alert("Ошибка загрузки");
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `log-${id}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  });
+}
+
 async function loadAudit() {
   const { logs } = await api("/v1/admin/audit");
   document.getElementById("content").innerHTML = `<table><tr><th>When</th><th>Admin</th><th>Action</th><th>Entity</th></tr>${logs
@@ -428,6 +463,7 @@ document.querySelectorAll("[data-tab]").forEach((btn) =>
     if (tab === "plans") loadPlans();
     if (tab === "subs") loadSubsForm();
     if (tab === "audit") loadAudit();
+    if (tab === "clientlogs") loadClientLogs();
   }),
 );
 

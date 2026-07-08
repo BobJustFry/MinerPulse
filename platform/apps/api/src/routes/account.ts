@@ -10,6 +10,11 @@ import {
   encryptPassword,
   normalizeMac,
 } from "../lib/miner-credentials-crypto.js";
+import {
+  readClientLogFile,
+  writeClientLogFile,
+} from "../lib/client-logs.js";
+import { randomUUID } from "node:crypto";
 
 type AccountEnv = { Variables: { user: User } };
 
@@ -219,6 +224,91 @@ account.delete("/miner-credentials/:mac", async (c) => {
   }
   await prisma.minerCredential.delete({ where: { id: existing.id } });
   return c.json({ ok: true });
+});
+
+const MAX_LOG_BYTES = 8 * 1024 * 1024;
+
+account.get("/logs", async (c) => {
+  const user = c.get("user");
+  const rows = await prisma.clientLog.findMany({
+    where: { userId: user.id },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+  return c.json({
+    logs: rows.map((row) => ({
+      id: row.id,
+      filename: row.filename,
+      hwid: row.hwid,
+      size_bytes: row.sizeBytes,
+      app_version: row.appVersion,
+      app_build: row.appBuild,
+      timezone: row.timezone,
+      created_at: row.createdAt,
+    })),
+  });
+});
+
+account.get("/logs/:id/download", async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+  const row = await prisma.clientLog.findFirst({
+    where: { id, userId: user.id },
+  });
+  if (!row) return c.json({ error: "not_found" }, 404);
+  const bytes = await readClientLogFile(row.storagePath);
+  return new Response(bytes, {
+    headers: {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="${row.filename}"`,
+    },
+  });
+});
+
+account.post("/logs", async (c) => {
+  const user = c.get("user");
+  const body = await c.req.parseBody();
+  const file = body.file;
+  if (!(file instanceof File)) {
+    return c.json({ error: "file_required" }, 400);
+  }
+  if (file.size <= 0 || file.size > MAX_LOG_BYTES) {
+    return c.json({ error: "file_too_large" }, 400);
+  }
+
+  const filename = String(body.filename ?? file.name ?? "log.zip").trim() || "log.zip";
+  const hwid = String(body.hwid ?? "").trim();
+  const timezone = String(body.timezone ?? "").trim() || null;
+  const appVersion = String(body.app_version ?? "").trim() || null;
+  const appBuildRaw = String(body.app_build ?? "").trim();
+  const appBuild = appBuildRaw ? Number.parseInt(appBuildRaw, 10) : null;
+
+  if (hwid.length < 8) {
+    return c.json({ error: "hwid_invalid" }, 400);
+  }
+
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const id = randomUUID();
+  const storagePath = await writeClientLogFile(user.id, id, filename, bytes);
+  const row = await prisma.clientLog.create({
+    data: {
+      id,
+      userId: user.id,
+      hwid,
+      filename,
+      sizeBytes: bytes.length,
+      storagePath,
+      appVersion,
+      appBuild: Number.isFinite(appBuild) ? appBuild : null,
+      timezone,
+    },
+  });
+
+  return c.json({
+    id: row.id,
+    filename: row.filename,
+    created_at: row.createdAt,
+  });
 });
 
 export { account };

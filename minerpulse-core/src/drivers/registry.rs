@@ -6,6 +6,7 @@ use super::MinerDriver;
 use crate::error::MinerPulseError;
 use crate::model::{MinerSnapshot, MinerVendor};
 use crate::tcp::TcpCgminerClient;
+use crate::trace;
 
 pub struct DriverRegistry;
 
@@ -94,13 +95,24 @@ pub fn fetch_with_detect(
     ensure_not_cancelled(wm_options)?;
 
     if wm_options.fast_poll {
+        trace("detect", "fast_start", host);
         match fetch_with_detect_fast(client, host, port, wm_options) {
-            Ok(snapshot) => return Ok(snapshot),
-            Err(err) if err.code() == crate::error::ErrorCode::NotSupported => {}
+            Ok(snapshot) => {
+                trace(
+                    "detect",
+                    "fast_ok",
+                    &format!("{host} vendor={:?}", snapshot.identity.vendor),
+                );
+                return Ok(snapshot);
+            }
+            Err(err) if err.code() == crate::error::ErrorCode::NotSupported => {
+                trace("detect", "fast_fallback", host);
+            }
             Err(err) => return Err(err),
         }
     }
 
+    trace("detect", "full_start", host);
     fetch_with_detect_full(client, host, port, wm_options)
 }
 
@@ -117,6 +129,7 @@ fn fetch_with_detect_fast(
         Ok(summary) if is_meaningful_response(&summary) => {
             ensure_not_cancelled(wm_options)?;
             if WhatsminerDriver::detect(&summary) {
+                trace("detect", "whatsminer_payload", host);
                 return WhatsminerDriver::fetch_with_options(client, host, port, wm_options);
             }
         }

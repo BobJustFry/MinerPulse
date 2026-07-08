@@ -21,6 +21,10 @@ services:
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
     env_file: .env
+    volumes:
+      - client_logs:/data/client-logs
+    environment:
+      CLIENT_LOG_DIR: /data/client-logs
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,5 +70,6 @@ networks:
 
 volumes:
   pgdata:
+  client_logs:
   caddy_data:
   caddy_config:

@@ -247,6 +247,66 @@ function renderDevices(devices, deviceLimit) {
   });
 }
 
+async function renderLogs() {
+  const list = document.getElementById("logs-list");
+  if (!list) return;
+  try {
+    const { logs } = await api("/v1/account/logs");
+    if (!logs?.length) {
+      list.innerHTML = `<p class="logs-empty">${t("logs.empty")}</p>`;
+      return;
+    }
+    list.innerHTML = `<table class="logs-table">
+      <thead>
+        <tr>
+          <th>${t("logs.col.date")}</th>
+          <th>${t("logs.col.file")}</th>
+          <th>${t("logs.col.hwid")}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${logs
+          .map(
+            (row) => `<tr>
+              <td>${escHtml(formatClientDateTime(row.created_at))}</td>
+              <td><code>${escHtml(row.filename)}</code></td>
+              <td><code>${escHtml(row.hwid)}</code></td>
+              <td>
+                <a class="secondary-btn" href="${escHtml(window.MPULSE_API + "/v1/account/logs/" + row.id + "/download")}" download>${t("logs.download")}</a>
+              </td>
+            </tr>`,
+          )
+          .join("")}
+      </tbody>
+    </table>`;
+    list.querySelectorAll("a.secondary-btn").forEach((link) => {
+      link.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const token = localStorage.getItem("mpulse_token");
+        if (!token) return;
+        const href = link.getAttribute("href");
+        const response = await fetch(href, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) {
+          alert(t("error.generic"));
+          return;
+        }
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = link.closest("tr")?.querySelector("code")?.textContent ?? "log.zip";
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+    });
+  } catch {
+    list.innerHTML = `<p class="logs-empty">${t("logs.loadError")}</p>`;
+  }
+}
+
 function showDashboard(user, subscription, devices = [], deviceLimit = 1) {
   document.getElementById("auth-actions").hidden = true;
   document.getElementById("auth-hint").hidden = true;
@@ -268,6 +328,7 @@ function showDashboard(user, subscription, devices = [], deviceLimit = 1) {
       ? t("auth.subscriptionNoneBeta")
       : t("auth.subscriptionNone");
   renderDevices(devices, deviceLimit);
+  void renderLogs();
   renderSubscribePlans();
   showSubscribeMessage("");
 }

@@ -105,6 +105,8 @@ pub struct LicenseInfo {
     pub user_email: Option<String>,
     pub user_nickname: Option<String>,
     pub licensed: bool,
+    pub signed_in: bool,
+    pub hwid: String,
 }
 
 fn api_base() -> &'static str {
@@ -253,9 +255,15 @@ impl LicenseState {
         store.access_token.clone()
     }
 
+    pub fn hwid(&self) -> String {
+        let store = self.store.lock().unwrap();
+        store.hwid.clone()
+    }
+
     pub fn info(&self) -> LicenseInfo {
         let store = self.store.lock().unwrap();
         let tier = Self::effective_tier(&store);
+        let signed_in = store.access_token.is_some();
         LicenseInfo {
             tier,
             plan_name: store.plan_name.clone(),
@@ -263,6 +271,8 @@ impl LicenseState {
             user_email: store.user_email.clone(),
             user_nickname: store.user_nickname.clone(),
             licensed: tier != SubscriptionTier::Free,
+            signed_in,
+            hwid: store.hwid.clone(),
         }
     }
 
@@ -376,6 +386,8 @@ impl LicenseState {
             user_email: store.user_email.clone(),
             user_nickname: store.user_nickname.clone(),
             licensed: tier != SubscriptionTier::Free,
+            signed_in: true,
+            hwid: store.hwid.clone(),
         };
         self.save(&store)?;
         self.apply_tier(&app, tier);
@@ -447,6 +459,8 @@ impl LicenseState {
             user_email: store.user_email.clone(),
             user_nickname: store.user_nickname.clone(),
             licensed: tier != SubscriptionTier::Free,
+            signed_in: true,
+            hwid: store.hwid.clone(),
         };
         self.save(&store)?;
         self.apply_tier(&app, tier);
@@ -472,6 +486,8 @@ impl LicenseState {
                 user_email: None,
                 user_nickname: None,
                 licensed: false,
+                signed_in: false,
+                hwid: store.hwid.clone(),
             }
         };
         self.apply_tier(app, SubscriptionTier::Free);

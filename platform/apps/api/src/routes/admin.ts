@@ -12,6 +12,7 @@ import {
 } from "../lib/device.js";
 import { activeSubscription } from "../lib/subscription.js";
 import { randomActivationCode, verifyAccessToken } from "../lib/jwt.js";
+import { readClientLogFile } from "../lib/client-logs.js";
 
 type AdminEnv = { Variables: { admin: AdminUser } };
 
@@ -393,6 +394,48 @@ admin.get("/audit", async (c) => {
     include: { admin: { select: { username: true, email: true } } },
   });
   return c.json({ logs });
+});
+
+admin.get("/client-logs", async (c) => {
+  const userId = c.req.query("userId");
+  const hwid = c.req.query("hwid");
+  const rows = await prisma.clientLog.findMany({
+    where: {
+      ...(userId ? { userId } : {}),
+      ...(hwid ? { hwid: { contains: hwid } } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+    include: { user: { select: { email: true, nickname: true } } },
+  });
+  return c.json({
+    logs: rows.map((row) => ({
+      id: row.id,
+      user_id: row.userId,
+      user_email: row.user.email,
+      user_nickname: row.user.nickname,
+      filename: row.filename,
+      hwid: row.hwid,
+      size_bytes: row.sizeBytes,
+      app_version: row.appVersion,
+      app_build: row.appBuild,
+      timezone: row.timezone,
+      created_at: row.createdAt,
+    })),
+  });
+});
+
+admin.get("/client-logs/:id/download", async (c) => {
+  const id = c.req.param("id");
+  const row = await prisma.clientLog.findUnique({ where: { id } });
+  if (!row) return c.json({ error: "not_found" }, 404);
+  const bytes = await readClientLogFile(row.storagePath);
+  return new Response(bytes, {
+    headers: {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="${row.filename}"`,
+    },
+  });
 });
 
 export { admin };
