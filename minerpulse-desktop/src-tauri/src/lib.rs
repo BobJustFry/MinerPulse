@@ -12,6 +12,7 @@ use minerpulse_core::model::BoardChipMap;
 mod diagnostic_log;
 mod license;
 mod miner_credentials;
+mod secure_store;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;

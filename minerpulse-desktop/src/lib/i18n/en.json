@@ -159,6 +159,7 @@
   "status.reading": "Reading…",
   "status.cancellingRead": "Cancelling read…",
   "status.readCancelled": "Read cancelled",
+  "status.syncFailed": "Failed to sync credentials with the cloud",
   "status.readEmpty": "Miner did not respond or returned empty data",
   "status.readCooldown": "Read available in {sec}s",
   "status.scanning": "Scanning network…",

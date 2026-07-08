@@ -8,11 +8,12 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::license::LicenseState;
 
 const CREDENTIALS_FILE: &str = "miner-credentials.json";
+const CREDENTIALS_FILE_ENC: &str = "miner-credentials.enc";
 pub const SYNC_INTERVAL_MS: u64 = 900_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,6 +39,7 @@ pub struct MinerCredentialsState {
     store: Mutex<MinerCredentialsStore>,
     client: reqwest::Client,
     path: PathBuf,
+    legacy_path: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,28 +87,53 @@ impl MinerCredentialsState {
             .app_data_dir()
             .map_err(|_| cred_err("app_data_dir"))?;
         fs::create_dir_all(&dir).map_err(|_| cred_err("io_error"))?;
-        let path = dir.join(CREDENTIALS_FILE);
-        let store = if path.exists() {
-            fs::read_to_string(&path)
-                .ok()
-                .and_then(|s| serde_json::from_str(&s).ok())
-                .unwrap_or_default()
-        } else {
-            MinerCredentialsStore::default()
-        };
-        Ok(Self {
+        let path = dir.join(CREDENTIALS_FILE_ENC);
+        let legacy_path = dir.join(CREDENTIALS_FILE);
+
+        let (store, migrated) = Self::load_store(&path, &legacy_path);
+
+        let state = Self {
             store: Mutex::new(store),
             client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(20))
                 .build()
                 .map_err(|_| cred_err("http_client"))?,
             path,
-        })
+            legacy_path,
+        };
+
+        // One-time migration: encrypt plaintext store, then drop the legacy file.
+        if migrated {
+            if let Ok(store) = state.store.lock() {
+                let _ = state.save(&store);
+            }
+            let _ = fs::remove_file(&state.legacy_path);
+        }
+
+        Ok(state)
+    }
+
+    /// Load encrypted store; fall back to (and flag) legacy plaintext for migration.
+    fn load_store(path: &PathBuf, legacy_path: &PathBuf) -> (MinerCredentialsStore, bool) {
+        if let Ok(bytes) = fs::read(path) {
+            if let Ok(plain) = crate::secure_store::decrypt(&bytes) {
+                if let Ok(store) = serde_json::from_slice(&plain) {
+                    return (store, false);
+                }
+            }
+        }
+        if let Ok(text) = fs::read_to_string(legacy_path) {
+            if let Ok(store) = serde_json::from_str(&text) {
+                return (store, true);
+            }
+        }
+        (MinerCredentialsStore::default(), false)
     }
 
     fn save(&self, store: &MinerCredentialsStore) -> Result<(), ErrorResponse> {
-        let json = serde_json::to_string_pretty(store).map_err(|_| cred_err("serialize"))?;
-        fs::write(&self.path, json).map_err(|_| cred_err("io_error"))?;
+        let json = serde_json::to_vec(store).map_err(|_| cred_err("serialize"))?;
+        let blob = crate::secure_store::encrypt(&json).map_err(|_| cred_err("encrypt"))?;
+        fs::write(&self.path, blob).map_err(|_| cred_err("io_error"))?;
         Ok(())
     }
 
@@ -273,7 +300,32 @@ impl MinerCredentialsState {
         if Self::access_token(app).is_none() {
             return;
         }
-        let _ = self.pull_remote(app).await;
+        crate::diagnostic_log::event(app, "INFO", "sync", "start", "");
+        match self.pull_remote(app).await {
+            Ok(list) => {
+                crate::diagnostic_log::event(
+                    app,
+                    "INFO",
+                    "sync",
+                    "ok",
+                    &format!("count={}", list.len()),
+                );
+                let _ = app.emit("miner-credentials://sync", serde_json::json!({ "ok": true }));
+            }
+            Err(err) => {
+                crate::diagnostic_log::event(
+                    app,
+                    "WARN",
+                    "sync",
+                    "fail",
+                    &format!("code={:?}", err.code),
+                );
+                let _ = app.emit(
+                    "miner-credentials://sync",
+                    serde_json::json!({ "ok": false, "code": format!("{:?}", err.code) }),
+                );
+            }
+        }
     }
 
     pub fn spawn_periodic_sync(app: AppHandle) {

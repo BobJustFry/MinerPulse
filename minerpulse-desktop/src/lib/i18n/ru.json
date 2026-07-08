@@ -159,6 +159,7 @@
   "status.reading": "Чтение…",
   "status.cancellingRead": "Отмена чтения…",
   "status.readCancelled": "Чтение отменено",
+  "status.syncFailed": "Не удалось синхронизировать учётные данные с облаком",
   "status.readEmpty": "Майнер не ответил или данные пустые",
   "status.readCooldown": "Чтение через {sec} сек",
   "status.scanning": "Сканирование сети…",

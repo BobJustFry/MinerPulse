@@ -159,6 +159,7 @@
   "status.reading": "读取中…",
   "status.cancellingRead": "正在取消读取…",
   "status.readCancelled": "读取已取消",
+  "status.syncFailed": "无法与云端同步凭据",
   "status.readEmpty": "矿机无响应或数据为空",
   "status.readCooldown": "{sec} 秒后可读取",
   "status.scanning": "正在扫描网络…",

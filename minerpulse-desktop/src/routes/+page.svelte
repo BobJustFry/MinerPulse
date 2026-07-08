@@ -944,6 +944,7 @@
     let unlistenPollSnapshot: (() => void) | undefined;
     let unlistenPollFinished: (() => void) | undefined;
     let unlistenLicense: (() => void) | undefined;
+    let unlistenCredsSync: (() => void) | undefined;
     let updateCheckTimer: ReturnType<typeof setInterval> | undefined;
 
     initSessionPlayer();
@@ -982,6 +983,15 @@
         void refreshEntitlements();
         void refreshLicenseInfo();
       });
+
+      unlistenCredsSync = await listen<{ ok: boolean; code?: string }>(
+        "miner-credentials://sync",
+        (event) => {
+          if (event.payload?.ok === false && !reading && !polling) {
+            statusText = msg("status.syncFailed");
+          }
+        },
+      );
 
       async function refreshLicenseInfo() {
         try {
@@ -1103,6 +1113,7 @@
       unlistenPollSnapshot?.();
       unlistenPollFinished?.();
       unlistenLicense?.();
+      unlistenCredsSync?.();
       if (updateCheckTimer) clearInterval(updateCheckTimer);
       sessionPlayer?.pause();
     };
