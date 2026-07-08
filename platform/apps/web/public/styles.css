@@ -340,29 +340,104 @@ body.modal-open {
   box-shadow: 0 6px 18px var(--accent-soft);
 }
 
-/* Account dashboard */
-#dashboard > p {
-  margin: 2px 0;
+/* Account dashboard — organised into panels */
+#dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+#dashboard .card {
+  margin-bottom: 0;
+}
+
+.account-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.account-id {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 #user-email {
-  font-size: 1.05rem;
-  font-weight: 650;
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 #user-nickname {
+  margin: 0;
   color: var(--text-muted);
   font-size: 0.9rem;
 }
 
 #subscription-info {
-  margin-top: 10px !important;
+  margin: 16px 0 0;
   padding: 12px 14px;
   border: 1px solid var(--border);
   border-left: 3px solid var(--gold);
   border-radius: var(--radius-sm);
   background: var(--gold-soft);
   font-size: 0.95rem;
+}
+
+#subscription-info:empty {
+  display: none;
+}
+
+.account-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.account-panel-head h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.account-panel-badge {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.account-panel-badge:empty {
+  display: none;
+}
+
+.account-panel-hint {
+  margin: 0 0 14px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* Panels are full cards now — cancel the old section dividers/spacing. */
+#dashboard .devices-section,
+#dashboard .storage-section,
+#dashboard .logs-section,
+#dashboard .subscribe-section {
+  margin: 0;
+  padding: clamp(18px, 3vw, 26px);
+  padding-top: clamp(18px, 3vw, 26px);
+  border-top: none;
+  background: var(--bg-surface);
 }
 
 .modal {
@@ -596,6 +671,10 @@ pre {
   overflow: auto;
   border: 1px solid var(--border);
   font-size: 0.88rem;
+}
+
+#activation-code:empty {
+  display: none;
 }
 
 /* Sections: devices / storage / logs */

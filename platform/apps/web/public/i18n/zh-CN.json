@@ -20,6 +20,8 @@
   "auth.register": "注册",
   "auth.logout": "退出",
   "auth.genCode": "应用激活码",
+  "account.appSection": "桌面应用",
+  "account.appHint": "用于登录桌面应用的一次性代码。",
   "auth.codeLine": "激活码：{code}",
   "auth.codeExpires": "有效期至：{date}",
   "auth.subscriptionActive": "订阅：{name}（{tier}）至 {date}",

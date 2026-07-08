@@ -20,6 +20,8 @@
   "auth.register": "REGISTER",
   "auth.logout": "Sign out",
   "auth.genCode": "App activation code",
+  "account.appSection": "Desktop app",
+  "account.appHint": "One-time code to sign in to the desktop app.",
   "auth.codeLine": "Code: {code}",
   "auth.codeExpires": "Valid until: {date}",
   "auth.subscriptionActive": "Subscription: {name} ({tier}) until {date}",

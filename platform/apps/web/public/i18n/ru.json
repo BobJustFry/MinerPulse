@@ -20,6 +20,8 @@
   "auth.register": "РЕГИСТРАЦИЯ",
   "auth.logout": "Выйти",
   "auth.genCode": "Код для приложения",
+  "account.appSection": "Приложение",
+  "account.appHint": "Одноразовый код для входа в десктоп-приложение.",
   "auth.codeLine": "Код: {code}",
   "auth.codeExpires": "Действует до: {date}",
   "auth.subscriptionActive": "Подписка: {name} ({tier}) до {date}",

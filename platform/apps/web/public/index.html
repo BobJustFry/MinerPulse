@@ -24,7 +24,7 @@
 
     <div id="beta-banner" class="beta-banner card" hidden></div>
 
-    <section class="card auth">
+    <section class="card auth" id="auth-card">
       <h2 data-i18n="auth.title">Личный кабинет</h2>
       <p id="auth-hint" class="auth-hint" data-i18n="auth.hint">Вход для клиентов — email и пароль.</p>
 
@@ -32,47 +32,72 @@
         <button type="button" id="open-login" class="auth-action-btn primary" data-i18n="auth.login">ВХОД</button>
         <button type="button" id="open-register" class="auth-action-btn" data-i18n="auth.register">РЕГИСТРАЦИЯ</button>
       </div>
+    </section>
 
-      <div id="dashboard" hidden>
-        <p id="user-email"></p>
-        <p id="user-nickname"></p>
+    <div id="dashboard" hidden>
+      <section class="card account-header-card">
+        <div class="account-header">
+          <div class="account-id">
+            <p id="user-email"></p>
+            <p id="user-nickname"></p>
+          </div>
+          <button id="logout" type="button" data-i18n="auth.logout">Выйти</button>
+        </div>
         <p id="subscription-info"></p>
-        <section id="subscribe-section" class="subscribe-section" hidden>
+      </section>
+
+      <section id="subscribe-section" class="card account-panel" hidden>
+        <div class="account-panel-head">
           <h3 data-i18n="subscribe.title">Подписка</h3>
-          <p class="beta-notice" data-i18n="beta.notice"></p>
-          <div id="subscribe-plans" class="subscribe-plans grid"></div>
-          <label class="field subscribe-devices-field">
-            <span class="field-label" data-i18n="subscribe.devicesLabel">Количество устройств</span>
-            <input id="subscribe-devices" type="number" min="1" max="10" value="1" inputmode="numeric" />
-            <span class="subscribe-devices-hint" data-i18n="subscribe.devicesHint"></span>
-          </label>
-          <button id="subscribe-btn" type="button" class="primary-btn" data-i18n="subscribe.activate">Активировать подписку</button>
-          <p id="subscribe-message" class="subscribe-message" hidden></p>
-        </section>
+        </div>
+        <p class="beta-notice" data-i18n="beta.notice"></p>
+        <div id="subscribe-plans" class="subscribe-plans grid"></div>
+        <label class="field subscribe-devices-field">
+          <span class="field-label" data-i18n="subscribe.devicesLabel">Количество устройств</span>
+          <input id="subscribe-devices" type="number" min="1" max="10" value="1" inputmode="numeric" />
+          <span class="subscribe-devices-hint" data-i18n="subscribe.devicesHint"></span>
+        </label>
+        <button id="subscribe-btn" type="button" class="primary-btn" data-i18n="subscribe.activate">Активировать подписку</button>
+        <p id="subscribe-message" class="subscribe-message" hidden></p>
+      </section>
+
+      <section class="card account-panel" id="app-section">
+        <div class="account-panel-head">
+          <h3 data-i18n="account.appSection">Приложение</h3>
+        </div>
+        <p class="account-panel-hint" data-i18n="account.appHint">Одноразовый код для входа в десктоп-приложение.</p>
         <button id="gen-code" type="button" data-i18n="auth.genCode">Код для приложения</button>
         <pre id="activation-code"></pre>
-        <section id="devices-section" class="devices-section">
+      </section>
+
+      <section id="devices-section" class="card account-panel">
+        <div class="account-panel-head">
           <h3 data-i18n="devices.title">Устройства</h3>
-          <p id="devices-summary" class="devices-summary"></p>
-          <div id="devices-list"></div>
-        </section>
-        <section id="storage-section" class="storage-section">
+          <span id="devices-summary" class="account-panel-badge"></span>
+        </div>
+        <div id="devices-list"></div>
+      </section>
+
+      <section id="storage-section" class="card account-panel">
+        <div class="account-panel-head">
           <h3 data-i18n="storage.title">Хранилище учётных данных</h3>
-          <label class="storage-toggle">
-            <input type="checkbox" id="storage-shared-toggle" />
-            <span data-i18n="storage.sharedLabel">Общее хранилище для всех моих компьютеров</span>
-          </label>
-          <p class="storage-hint" data-i18n="storage.hint">Если выключено — на каждом компьютере свой набор учётных данных (по HWID).</p>
-          <div id="storage-backups-list"></div>
-        </section>
-        <section id="logs-section" class="logs-section">
+        </div>
+        <label class="storage-toggle">
+          <input type="checkbox" id="storage-shared-toggle" />
+          <span data-i18n="storage.sharedLabel">Общее хранилище для всех моих компьютеров</span>
+        </label>
+        <p class="storage-hint" data-i18n="storage.hint">Если выключено — на каждом компьютере свой набор учётных данных (по HWID).</p>
+        <div id="storage-backups-list"></div>
+      </section>
+
+      <section id="logs-section" class="card account-panel">
+        <div class="account-panel-head">
           <h3 data-i18n="logs.title">Диагностические логи</h3>
-          <p class="logs-hint" data-i18n="logs.hint">Логи, отправленные из приложения (О программе → Отправить диагностический лог).</p>
-          <div id="logs-list"></div>
-        </section>
-        <button id="logout" type="button" data-i18n="auth.logout">Выйти</button>
-      </div>
-    </section>
+        </div>
+        <p class="logs-hint" data-i18n="logs.hint">Логи, отправленные из приложения (О программе → Отправить диагностический лог).</p>
+        <div id="logs-list"></div>
+      </section>
+    </div>
   </main>
 
   <div id="login-modal" class="modal" hidden aria-hidden="true">

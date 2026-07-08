@@ -173,6 +173,7 @@ function renderActivationCode() {
 }
 
 function showGuestAuth() {
+  document.getElementById("auth-card").hidden = false;
   document.getElementById("auth-actions").hidden = false;
   document.getElementById("auth-hint").hidden = false;
   document.getElementById("dashboard").hidden = true;
@@ -353,6 +354,7 @@ async function renderStorageSection() {
 }
 
 function showDashboard(user, subscription, devices = [], deviceLimit = 1) {
+  document.getElementById("auth-card").hidden = true;
   document.getElementById("auth-actions").hidden = true;
   document.getElementById("auth-hint").hidden = true;
   closeAllModals();
