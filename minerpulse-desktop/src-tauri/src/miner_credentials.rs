@@ -180,6 +180,11 @@ impl MinerCredentialsState {
         self.try_resolve_auth_for_mac(&mac)
     }
 
+    /// MAC currently cached for this IP (to detect a swapped miner on read).
+    pub fn cached_mac_for_ip(&self, ip: &str) -> Option<String> {
+        self.store.try_lock().ok()?.ip_mac.get(ip).cloned()
+    }
+
     pub fn try_resolve_auth_for_mac(&self, mac: &str) -> Option<WhatsminerLuciAuth> {
         let mac = normalize_mac(mac);
         let store = self.store.try_lock().ok()?;

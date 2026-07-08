@@ -381,19 +381,8 @@
     if (polling) return;
 
     const targetIp = ip.trim();
-
-    // Reopen auth after dismiss only — never skip a real read otherwise.
-    if (
-      !whatsminerAuthOpen &&
-      whatsminerAuthDismissedIp === targetIp &&
-      snapshot &&
-      snapshotSourceIp === targetIp &&
-      whatsminerNeedsAuth(snapshot)
-    ) {
-      maybePromptWhatsminerAuth(snapshot);
-      statusText = snapshotStatusText(snapshot);
-      return;
-    }
+    const previousMac = snapshot?.identity.mac ?? null;
+    const previousVendor = snapshot?.identity.vendor ?? null;
 
     const gen = bumpReadGeneration();
     const targetPort = Number(port) || 4028;
@@ -421,6 +410,17 @@
         }
         statusText = msg("status.readEmpty");
         return;
+      }
+
+      // Same IP now hosts a different miner (MAC/vendor changed) — drop stale auth state.
+      const nextMac = response.snapshot.identity.mac ?? null;
+      const nextVendor = response.snapshot.identity.vendor ?? null;
+      const minerChanged =
+        (previousMac != null && nextMac != null && previousMac !== nextMac) ||
+        (previousVendor != null && nextVendor != null && previousVendor !== nextVendor);
+      if (minerChanged) {
+        whatsminerAuthDismissedIp = "";
+        whatsminerAuthOpen = false;
       }
 
       snapshot = response.snapshot;

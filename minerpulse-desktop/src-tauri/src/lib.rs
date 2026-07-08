@@ -279,19 +279,39 @@ async fn read_miner(
     };
 
     // Best-effort bookkeeping — must never block returning data to the UI.
-    if let Some(access) = &snapshot.whatsminer_access {
-        if let Some(mac) = &access.mac {
-            let stored = app
-                .state::<miner_credentials::MinerCredentialsState>()
-                .try_remember_ip_mac(&request.ip, mac);
-            diagnostic_log::event(
-                &app,
-                "INFO",
-                "read",
-                "remember_ip_mac",
-                &format!("stored={stored}"),
-            );
+    let actual_mac = snapshot
+        .identity
+        .mac
+        .clone()
+        .filter(|m| !m.is_empty())
+        .or_else(|| {
+            snapshot
+                .whatsminer_access
+                .as_ref()
+                .and_then(|a| a.mac.clone())
+        });
+    if let Some(mac) = actual_mac {
+        let creds = app.state::<miner_credentials::MinerCredentialsState>();
+        // Detect a swapped miner on the same IP (different MAC than cached).
+        if let Some(prev) = creds.cached_mac_for_ip(&request.ip) {
+            if !prev.eq_ignore_ascii_case(&mac) {
+                diagnostic_log::event(
+                    &app,
+                    "WARN",
+                    "read",
+                    "mac_changed",
+                    &format!("ip={} old={prev} new={mac}", request.ip),
+                );
+            }
         }
+        let stored = creds.try_remember_ip_mac(&request.ip, &mac);
+        diagnostic_log::event(
+            &app,
+            "INFO",
+            "read",
+            "remember_ip_mac",
+            &format!("stored={stored}"),
+        );
     }
 
     if let Ok(mut guard) = app.state::<AppState>().last_snapshot.try_lock() {
