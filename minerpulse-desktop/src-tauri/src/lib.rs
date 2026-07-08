@@ -248,6 +248,7 @@ async fn read_miner(
         );
     }
     read_session.finish(&cancel);
+    diagnostic_log::event(&app, "INFO", "read", "post_fetch", "session finished");
 
     let snapshot = match fetch_result {
         Ok(Ok(Ok(snapshot))) => snapshot,
@@ -276,17 +277,26 @@ async fn read_miner(
         }
     };
 
+    // Best-effort bookkeeping — must never block returning data to the UI.
     if let Some(access) = &snapshot.whatsminer_access {
         if let Some(mac) = &access.mac {
-            app.state::<miner_credentials::MinerCredentialsState>()
-                .remember_ip_mac(&request.ip, mac);
+            let stored = app
+                .state::<miner_credentials::MinerCredentialsState>()
+                .try_remember_ip_mac(&request.ip, mac);
+            diagnostic_log::event(
+                &app,
+                "INFO",
+                "read",
+                "remember_ip_mac",
+                &format!("stored={stored}"),
+            );
         }
     }
 
-    *app.state::<AppState>()
-        .last_snapshot
-        .lock()
-        .unwrap() = Some(snapshot.clone());
+    if let Ok(mut guard) = app.state::<AppState>().last_snapshot.try_lock() {
+        *guard = Some(snapshot.clone());
+    }
+    diagnostic_log::event(&app, "INFO", "read", "after_snapshot", "");
 
     diagnostic_log::event(
         &app,

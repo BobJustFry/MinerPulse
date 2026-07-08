@@ -122,6 +122,21 @@ impl MinerCredentialsState {
         let _ = self.save(&store);
     }
 
+    /// Best-effort IP↔MAC cache update that never blocks the caller (read path).
+    /// Returns `false` if the store was busy and the mapping was skipped.
+    pub fn try_remember_ip_mac(&self, ip: &str, mac: &str) -> bool {
+        let mac = normalize_mac(mac);
+        let Ok(mut store) = self.store.try_lock() else {
+            return false;
+        };
+        if store.ip_mac.get(ip).map(String::as_str) == Some(mac.as_str()) {
+            return true;
+        }
+        store.ip_mac.insert(ip.to_string(), mac);
+        let _ = self.save(&store);
+        true
+    }
+
     pub fn try_resolve_auth_for_ip(&self, ip: &str) -> Option<WhatsminerLuciAuth> {
         let mac = self.store.try_lock().ok()?.ip_mac.get(ip).cloned()?;
         self.try_resolve_auth_for_mac(&mac)
