@@ -1,6 +1,7 @@
 use super::btminer_log::{parse_btminer_html, parse_btminer_log};
 use super::options::WhatsminerFetchOptions;
 use crate::model::BoardChipMap;
+use crate::trace;
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, SET_COOKIE};
 use serde_json::Value;
@@ -85,13 +86,22 @@ pub fn fetch_btminer_chip_data(host: &str, options: &WhatsminerFetchOptions) -> 
         &["https", "http"]
     };
 
+    let cred_count = options.luci_credential_pairs().len();
+    trace(
+        "luci",
+        "chips_begin",
+        &format!("{host} fast={} creds={cred_count}", options.fast_poll),
+    );
+
     for scheme in schemes {
         let base = format!("{scheme}://{host}");
         if let Some(log) = cached_log(&client, host, &base) {
+            trace("luci", "chips_cached_ok", &base);
             return (parse_btminer_log(&log), log);
         }
         if !options.fast_poll {
             if let Some(log) = fetch_log_anonymous(&client, &base) {
+                trace("luci", "chips_anon_ok", &base);
                 return (parse_btminer_log(&log), log);
             }
         }
@@ -101,11 +111,17 @@ pub fn fetch_btminer_chip_data(host: &str, options: &WhatsminerFetchOptions) -> 
                 return (Vec::new(), String::new());
             }
             if let Some(log) = fetch_log_authenticated(&client, host, &base, &username, &password) {
+                trace(
+                    "luci",
+                    "chips_auth_ok",
+                    &format!("{base} user={username}"),
+                );
                 return (parse_btminer_log(&log), log);
             }
         }
     }
 
+    trace("luci", "chips_empty", host);
     (Vec::new(), String::new())
 }
 
@@ -271,15 +287,30 @@ fn fetch_log_authenticated(
     let cookie = luci_login(client, base, username, password)?;
     store_session(host, base, &cookie);
     let url = format!("{base}/cgi-bin/luci/admin/status/btminerapi");
-    let response = client
-        .get(&url)
-        .header("Cookie", cookie)
-        .send()
-        .ok()?;
+    let response = match client.get(&url).header("Cookie", cookie).send() {
+        Ok(resp) => resp,
+        Err(err) => {
+            trace(
+                "luci",
+                "chips_get_err",
+                &format!("{base} timeout_or_conn err={err}"),
+            );
+            return None;
+        }
+    };
+    let status = response.status().as_u16();
     if !response.status().is_success() {
+        trace("luci", "chips_get_status", &format!("{base} code={status}"));
         return None;
     }
-    extract_chip_log(&response.text().ok()?)
+    let body = response.text().ok()?;
+    let log = extract_chip_log(&body);
+    trace(
+        "luci",
+        "chips_get_ok",
+        &format!("{base} code={status} parsed={}", log.is_some()),
+    );
+    log
 }
 
 fn luci_login(_client: &Client, base: &str, username: &str, password: &str) -> Option<String> {
@@ -299,19 +330,44 @@ fn luci_login_with_client(
     password: &str,
 ) -> Option<String> {
     let login_url = format!("{base}/cgi-bin/luci");
-    let response = login_client
+    let response = match login_client
         .post(&login_url)
         .header("Referer", format!("{base}/cgi-bin/luci"))
         .form(&[("luci_username", username), ("luci_password", password)])
         .send()
-        .ok()?;
+    {
+        Ok(resp) => resp,
+        Err(err) => {
+            trace(
+                "luci",
+                "login_err",
+                &format!("{base} user={username} timeout_or_conn err={err}"),
+            );
+            return None;
+        }
+    };
 
     let status = response.status();
-    if !status.is_success() && status.as_u16() != 302 {
+    let code = status.as_u16();
+    if !status.is_success() && code != 302 {
+        trace(
+            "luci",
+            "login_rejected",
+            &format!("{base} user={username} code={code}"),
+        );
         return None;
     }
 
-    extract_sysauth_cookie(response.headers())
+    let cookie = extract_sysauth_cookie(response.headers());
+    trace(
+        "luci",
+        "login_result",
+        &format!(
+            "{base} user={username} code={code} cookie={}",
+            cookie.is_some()
+        ),
+    );
+    cookie
 }
 
 fn extract_sysauth_cookie(headers: &HeaderMap) -> Option<String> {
