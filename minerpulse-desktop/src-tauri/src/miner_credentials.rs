@@ -16,6 +16,15 @@ const CREDENTIALS_FILE: &str = "miner-credentials.json";
 const CREDENTIALS_FILE_ENC: &str = "miner-credentials.enc";
 pub const SYNC_INTERVAL_MS: u64 = 900_000;
 
+/// Clears the sync-in-progress flag when a sync finishes (even on early return).
+struct SyncGuard<'a>(&'a std::sync::atomic::AtomicBool);
+
+impl Drop for SyncGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct MinerCredentialEntry {
     mac: String,
@@ -40,6 +49,7 @@ pub struct MinerCredentialsState {
     client: reqwest::Client,
     path: PathBuf,
     legacy_path: PathBuf,
+    sync_running: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,6 +110,7 @@ impl MinerCredentialsState {
                 .map_err(|_| cred_err("http_client"))?,
             path,
             legacy_path,
+            sync_running: std::sync::atomic::AtomicBool::new(false),
         };
 
         // One-time migration: encrypt plaintext store, then drop the legacy file.
@@ -293,7 +304,17 @@ impl MinerCredentialsState {
         }
         store.last_sync_unix = now_unix();
         self.save(&store)?;
-        Ok(self.list_local())
+        let list = store
+            .credentials
+            .iter()
+            .map(|entry| MinerCredentialMeta {
+                mac: entry.mac.clone(),
+                username: entry.username.clone(),
+                updated_at: entry.updated_at.clone(),
+            })
+            .collect();
+        drop(store);
+        Ok(list)
     }
 
     fn device_hwid(app: &AppHandle) -> Option<String> {
@@ -377,9 +398,16 @@ impl MinerCredentialsState {
     }
 
     pub async fn sync_if_logged_in(&self, app: &AppHandle) {
+        use std::sync::atomic::Ordering;
         if Self::access_token(app).is_none() {
             return;
         }
+        // Only one sync at a time; skip if another is in flight.
+        if self.sync_running.swap(true, Ordering::SeqCst) {
+            crate::diagnostic_log::event(app, "INFO", "sync", "skip", "already running");
+            return;
+        }
+        let _guard = SyncGuard(&self.sync_running);
         crate::diagnostic_log::event(app, "INFO", "sync", "start", "");
         let shared = self.fetch_storage_mode(app).await;
         let result = if shared {
