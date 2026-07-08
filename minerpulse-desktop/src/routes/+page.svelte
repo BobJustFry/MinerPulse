@@ -138,10 +138,32 @@
   const chartsUnlocked = $derived(
     entitlements.can_show_charts || polling || recording || sessionLoaded,
   );
+  // Sticky per-miner chip availability: hide the Chips tab when a miner has no
+  // chip data, but never flicker during poll/record (empty ticks keep the latch).
+  let chipsAvailable = $state(false);
+  let chipsMinerKey = "";
+  $effect(() => {
+    const data = snapshot;
+    if (!data || data.identity.vendor === "unknown") {
+      chipsAvailable = false;
+      chipsMinerKey = "";
+      return;
+    }
+    const key = data.identity.mac || data.identity.model || data.identity.vendor;
+    const hasChips = (data.board_chips?.length ?? 0) > 0;
+    if (key !== chipsMinerKey) {
+      chipsMinerKey = key;
+      chipsAvailable = hasChips;
+    } else if (hasChips) {
+      chipsAvailable = true;
+    }
+  });
+
   const visibleTabs = $derived.by((): TabId[] =>
     tabs.filter((tab) => {
       if (tab === "charts") return chartsUnlocked;
       if (tab === "commands") return entitlements.can_poll;
+      if (tab === "chips") return chipsAvailable;
       return true;
     }),
   );
