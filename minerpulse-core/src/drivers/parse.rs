@@ -52,6 +52,23 @@ pub fn normalize_mac_address(raw: &str) -> String {
         .replace('-', ":")
 }
 
+/// True when a parsed status is missing or the placeholder "Unknown".
+pub fn status_is_unknown(status: &str) -> bool {
+    status.trim().is_empty() || status.trim().eq_ignore_ascii_case("unknown")
+}
+
+/// Canonical run-status token derived from telemetry when the miner reports none.
+/// cgminer/BMMiner `summary` has no top-level status field, so we infer it.
+pub fn derive_run_status(has_hashrate: bool, has_telemetry: bool) -> &'static str {
+    if has_hashrate {
+        "mining"
+    } else if has_telemetry {
+        "idle"
+    } else {
+        "offline"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

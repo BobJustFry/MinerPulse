@@ -193,7 +193,7 @@ fn apply_identity(snapshot: &mut MinerSnapshot, model: Option<&str>, working: Op
 }
 
 fn status_is_unknown(status: &str) -> bool {
-    status.is_empty() || status.eq_ignore_ascii_case("unknown")
+    crate::drivers::parse::status_is_unknown(status)
 }
 
 /// Last-resort status when neither summary nor device.info reported one.
@@ -206,13 +206,7 @@ fn finalize_status(snapshot: &mut MinerSnapshot) {
         || !snapshot.boards.is_empty()
         || !snapshot.board_chips.is_empty()
         || !snapshot.pools.is_empty();
-    snapshot.status = if has_hash {
-        "mining".to_string()
-    } else if has_telemetry {
-        "idle".to_string()
-    } else {
-        "offline".to_string()
-    };
+    snapshot.status = crate::drivers::parse::derive_run_status(has_hash, has_telemetry).to_string();
 }
 
 fn ensure_active(options: &WhatsminerFetchOptions) -> Result<(), MinerPulseError> {

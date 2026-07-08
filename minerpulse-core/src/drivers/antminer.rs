@@ -698,6 +698,17 @@ pub fn parse_antminer_snapshot(
 
     hydrate_antminer_snapshot(&mut snapshot, stats_raw, summary_raw, pools_raw);
 
+    if crate::drivers::parse::status_is_unknown(&snapshot.status) {
+        let has_hashrate = snapshot.hashrate.avg5s_ghs > 0.0
+            || snapshot.hashrate.current_ghs > 0.0
+            || snapshot.hashrate.avg_ghs > 0.0;
+        let has_telemetry = has_hashrate
+            || !snapshot.boards.is_empty()
+            || snapshot.uptime_sec.unwrap_or(0) > 0;
+        snapshot.status =
+            crate::drivers::parse::derive_run_status(has_hashrate, has_telemetry).to_string();
+    }
+
     snapshot
 }
 
@@ -955,6 +966,13 @@ mod tests {
         let (boards, _) = parse_antminer_devs(devs);
         assert_eq!(boards.len(), 1);
         assert_eq!(boards[0].label, "chain0");
+    }
+
+    #[test]
+    fn derives_mining_status_when_cgminer_reports_none() {
+        let stats = r#"{"STATUS":[{"STATUS":"S"}],"STATS":[{"Type":"Antminer S19"},{"GHS 5s":95000.0,"GHS av":94000.0,"Elapsed":3600}]}"#;
+        let snap = parse_antminer_snapshot(stats, "", "", "");
+        assert_eq!(snap.status, "mining");
     }
 
     #[test]
