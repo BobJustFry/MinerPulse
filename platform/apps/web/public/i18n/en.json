@@ -74,5 +74,12 @@
   "logs.col.date": "Date",
   "logs.col.file": "File",
   "logs.col.hwid": "HWID",
-  "logs.download": "Download"
+  "logs.download": "Download",
+  "storage.title": "Credential storage",
+  "storage.sharedLabel": "Shared storage across all my computers",
+  "storage.hint": "When off, each computer keeps its own credential set (by HWID).",
+  "storage.empty": "No backups yet.",
+  "storage.loadError": "Could not load backups.",
+  "storage.col.hwid": "HWID",
+  "storage.col.updated": "Updated"
 }

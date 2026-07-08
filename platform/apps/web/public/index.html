@@ -55,6 +55,15 @@
           <p id="devices-summary" class="devices-summary"></p>
           <div id="devices-list"></div>
         </section>
+        <section id="storage-section" class="storage-section">
+          <h3 data-i18n="storage.title">Хранилище учётных данных</h3>
+          <label class="storage-toggle">
+            <input type="checkbox" id="storage-shared-toggle" />
+            <span data-i18n="storage.sharedLabel">Общее хранилище для всех моих компьютеров</span>
+          </label>
+          <p class="storage-hint" data-i18n="storage.hint">Если выключено — на каждом компьютере свой набор учётных данных (по HWID).</p>
+          <div id="storage-backups-list"></div>
+        </section>
         <section id="logs-section" class="logs-section">
           <h3 data-i18n="logs.title">Диагностические логи</h3>
           <p class="logs-hint" data-i18n="logs.hint">Логи, отправленные из приложения (О программе → Отправить диагностический лог).</p>

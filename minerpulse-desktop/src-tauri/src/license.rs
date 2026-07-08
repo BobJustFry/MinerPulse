@@ -137,9 +137,9 @@ fn fallback_hwid() -> String {
 
 fn ensure_device_identity(store: &mut LicenseStore) {
     let current = device_identity();
-    if store.hwid.is_empty() {
-        store.hwid = current.hwid;
-    }
+    // Always bind to the real machine id so a copied license.json cannot
+    // impersonate another device (honest per-HWID isolation).
+    store.hwid = current.hwid;
     store.os = current.os;
     store.os_version = current.os_version;
 }

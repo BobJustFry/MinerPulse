@@ -311,4 +311,62 @@ account.post("/logs", async (c) => {
   });
 });
 
+// --- Per-HWID credential storage backup + shared/isolated mode ---
+
+const MAX_BACKUP_CHARS = 512 * 1024;
+
+account.get("/storage-mode", async (c) => {
+  const user = c.get("user");
+  return c.json({ shared: user.sharedStorage });
+});
+
+account.put("/storage-mode", async (c) => {
+  const user = c.get("user");
+  const body = z.object({ shared: z.boolean() }).parse(await c.req.json());
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { sharedStorage: body.shared },
+  });
+  return c.json({ shared: body.shared });
+});
+
+account.put("/storage-backup", async (c) => {
+  const user = c.get("user");
+  const body = z
+    .object({ hwid: z.string().min(8), payload: z.string().min(1).max(MAX_BACKUP_CHARS) })
+    .parse(await c.req.json());
+  const payloadEnc = encryptPassword(body.payload);
+  await prisma.deviceStorageBackup.upsert({
+    where: { userId_hwid: { userId: user.id, hwid: body.hwid } },
+    create: { userId: user.id, hwid: body.hwid, payloadEnc },
+    update: { payloadEnc },
+  });
+  return c.json({ ok: true });
+});
+
+account.get("/storage-backups", async (c) => {
+  const user = c.get("user");
+  const rows = await prisma.deviceStorageBackup.findMany({
+    where: { userId: user.id },
+    orderBy: { updatedAt: "desc" },
+  });
+  return c.json({
+    backups: rows.map((row) => ({
+      hwid: row.hwid,
+      updated_at: row.updatedAt,
+      size_chars: row.payloadEnc.length,
+    })),
+  });
+});
+
+account.get("/storage-backup/:hwid", async (c) => {
+  const user = c.get("user");
+  const hwid = c.req.param("hwid");
+  const row = await prisma.deviceStorageBackup.findUnique({
+    where: { userId_hwid: { userId: user.id, hwid } },
+  });
+  if (!row) return c.json({ error: "not_found" }, 404);
+  return c.json({ hwid: row.hwid, payload: decryptPassword(row.payloadEnc), updated_at: row.updatedAt });
+});
+
 export { account };

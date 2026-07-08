@@ -296,33 +296,127 @@ impl MinerCredentialsState {
         Ok(self.list_local())
     }
 
+    fn device_hwid(app: &AppHandle) -> Option<String> {
+        let hwid = app.try_state::<LicenseState>()?.hwid();
+        if hwid.len() >= 8 {
+            Some(hwid)
+        } else {
+            None
+        }
+    }
+
+    /// Fetch the user's storage mode (`true` = shared across devices).
+    async fn fetch_storage_mode(&self, app: &AppHandle) -> bool {
+        let Some(token) = Self::access_token(app) else {
+            return true;
+        };
+        let url = format!("{}/v1/account/storage-mode", api_base());
+        match self.client.get(url).bearer_auth(token).send().await {
+            Ok(res) if res.status().is_success() => res
+                .json::<serde_json::Value>()
+                .await
+                .ok()
+                .and_then(|v| v.get("shared").and_then(|s| s.as_bool()))
+                .unwrap_or(true),
+            _ => true,
+        }
+    }
+
+    /// Upload this device's full local store under its HWID (survives reinstall).
+    async fn push_storage_backup(&self, app: &AppHandle) -> Result<(), ErrorResponse> {
+        let token = Self::access_token(app).ok_or_else(|| cred_err("not_logged_in"))?;
+        let hwid = Self::device_hwid(app).ok_or_else(|| cred_err("no_hwid"))?;
+        let payload = {
+            let store = self.store.lock().unwrap();
+            serde_json::to_string(&*store).map_err(|_| cred_err("serialize"))?
+        };
+        let url = format!("{}/v1/account/storage-backup", api_base());
+        let res = self
+            .client
+            .put(url)
+            .bearer_auth(token)
+            .json(&serde_json::json!({ "hwid": hwid, "payload": payload }))
+            .send()
+            .await
+            .map_err(|_| cred_err("network_error"))?;
+        if !res.status().is_success() {
+            return Err(cred_err("backup_failed"));
+        }
+        Ok(())
+    }
+
+    /// Isolated mode: restore only this HWID's backup into the local store.
+    async fn pull_storage_backup(&self, app: &AppHandle) -> Result<(), ErrorResponse> {
+        let token = Self::access_token(app).ok_or_else(|| cred_err("not_logged_in"))?;
+        let hwid = Self::device_hwid(app).ok_or_else(|| cred_err("no_hwid"))?;
+        let url = format!("{}/v1/account/storage-backup/{hwid}", api_base());
+        let res = self
+            .client
+            .get(url)
+            .bearer_auth(token)
+            .send()
+            .await
+            .map_err(|_| cred_err("network_error"))?;
+        if res.status().as_u16() == 404 {
+            return Ok(()); // new device — nothing to restore yet
+        }
+        if !res.status().is_success() {
+            return Err(cred_err("restore_failed"));
+        }
+        let body: serde_json::Value = res.json().await.map_err(|_| cred_err("parse_error"))?;
+        let payload = body
+            .get("payload")
+            .and_then(|p| p.as_str())
+            .ok_or_else(|| cred_err("parse_error"))?;
+        let restored: MinerCredentialsStore =
+            serde_json::from_str(payload).map_err(|_| cred_err("parse_error"))?;
+        let mut store = self.store.lock().unwrap();
+        *store = restored;
+        self.save(&store)?;
+        Ok(())
+    }
+
     pub async fn sync_if_logged_in(&self, app: &AppHandle) {
         if Self::access_token(app).is_none() {
             return;
         }
         crate::diagnostic_log::event(app, "INFO", "sync", "start", "");
-        match self.pull_remote(app).await {
-            Ok(list) => {
+        let shared = self.fetch_storage_mode(app).await;
+        let result = if shared {
+            self.pull_remote(app).await.map(|_| ())
+        } else {
+            self.pull_storage_backup(app).await
+        };
+        // Always back up this device's store under its HWID.
+        let backup = self.push_storage_backup(app).await;
+        match (&result, &backup) {
+            (Ok(_), Ok(_)) => {
                 crate::diagnostic_log::event(
                     app,
                     "INFO",
                     "sync",
                     "ok",
-                    &format!("count={}", list.len()),
+                    &format!("shared={shared}"),
                 );
                 let _ = app.emit("miner-credentials://sync", serde_json::json!({ "ok": true }));
             }
-            Err(err) => {
+            _ => {
+                let code = result
+                    .as_ref()
+                    .err()
+                    .map(|e| format!("{:?}", e.code))
+                    .or_else(|| backup.as_ref().err().map(|e| format!("{:?}", e.code)))
+                    .unwrap_or_else(|| "Unknown".to_string());
                 crate::diagnostic_log::event(
                     app,
                     "WARN",
                     "sync",
                     "fail",
-                    &format!("code={:?}", err.code),
+                    &format!("shared={shared} code={code}"),
                 );
                 let _ = app.emit(
                     "miner-credentials://sync",
-                    serde_json::json!({ "ok": false, "code": format!("{:?}", err.code) }),
+                    serde_json::json!({ "ok": false, "code": code }),
                 );
             }
         }

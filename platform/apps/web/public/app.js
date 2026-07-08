@@ -307,6 +307,51 @@ async function renderLogs() {
   }
 }
 
+async function renderStorageSection() {
+  const toggle = document.getElementById("storage-shared-toggle");
+  const list = document.getElementById("storage-backups-list");
+  if (!toggle || !list) return;
+  try {
+    const mode = await api("/v1/account/storage-mode");
+    toggle.checked = mode.shared !== false;
+    toggle.onchange = async () => {
+      try {
+        await api("/v1/account/storage-mode", {
+          method: "PUT",
+          body: JSON.stringify({ shared: toggle.checked }),
+        });
+      } catch (err) {
+        alert(err.message || t("error.generic"));
+        toggle.checked = !toggle.checked;
+      }
+    };
+  } catch {
+    /* ignore */
+  }
+  try {
+    const { backups } = await api("/v1/account/storage-backups");
+    if (!backups?.length) {
+      list.innerHTML = `<p class="storage-empty">${t("storage.empty")}</p>`;
+      return;
+    }
+    list.innerHTML = `<table class="storage-table">
+      <thead><tr><th>${t("storage.col.hwid")}</th><th>${t("storage.col.updated")}</th></tr></thead>
+      <tbody>
+        ${backups
+          .map(
+            (row) => `<tr>
+              <td><code>${escHtml(row.hwid)}</code></td>
+              <td>${escHtml(formatClientDateTime(row.updated_at))}</td>
+            </tr>`,
+          )
+          .join("")}
+      </tbody>
+    </table>`;
+  } catch {
+    list.innerHTML = `<p class="storage-empty">${t("storage.loadError")}</p>`;
+  }
+}
+
 function showDashboard(user, subscription, devices = [], deviceLimit = 1) {
   document.getElementById("auth-actions").hidden = true;
   document.getElementById("auth-hint").hidden = true;
@@ -328,6 +373,7 @@ function showDashboard(user, subscription, devices = [], deviceLimit = 1) {
       ? t("auth.subscriptionNoneBeta")
       : t("auth.subscriptionNone");
   renderDevices(devices, deviceLimit);
+  void renderStorageSection();
   void renderLogs();
   renderSubscribePlans();
   showSubscribeMessage("");

@@ -74,5 +74,12 @@
   "logs.col.date": "Дата",
   "logs.col.file": "Файл",
   "logs.col.hwid": "HWID",
-  "logs.download": "Скачать"
+  "logs.download": "Скачать",
+  "storage.title": "Хранилище учётных данных",
+  "storage.sharedLabel": "Общее хранилище для всех моих компьютеров",
+  "storage.hint": "Если выключено — на каждом компьютере свой набор учётных данных (по HWID).",
+  "storage.empty": "Резервных копий пока нет.",
+  "storage.loadError": "Не удалось загрузить список копий.",
+  "storage.col.hwid": "HWID",
+  "storage.col.updated": "Обновлено"
 }

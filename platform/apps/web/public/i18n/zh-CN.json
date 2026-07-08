@@ -74,5 +74,12 @@
   "logs.col.date": "日期",
   "logs.col.file": "文件",
   "logs.col.hwid": "HWID",
-  "logs.download": "下载"
+  "logs.download": "下载",
+  "storage.title": "凭据存储",
+  "storage.sharedLabel": "我的所有电脑共享存储",
+  "storage.hint": "关闭后，每台电脑按 HWID 保留各自的凭据集。",
+  "storage.empty": "暂无备份。",
+  "storage.loadError": "无法加载备份列表。",
+  "storage.col.hwid": "HWID",
+  "storage.col.updated": "更新时间"
 }
