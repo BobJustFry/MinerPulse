@@ -790,6 +790,7 @@ fn run_poll_loop(
     let mut frame_index = 0u32;
     let mut cached_driver = String::new();
     let mut cached_board_chips = Vec::<BoardChipMap>::new();
+    let mut cached_chip_log = String::new();
     let mut session = if recording {
         Some(MpulseFile::new_session(
             ip,
@@ -832,8 +833,18 @@ fn run_poll_loop(
                     if snapshot.board_chips.is_empty() && !cached_board_chips.is_empty() {
                         snapshot.board_chips = cached_board_chips.clone();
                     }
-                } else if !snapshot.board_chips.is_empty() {
-                    cached_board_chips = snapshot.board_chips.clone();
+                    // Keep the chip section visible in the console between full refreshes.
+                    if !cached_chip_log.is_empty() && !snapshot.raw_log.contains("--- btminer log ---") {
+                        snapshot.raw_log.push_str("\n--- btminer log (cached) ---\n");
+                        snapshot.raw_log.push_str(&cached_chip_log);
+                    }
+                } else {
+                    if !snapshot.board_chips.is_empty() {
+                        cached_board_chips = snapshot.board_chips.clone();
+                    }
+                    if let Some(idx) = snapshot.raw_log.find("--- btminer log ---") {
+                        cached_chip_log = snapshot.raw_log[idx..].to_string();
+                    }
                 }
 
                 let t_ms = started.elapsed().as_millis() as u64;
