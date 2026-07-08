@@ -312,9 +312,52 @@ fn fetch_with_detect_full(
         return Err(MinerPulseError::no_port_response(port));
     }
 
-    Err(MinerPulseError::with_code(
-        crate::error::ErrorCode::NotSupported,
+    // Unknown cgminer-family miner: return a generic snapshot instead of an error.
+    ensure_not_cancelled(wm_options)?;
+    let model_hint = generic_model_hint(client, host, port);
+    let stats = if last_stats.is_empty() {
+        client
+            .send_receive(host, port, "stats", "", true)
+            .ok()
+            .filter(|v| is_meaningful_response(v))
+            .unwrap_or_default()
+    } else {
+        last_stats
+    };
+    Ok(super::generic::parse_generic_cgminer_snapshot(
+        model_hint.as_deref(),
+        &stats,
+        &summary,
+        &pools_raw,
     ))
+}
+
+/// Best-effort model name from `devdetails` (Model) or `version` (Type).
+fn generic_model_hint(client: &TcpCgminerClient, host: &str, port: u16) -> Option<String> {
+    use super::json_util::{array_items, first_in_array, json_str};
+
+    if let Ok(raw) = client.send_receive(host, port, "devdetails", "", true) {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(raw.trim()) {
+            if let Some(items) = array_items(&value, "DEVDETAILS") {
+                if let Some(model) = items
+                    .iter()
+                    .find_map(|item| json_str(item, "Model").filter(|m| !m.is_empty()))
+                {
+                    return Some(model.to_string());
+                }
+            }
+        }
+    }
+    if let Ok(raw) = client.send_receive(host, port, "version", "", true) {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(raw.trim()) {
+            if let Some(item) = first_in_array(&value, "VERSION") {
+                if let Some(t) = json_str(item, "Type").filter(|m| !m.is_empty()) {
+                    return Some(t.to_string());
+                }
+            }
+        }
+    }
+    None
 }
 
 pub fn fetch_whatsminer(

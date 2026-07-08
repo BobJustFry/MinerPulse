@@ -105,6 +105,7 @@ export function driverLabel(driverId: string): string {
     avalon: "Avalon",
     innosilicon: "Innosilicon",
     generic: "CGMiner",
+    cgminer: "CGMiner",
     unknown: "?",
   };
   return map[driverId] ?? driverId;
