@@ -2,6 +2,7 @@ use crate::drivers::antminer::{parse_antminer_snapshot, split_antminer_log, Antm
 use crate::drivers::avalon::{
     parse_avalon_estats_log, parse_estats, refresh_avalon_board_chips_from_raw_log, AvalonDriver,
 };
+use crate::drivers::whatsminer::refresh_whatsminer_board_chips_from_raw_log;
 use crate::drivers::avalon_cgminer::{is_avalon_cgminer_dump, parse_avalon_cgminer_dump};
 use crate::drivers::whatsminer::{classify_whatsminer, parse_whatsminer_snapshot};
 use crate::drivers::MinerDriver;
@@ -127,6 +128,7 @@ fn import_json(trimmed: &str, label: &str) -> Result<ImportResult, MinerPulseErr
 
         let mut snapshot = frame.snapshot.clone();
         refresh_avalon_board_chips_from_raw_log(&mut snapshot, Some(&frame.raw_log));
+        refresh_whatsminer_board_chips_from_raw_log(&mut snapshot, Some(&frame.raw_log));
 
         return Ok(ImportResult {
             snapshot,

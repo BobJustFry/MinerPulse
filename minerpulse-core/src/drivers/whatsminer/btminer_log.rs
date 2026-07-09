@@ -54,6 +54,21 @@ pub fn parse_btminer_log(text: &str) -> Vec<BoardChipMap> {
         .collect()
 }
 
+pub fn extract_btminer_log_section(raw: &str) -> Option<&str> {
+    const MARKERS: &[&str] = &[
+        "--- btminer log ---\n",
+        "--- btminer log (cached) ---\n",
+        "--- btminer log ---",
+        "--- btminer log (cached) ---",
+    ];
+    for marker in MARKERS {
+        if let Some(idx) = raw.find(marker) {
+            return Some(&raw[idx + marker.len()..]);
+        }
+    }
+    None
+}
+
 pub fn parse_btminer_html(html: &str) -> Option<String> {
     let start = html.find(r#"id="syslog">"#)? + 12;
     let end = start + html[start..].find("</textarea>")?;
@@ -93,8 +108,12 @@ fn parse_slot_header(line: &str) -> ParsedSlot {
 }
 
 fn parse_chip_line(line: &str) -> Option<ChipStats> {
-    let id_end = line.find(char::is_whitespace)?;
-    let index: u32 = line[1..id_end].parse().ok()?;
+    let rest = line.strip_prefix('C')?;
+    let digit_len = rest.chars().take_while(|c| c.is_ascii_digit()).count();
+    if digit_len == 0 {
+        return None;
+    }
+    let index: u32 = rest[..digit_len].parse().ok()?;
 
     let mut chip = ChipStats {
         index,
@@ -204,6 +223,27 @@ C110 freq:609 vol:326 temp:60 nonce:42321590 error:878 crc:0 x:0 repeat:31 pct:1
         assert_eq!(chip.crc_errors, Some(0));
         assert_eq!(chip.repeat_count, Some(31));
         assert_eq!(chip.performance_pct, Some([101.3, 101.4]));
+    }
+
+    #[test]
+    fn parses_three_digit_chip_index_without_space_before_colon() {
+        let sample = r#"
+slot0:
+(
+   slot: 0
+   C98 : freq:630  vol:327 temp:62  nonce:63807003 error:1226 crc:0    x:0   / 0 repeat:35   pct: 99.7%/101.8%
+   C99 : freq:634  vol:328 temp:60  nonce:63510189 error:1207 crc:0    x:0   / 0 repeat:28   pct: 99.7%/ 94.6%
+   C100: freq:608  vol:330 temp:62  nonce:60833588 error:1152 crc:0    x:0   / 0 repeat:29   pct: 99.4%/100.6%
+   C110: freq:633  vol:334 temp:56  nonce:63943349 error:1162 crc:0    x:0   / 0 repeat:44   pct:100.4%/ 99.7%
+)
+"#;
+        let boards = parse_btminer_log(sample);
+        assert_eq!(boards.len(), 1);
+        assert_eq!(boards[0].chips.len(), 4);
+        assert_eq!(boards[0].chips[2].index, 100);
+        assert_eq!(boards[0].chips[2].temp_c, 62);
+        assert_eq!(boards[0].chips[3].index, 110);
+        assert_eq!(boards[0].chips[3].freq_mhz, Some(633));
     }
 
     #[test]

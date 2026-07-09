@@ -1,4 +1,5 @@
 use crate::drivers::avalon::refresh_avalon_board_chips_from_raw_log;
+use crate::drivers::whatsminer::refresh_whatsminer_board_chips_from_raw_log;
 use crate::entitlements::SubscriptionTier;
 use crate::error::MinerPulseError;
 use crate::model::MinerSnapshot;
@@ -262,10 +263,15 @@ pub fn load_mpulse(path: &Path) -> Result<MpulseFile, MinerPulseError> {
 
 fn refresh_loaded_mpulse_frames(file: &mut MpulseFile) {
     for frame in &mut file.frames {
-        if frame.raw_log.is_empty() {
+        let raw_log = if !frame.raw_log.is_empty() {
+            frame.raw_log.clone()
+        } else if !frame.snapshot.raw_log.is_empty() {
+            frame.snapshot.raw_log.clone()
+        } else {
             continue;
-        }
-        refresh_avalon_board_chips_from_raw_log(&mut frame.snapshot, Some(&frame.raw_log));
+        };
+        refresh_avalon_board_chips_from_raw_log(&mut frame.snapshot, Some(&raw_log));
+        refresh_whatsminer_board_chips_from_raw_log(&mut frame.snapshot, Some(&raw_log));
     }
 }
 

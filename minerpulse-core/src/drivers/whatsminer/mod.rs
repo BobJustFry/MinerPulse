@@ -15,7 +15,7 @@ use crate::model::{
 };
 use crate::tcp::TcpCgminerClient;
 use access::{compute_needs_setup, probe_whatsminer_access, probe_whatsminer_access_fast};
-use btminer_log::parse_btminer_log;
+use btminer_log::{extract_btminer_log_section, parse_btminer_log};
 use errors::parse_error_entries;
 use luci::fetch_btminer_chip_data;
 use options::WhatsminerFetchOptions;
@@ -229,11 +229,7 @@ fn enrich_params(snapshot: &mut MinerSnapshot, summary_raw: &str) {
 
     // Defensive summary fields (key names vary across firmware).
     let value: Value = serde_json::from_str(summary_raw.trim()).unwrap_or(Value::Null);
-    let summary = value
-        .get("SUMMARY")
-        .and_then(|s| s.as_array())
-        .and_then(|items| items.first())
-        .or_else(|| value.get("msg").and_then(|m| m.get("summary")));
+    let summary = summary_item_from_value(&value);
     if let Some(item) = summary {
         if snapshot.params.env_temp_c.is_none() {
             snapshot.params.env_temp_c = json_f64(item, "Env Temp")
@@ -254,6 +250,18 @@ fn enrich_params(snapshot: &mut MinerSnapshot, summary_raw: &str) {
         }
         if snapshot.params.rated_ghs.is_none() {
             snapshot.params.rated_ghs = json_f64(item, "Factory GHS");
+        }
+        if snapshot.params.chip_temp_min_c.is_none() {
+            snapshot.params.chip_temp_min_c =
+                json_f64(item, "Chip Temp Min").or_else(|| json_f64(item, "chip-temp-min"));
+        }
+        if snapshot.params.chip_temp_avg_c.is_none() {
+            snapshot.params.chip_temp_avg_c =
+                json_f64(item, "Chip Temp Avg").or_else(|| json_f64(item, "chip-temp-avg"));
+        }
+        if snapshot.params.chip_temp_max_c.is_none() {
+            snapshot.params.chip_temp_max_c =
+                json_f64(item, "Chip Temp Max").or_else(|| json_f64(item, "chip-temp-max"));
         }
     }
 }
@@ -309,55 +317,24 @@ pub fn classify_whatsminer(json: &str) -> Option<(MinerVendor, String)> {
     }
 
     let value: Value = serde_json::from_str(trimmed).ok()?;
-    let status_msg = value
-        .get("STATUS")
-        .and_then(|s| s.as_array())
-        .and_then(|items| items.first())
-        .and_then(|item| item.get("Msg"))
-        .and_then(|msg| msg.as_str());
+    let summary_item = summary_item_from_value(&value)?;
 
-    if value.get("msg").and_then(|msg| msg.get("summary")).is_some() {
-        let model = value
-            .get("msg")
-            .and_then(|msg| msg.get("summary"))
-            .and_then(|summary| {
-                summary
-                    .get("type")
-                    .or_else(|| summary.get("Miner Type"))
-                    .and_then(|v| v.as_str())
-            })
-            .unwrap_or("WhatsMiner")
-            .to_string();
-        return Some((MinerVendor::Whatsminer, model));
-    }
-
-    let summary_item = value.get("SUMMARY").and_then(|s| s.as_array())?.first()?;
-
-    let has_summary = value.get("SUMMARY").is_some();
-    if !has_summary && status_msg != Some("Summary") {
+    // CGMiner Antminer summary uses GHS without WhatsMiner markers.
+    if summary_item.get("GHS 5s").is_some()
+        && json_str(summary_item, "Miner Type").is_none()
+        && json_f64(summary_item, "MHS 5s").is_none()
+        && json_f64(summary_item, "MHS av").is_none()
+        && json_f64(summary_item, "MHS 1m").is_none()
+        && !whatsminer_summary_markers(summary_item)
+    {
         return None;
     }
 
-    // CGMiner Antminer summary uses GHS fields; WhatsMiner uses MHS / Miner Type.
-    let miner_type = summary_item
-        .get("Miner Type")
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
-    let has_mhs = summary_item.get("MHS 5s").is_some()
-        || summary_item.get("MHS av").is_some()
-        || summary_item.get("MHS 1m").is_some();
-    let has_whatsminer_hash = summary_item.get("hash-realtime").is_some()
-        || summary_item.get("hash-average").is_some();
-
-    if miner_type.is_none() && !has_mhs && !has_whatsminer_hash {
-        return None;
-    }
-
-    if summary_item.get("GHS 5s").is_some() && miner_type.is_none() && !has_mhs {
-        return None;
-    }
-
-    let model = miner_type.unwrap_or_else(|| "WhatsMiner".to_string());
+    let model = json_str(summary_item, "Miner Type")
+        .or_else(|| json_str(summary_item, "Type"))
+        .or_else(|| json_str(summary_item, "type"))
+        .unwrap_or("WhatsMiner")
+        .to_string();
 
     Some((MinerVendor::Whatsminer, model))
 }
@@ -425,9 +402,53 @@ fn whatsminer_model_from_cgminer_item(item: &Value) -> Option<String> {
     None
 }
 
+/// Telemetry object from `SUMMARY[]`, API `msg.summary`, or root/`STATUS` `Msg` object.
+fn summary_item_from_value(value: &Value) -> Option<&Value> {
+    if let Some(item) = value
+        .get("SUMMARY")
+        .and_then(|s| s.as_array())
+        .and_then(|items| items.first())
+    {
+        if whatsminer_summary_markers(item) {
+            return Some(item);
+        }
+    }
+
+    if let Some(item) = value.get("msg").and_then(|m| m.get("summary")) {
+        if whatsminer_summary_markers(item) {
+            return Some(item);
+        }
+    }
+
+    if let Some(msg) = value.get("Msg").filter(|m| m.is_object()) {
+        if whatsminer_summary_markers(msg) {
+            return Some(msg);
+        }
+    }
+
+    if let Some(arr) = value.get("STATUS").and_then(|s| s.as_array()) {
+        for item in arr {
+            if let Some(msg) = item.get("Msg").filter(|m| m.is_object()) {
+                if whatsminer_summary_markers(msg) {
+                    return Some(msg);
+                }
+            }
+        }
+    }
+
+    None
+}
+
 fn whatsminer_summary_markers(item: &Value) -> bool {
     json_f64(item, "MHS 5s").is_some()
         || json_f64(item, "MHS av").is_some()
+        || json_f64(item, "MHS 1m").is_some()
+        || json_f64(item, "MHS 15m").is_some()
+        || json_f64(item, "HS RT").is_some()
+        || json_f64(item, "Power").is_some()
+        || json_f64(item, "Factory GHS").is_some()
+        || json_str(item, "Miner Type").is_some()
+        || json_str(item, "Btminer Fast Boot").is_some()
         || json_str(item, "RT HASHRATE").is_some()
         || json_str(item, "AV HASHRATE").is_some()
         || json_str(item, "THEORY HASHRATE").is_some()
@@ -581,11 +602,7 @@ pub fn parse_whatsminer_snapshot(
     board_chips: Vec<crate::model::BoardChipMap>,
 ) -> MinerSnapshot {
     let value: Value = serde_json::from_str(summary_raw.trim()).unwrap_or(Value::Null);
-    let summary = value
-        .get("SUMMARY")
-        .and_then(|s| s.as_array())
-        .and_then(|items| items.first())
-        .or_else(|| value.get("msg").and_then(|msg| msg.get("summary")));
+    let summary = summary_item_from_value(&value);
 
     let model = summary
         .and_then(|item| {
@@ -611,6 +628,8 @@ pub fn parse_whatsminer_snapshot(
     if let Some(item) = summary {
         hashrate.avg5s_ghs = json_f64(item, "MHS 5s")
             .map(mhs_to_ghs)
+            .or_else(|| json_f64(item, "HS RT").map(mhs_to_ghs))
+            .or_else(|| json_f64(item, "MHS 1m").map(mhs_to_ghs))
             .or_else(|| json_f64(item, "hash-realtime").map(ths_to_ghs))
             .unwrap_or(0.0);
         hashrate.avg_ghs = json_f64(item, "MHS av")
@@ -788,9 +807,76 @@ pub fn parse_whatsminer_snapshot(
     }
 }
 
+pub fn refresh_whatsminer_board_chips_from_raw_log(
+    snapshot: &mut MinerSnapshot,
+    frame_raw_log: Option<&str>,
+) {
+    if snapshot.identity.driver_id != "whatsminer"
+        && snapshot.identity.vendor != MinerVendor::Whatsminer
+    {
+        return;
+    }
+
+    let raw = frame_raw_log
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            if snapshot.raw_log.trim().is_empty() {
+                None
+            } else {
+                Some(snapshot.raw_log.as_str())
+            }
+        });
+
+    let Some(raw) = raw else {
+        return;
+    };
+
+    let Some(btminer_log) = extract_btminer_log_section(raw) else {
+        return;
+    };
+
+    let mut board_chips = parse_btminer_log(btminer_log);
+    if board_chips.is_empty() {
+        return;
+    }
+
+    let model = snapshot.identity.model.clone();
+    for board in &mut board_chips {
+        board.chips_per_domain = layout::resolve_chips_per_domain(&model, board.chips.len());
+    }
+
+    snapshot.board_chips = board_chips;
+    snapshot.thermal.per_chip_c = snapshot
+        .board_chips
+        .iter()
+        .flat_map(|board| board.chips.iter().map(|chip| chip.temp_c))
+        .collect();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn classifies_flat_msg_summary_firmware() {
+        let sample = r#"{"STATUS":"S","When":1783581545,"Code":131,"Msg":{"Elapsed":228,"MHS av":5444539.5,"MHS 1m":897882.68,"HS RT":897882.68,"Power":938.12,"Env Temp":24.5,"Btminer Fast Boot":"enable","Chip Temp Avg":67.3},"Description":""}"#;
+        let (vendor, model) = classify_whatsminer(sample).unwrap();
+        assert_eq!(vendor, MinerVendor::Whatsminer);
+        assert_eq!(model, "WhatsMiner");
+        let snap = parse_whatsminer_snapshot(sample, "", "", "", "", "", "", Vec::new());
+        assert!((snap.hashrate.avg5s_ghs - 897.88268).abs() < 0.1);
+        assert!((snap.hashrate.avg_ghs - 5444.5395).abs() < 0.1);
+        assert_eq!(snap.power.watts, Some(938.12));
+        let mut enriched = snap;
+        enrich_params(&mut enriched, sample);
+        assert_eq!(enriched.params.env_temp_c, Some(24.5));
+    }
+
+    #[test]
+    fn classifies_status_array_msg_summary_firmware() {
+        let sample = r#"{"STATUS":[{"STATUS":"S","Code":131,"Msg":{"MHS av":29275324,"MHS 1m":33609692,"Power":3415.39,"Btminer Fast Boot":"enable"}}]}"#;
+        assert!(classify_whatsminer(sample).is_some());
+    }
 
     #[test]
     fn rejects_antminer_summary_as_whatsminer() {

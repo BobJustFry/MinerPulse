@@ -168,6 +168,7 @@ pub fn load_binary_mpulse_bytes(bytes: &[u8]) -> Result<LoadedBinarySession, Min
 
 fn refresh_loaded_binary_frames(frames: &mut [MpulseFrame]) {
     use crate::drivers::avalon::refresh_avalon_board_chips_from_raw_log;
+    use crate::drivers::whatsminer::refresh_whatsminer_board_chips_from_raw_log;
     for frame in frames {
         let raw_log = if !frame.raw_log.is_empty() {
             frame.raw_log.clone()
@@ -177,6 +178,7 @@ fn refresh_loaded_binary_frames(frames: &mut [MpulseFrame]) {
             continue;
         };
         refresh_avalon_board_chips_from_raw_log(&mut frame.snapshot, Some(&raw_log));
+        refresh_whatsminer_board_chips_from_raw_log(&mut frame.snapshot, Some(&raw_log));
     }
 }
 
