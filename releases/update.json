@@ -1,12 +1,12 @@
 {
-  "version": "1.2.138",
-  "build": 138,
-  "notes": "Miner Pulse 1.2.0 (138) — import 412 WhatsMiner chip layout configs from HashSource firmware tables; correct chips_per_domain for M60 (172→43×4), M50 series, and other models.",
-  "pub_date": "2026-07-09T08:39:52Z",
+  "version": "1.2.178",
+  "build": 178,
+  "notes": "Miner Pulse 1.2.0 (178) — WhatsMiner control: cancellable log export, corrected numeric ranges (freq −100…+100), API Switch enable diagnostics with WhatsMinerTool guidance when firmware lacks API 3.0 command, LuCI login token fix.",
+  "pub_date": "2026-07-09T13:24:16Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRGJjUWdVNlE3anNONEJTK2hESWdOWC93Sm55azJ3RTlMRU5UWWpwa0Z0b2o4bTBGTmxqMHlRVmd3MzdQcTZGR2Y3OHpNQVFyb0dwNGNmTjRwK1UvWVFvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzNTg2Mzg4CWZpbGU6TWluZXJQdWxzZV8xLjIuMTM4X3g2NC1zZXR1cC5leGUKTExKamlva1QwUjFmVCs3aWlKdDVDZ29RTk5SN2tOUElEeG5zcW5tRU1RSWF1Y3ZReTRkeGY2ZGdDbkZpalpUQVQraldPcm8rUDRCaGRoUzNoL2hYQlE9PQo=",
-      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.2.0-build138/MinerPulse_1.2.138_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRGQwR3l1azVJL2RCcmd6eUcxYmhNWDN4QkJPWlZlR3hhMXFJLzBmUEpUUUU0WldJcXFsZGdoOXo5bDlIZDRnL0VWR2VMKzJXUWZ0cW1RTHppTGJodndzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzNjAzNDUxCWZpbGU6TWluZXJQdWxzZV8xLjIuMTc4X3g2NC1zZXR1cC5leGUKVEtrWlQ5WDRNalN4c2FKd2F0NGd0ekREM1BISWJQOFNFTWFWY2FJNmZuWlhNNFE4SkZtNXNBQmNpVTNsYXM0RlJsSXlpRnNTVkcwNEdSVUNCWDNmQ3c9PQo=",
+      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.2.0-build178/MinerPulse_1.2.178_x64-setup.exe"
     }
   }
 }
