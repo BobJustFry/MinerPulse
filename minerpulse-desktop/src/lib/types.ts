@@ -163,7 +163,9 @@ export interface ScanResult {
   range_label: string;
 }
 
+export type ChartsLayout = "tile" | "list";
+
 export interface ErrorResponse {
   code: string;
-  args?: { sec?: number; message?: string };
+  args?: { sec?: number; message?: string; port?: number };
 }

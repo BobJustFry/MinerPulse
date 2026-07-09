@@ -55,7 +55,7 @@
   import { invokeWithTimeout, MINER_READ_TIMEOUT_MS, WHATSMINER_AUTH_TEST_TIMEOUT_MS } from "$lib/minerInvoke";
   import { isSnapshotEmpty } from "$lib/snapshotUtils";
   import { checkForAppUpdate, UPDATE_CHECK_INTERVAL_MS } from "$lib/updateCheck";
-  import type { ChartsLayout } from "$lib/components/MinerChartsPanel";
+  import type { ChartsLayout } from "$lib/types";
   import type {
     Entitlements,
     LicenseInfo,
@@ -733,7 +733,7 @@
         port: Number(port) || 4028,
         recordPath,
         pollRateHz,
-        whatsminerAuth: whatsminerAuthPayload(),
+        whatsminerAuth: whatsminerAuthPayload() ?? undefined,
       });
       polling = true;
       recording = record;

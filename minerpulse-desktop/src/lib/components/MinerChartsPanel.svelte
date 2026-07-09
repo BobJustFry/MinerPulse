@@ -13,8 +13,7 @@
   } from "$lib/chartHistory";
   import { formatHashrateAxis } from "$lib/formatMiner";
   import { t, type Locale, type MessageKey } from "$lib/i18n";
-
-  export type ChartsLayout = "tile" | "list";
+  import type { ChartsLayout } from "$lib/types";
 
   let {
     points,

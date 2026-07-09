@@ -344,6 +344,7 @@
   "charts.fan": "Fan speed",
   "charts.series.hashrate": "Hashrate",
   "charts.series.power": "Power",
+  "charts.series.fan": "Fan",
   "player.title": "Session playback",
   "player.close": "Close",
   "player.rewind": "To start",

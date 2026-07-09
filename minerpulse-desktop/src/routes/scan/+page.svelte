@@ -399,34 +399,36 @@
     await getCurrentWindow().close();
   }
 
-  onMount(async () => {
-    applyUiPrefs();
-    try {
-      const v = await invoke<{ display: string; version: string; build: number; product: string }>(
-        "get_app_version",
-      );
-      appProduct = v.product;
-      appVersionNumber = v.version;
-      appBuild = v.build;
-    } catch {
-      /* ignore in web preview */
-    }
-    subnets = await invoke<ScanSubnet[]>("list_scan_subnets");
-    selectedSubnetId = subnets[0]?.id ?? CUSTOM_SUBNET_ID;
-    loadScanPrefs(subnets);
-    prefsLoaded = true;
-    statusText = msg("scan.hint");
+  onMount(() => {
+    void (async () => {
+      applyUiPrefs();
+      try {
+        const v = await invoke<{ display: string; version: string; build: number; product: string }>(
+          "get_app_version",
+        );
+        appProduct = v.product;
+        appVersionNumber = v.version;
+        appBuild = v.build;
+      } catch {
+        /* ignore in web preview */
+      }
+      subnets = await invoke<ScanSubnet[]>("list_scan_subnets");
+      selectedSubnetId = subnets[0]?.id ?? CUSTOM_SUBNET_ID;
+      loadScanPrefs(subnets);
+      prefsLoaded = true;
+      statusText = msg("scan.hint");
 
-    unlistenProgress = await listen<ScanProgressPayload>("scan://progress", (event) => {
-      applyProgress(event.payload);
-    });
-    unlistenFound = await listen<DiscoveredMiner>("scan://found", (event) => {
-      addDiscoveredMiner(event.payload);
-      progressFound = discovered.length;
-    });
-    unlistenFinished = await listen<ScanFinishedPayload>("scan://finished", (event) => {
-      finishScan(event.payload);
-    });
+      unlistenProgress = await listen<ScanProgressPayload>("scan://progress", (event) => {
+        applyProgress(event.payload);
+      });
+      unlistenFound = await listen<DiscoveredMiner>("scan://found", (event) => {
+        addDiscoveredMiner(event.payload);
+        progressFound = discovered.length;
+      });
+      unlistenFinished = await listen<ScanFinishedPayload>("scan://finished", (event) => {
+        finishScan(event.payload);
+      });
+    })();
 
     return () => {
       unlistenProgress?.();

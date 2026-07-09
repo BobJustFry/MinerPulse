@@ -344,6 +344,7 @@
   "charts.fan": "Скорость вентиляторов",
   "charts.series.hashrate": "Хешрейт",
   "charts.series.power": "Мощность",
+  "charts.series.fan": "Вентилятор",
   "player.title": "Воспроизведение сессии",
   "player.close": "Закрыть",
   "player.rewind": "В начало",

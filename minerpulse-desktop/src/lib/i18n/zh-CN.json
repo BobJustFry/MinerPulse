@@ -344,6 +344,7 @@
   "charts.fan": "风扇转速",
   "charts.series.hashrate": "算力",
   "charts.series.power": "功耗",
+  "charts.series.fan": "风扇",
   "player.title": "会话播放",
   "player.close": "关闭",
   "player.rewind": "回到开头",
