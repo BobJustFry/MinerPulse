@@ -69,14 +69,9 @@ impl WhatsminerDriver {
         trace("whatsminer", "tcp_summary", host);
         let summary = client.send_payload(host, port, r#"{"cmd":"summary"}"#)?;
         ensure_active(options)?;
-        // Pools are cheap and wanted on manual reads; skip only on fast poll ticks.
-        let pools = if options.fast_poll && !options.fetch_chips {
-            String::new()
-        } else {
-            client
-                .send_payload(host, port, r#"{"cmd":"pools"}"#)
-                .unwrap_or_default()
-        };
+        let pools = client
+            .send_payload(host, port, r#"{"cmd":"pools"}"#)
+            .unwrap_or_default();
         let devs = if options.fast_poll {
             String::new()
         } else {

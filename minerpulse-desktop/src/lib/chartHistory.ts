@@ -6,6 +6,7 @@ import {
 } from "$lib/formatMiner";
 
 export const MAX_CHART_WINDOW_MS = 30 * 60 * 1000;
+export const MAX_CHART_DISPLAY_POINTS = 1200;
 
 export interface ChartPoint {
   t_ms: number;
@@ -51,13 +52,31 @@ export function appendChartPoint(
 ): ChartPoint[] {
   const next = [...history, point];
   const cutoff = Math.max(0, point.t_ms - maxWindowMs);
-  return next.filter((item) => item.t_ms >= cutoff);
+  const trimmed = next.filter((item) => item.t_ms >= cutoff);
+  return downsampleChartPoints(trimmed);
 }
 
 export function chartPointsFromFrames(
   frames: Array<{ t_ms: number; snapshot: MinerSnapshot }>,
 ): ChartPoint[] {
   return frames.map((frame) => pointFromSnapshot(frame.snapshot, frame.t_ms));
+}
+
+export function downsampleChartPoints(
+  points: ChartPoint[],
+  maxPoints = MAX_CHART_DISPLAY_POINTS,
+): ChartPoint[] {
+  if (points.length <= maxPoints) return points;
+  const lastIndex = points.length - 1;
+  const step = lastIndex / (maxPoints - 1);
+  const sampled: ChartPoint[] = [];
+  for (let i = 0; i < maxPoints; i += 1) {
+    sampled.push(points[Math.min(lastIndex, Math.round(i * step))]);
+  }
+  if (sampled[sampled.length - 1] !== points[lastIndex]) {
+    sampled[sampled.length - 1] = points[lastIndex];
+  }
+  return sampled;
 }
 
 export function formatChartDuration(t_ms: number, originMs: number): string {

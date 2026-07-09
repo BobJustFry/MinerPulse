@@ -35,6 +35,13 @@ export type SessionPlayerListener = (
   total: number,
 ) => void;
 
+export type SessionFrameLoader = (index: number) => Promise<MpulseFrame>;
+
+export interface SessionTimeline {
+  frame_count: number;
+  timeline_ms: number[];
+}
+
 export function formatTimelineMs(ms: number): string {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
   const hours = Math.floor(totalSec / 3600);
@@ -50,10 +57,13 @@ export function formatTimelineMs(ms: number): string {
 
 export class SessionPlayer {
   private frames: MpulseFrame[] = [];
+  private timeline: SessionTimeline | null = null;
+  private frameLoader: SessionFrameLoader | null = null;
   private index = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private playing = false;
   private playbackSpeed: PlaybackSpeed = 1;
+  private emitSerial = 0;
   private onFrame: SessionPlayerListener;
   private onEnd: () => void;
   private onState: (state: SessionPlayerState) => void;
@@ -70,31 +80,59 @@ export class SessionPlayer {
 
   load(frames: MpulseFrame[]) {
     this.pause();
+    this.timeline = null;
+    this.frameLoader = null;
     this.frames = frames;
     this.index = 0;
     this.playbackSpeed = 1;
     if (frames.length > 0) {
-      this.emitFrame(false);
+      void this.emitFrame(false);
+    } else {
+      this.emitState();
+    }
+  }
+
+  loadRemote(timeline: SessionTimeline, loader: SessionFrameLoader) {
+    this.pause();
+    this.frames = [];
+    this.timeline = timeline;
+    this.frameLoader = loader;
+    this.index = 0;
+    this.playbackSpeed = 1;
+    if (timeline.frame_count > 0) {
+      void this.emitFrame(false);
     } else {
       this.emitState();
     }
   }
 
   getState(): SessionPlayerState {
-    const origin = this.frames[0]?.t_ms ?? 0;
-    const last = this.frames[this.frames.length - 1]?.t_ms ?? origin;
+    const origin = this.originMs();
+    const last = this.timelineMsAt(this.frameCount() - 1) ?? origin;
+    const current = this.timelineMsAt(this.index) ?? origin;
     return {
       index: this.index,
-      total: this.frames.length,
-      current_ms: Math.max(0, (this.frames[this.index]?.t_ms ?? origin) - origin),
+      total: this.frameCount(),
+      current_ms: Math.max(0, current - origin),
       duration_ms: Math.max(0, last - origin),
       playing: this.playing,
       speed: this.playbackSpeed,
     };
   }
 
-  get frameCount(): number {
-    return this.frames.length;
+  private frameCount(): number {
+    return this.timeline?.frame_count ?? this.frames.length;
+  }
+
+  private originMs(): number {
+    return this.timeline?.timeline_ms[0] ?? this.frames[0]?.t_ms ?? 0;
+  }
+
+  private timelineMsAt(index: number): number | null {
+    if (this.timeline) {
+      return this.timeline.timeline_ms[index] ?? null;
+    }
+    return this.frames[index]?.t_ms ?? null;
   }
 
   get currentIndex(): number {
@@ -110,20 +148,22 @@ export class SessionPlayer {
   }
 
   show(index: number) {
-    if (this.frames.length === 0) return;
-    this.index = Math.max(0, Math.min(index, this.frames.length - 1));
-    this.emitFrame(false);
+    if (this.frameCount() === 0) return;
+    this.index = Math.max(0, Math.min(index, this.frameCount() - 1));
+    void this.emitFrame(false);
   }
 
   seekToProgress(progress: number) {
-    if (this.frames.length === 0) return;
+    if (this.frameCount() === 0) return;
     const clamped = Math.max(0, Math.min(progress, 1));
-    const origin = this.frames[0].t_ms;
+    const origin = this.originMs();
     const duration = this.getState().duration_ms;
     const targetMs = origin + duration * clamped;
     let bestIndex = 0;
-    for (let i = 0; i < this.frames.length; i += 1) {
-      if (this.frames[i].t_ms <= targetMs) {
+    const count = this.frameCount();
+    for (let i = 0; i < count; i += 1) {
+      const t = this.timelineMsAt(i) ?? origin;
+      if (t <= targetMs) {
         bestIndex = i;
       } else {
         break;
@@ -145,12 +185,12 @@ export class SessionPlayer {
   }
 
   play(fromIndex = this.index) {
-    if (this.frames.length === 0) return;
+    if (this.frameCount() === 0) return;
     this.pause();
     this.playing = true;
-    this.index = Math.max(0, Math.min(fromIndex, this.frames.length - 1));
-    this.emitFrame(false);
-    if (this.index >= this.frames.length - 1) {
+    this.index = Math.max(0, Math.min(fromIndex, this.frameCount() - 1));
+    void this.emitFrame(false);
+    if (this.index >= this.frameCount() - 1) {
       this.pause();
       this.onEnd();
       return;
@@ -169,31 +209,34 @@ export class SessionPlayer {
 
   stop() {
     this.pause();
-    if (this.frames.length > 0) {
+    if (this.frameCount() > 0) {
       this.index = 0;
-      this.emitFrame(false);
+      void this.emitFrame(false);
     }
   }
 
   unload() {
     this.pause();
     this.frames = [];
+    this.timeline = null;
+    this.frameLoader = null;
     this.index = 0;
     this.playbackSpeed = 1;
     this.emitState();
   }
 
   private scheduleAdvance() {
-    if (!this.playing || this.frames.length < 2) return;
-    const current = this.frames[this.index];
-    const next = this.frames[this.index + 1];
-    const gap = Math.max(0, next.t_ms - current.t_ms);
+    if (!this.playing || this.frameCount() < 2) return;
+    const currentMs = this.timelineMsAt(this.index);
+    const nextMs = this.timelineMsAt(this.index + 1);
+    if (currentMs == null || nextMs == null) return;
+    const gap = Math.max(0, nextMs - currentMs);
     const delay = gap / this.playbackSpeed;
     this.timer = setTimeout(() => {
       if (!this.playing) return;
       this.index += 1;
-      this.emitFrame(false);
-      if (this.index >= this.frames.length - 1) {
+      void this.emitFrame(false);
+      if (this.index >= this.frameCount() - 1) {
         this.pause();
         this.onEnd();
         return;
@@ -202,8 +245,18 @@ export class SessionPlayer {
     }, delay);
   }
 
-  private emitFrame(notifyPlayingState: boolean) {
-    this.onFrame(this.frames[this.index], this.index, this.frames.length);
+  private async resolveFrame(index: number): Promise<MpulseFrame | null> {
+    if (this.frameLoader) {
+      return this.frameLoader(index);
+    }
+    return this.frames[index] ?? null;
+  }
+
+  private async emitFrame(notifyPlayingState: boolean) {
+    const serial = ++this.emitSerial;
+    const frame = await this.resolveFrame(this.index);
+    if (serial !== this.emitSerial || frame == null) return;
+    this.onFrame(frame, this.index, this.frameCount());
     if (notifyPlayingState) {
       this.emitState();
     } else {

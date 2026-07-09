@@ -1,11 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "MinerPulse",
-  "version": "1.2.123",
+  "version": "1.2.132",
   "identifier": "com.minerpulse.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../build"
   },
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Miner Pulse 1.2.0 (123)",
+        "title": "Miner Pulse 1.2.0 (132)",
         "width": 1180,
         "height": 760,
         "minWidth": 960,

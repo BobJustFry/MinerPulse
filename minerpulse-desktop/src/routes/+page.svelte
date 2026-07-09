@@ -9,27 +9,37 @@
   import UpdateProgressModal from "$lib/components/UpdateProgressModal.svelte";
   import WhatsminerSetupModal from "$lib/components/WhatsminerSetupModal.svelte";
   import WindowCaption from "$lib/components/WindowCaption.svelte";
+  import ToolbarBtn from "$lib/components/ToolbarBtn.svelte";
+  import ToolbarIcon, { type ToolbarIconName } from "$lib/components/ToolbarIcon.svelte";
   import { locales, t, type Locale, type MessageKey } from "$lib/i18n";
   import { openScanWindow } from "$lib/openScanWindow";
   import MinerChipMatrix from "$lib/components/MinerChipMatrix.svelte";
   import MinerDataPanel from "$lib/components/MinerDataPanel.svelte";
   import MinerCommandsPanel from "$lib/components/MinerCommandsPanel.svelte";
-  import MinerPoolsPanel from "$lib/components/MinerPoolsPanel.svelte";
   import MinerChartsPanel from "$lib/components/MinerChartsPanel.svelte";
   import {
     appendChartPoint,
-    chartPointsFromFrames,
+    downsampleChartPoints,
     pointFromSnapshot,
     type ChartPoint,
   } from "$lib/chartHistory";
   import {
     type ParseImportResponse,
   } from "$lib/importFile";
+  import {
+    chartPointsFromStored,
+    closeOpenedSession,
+    defaultSessionSaveName,
+    defaultSnapshotSaveName,
+    getSessionFrame,
+    MINER_FILE_EXTENSIONS,
+    openMinerFile,
+    type OpenMinerFileResponse,
+  } from "$lib/openFile";
   import { setupFileDrop } from "$lib/setupFileDrop";
   import {
     DEFAULT_POLL_RATE_HZ,
     getPollStatus,
-    loadSessionFile,
     isPollRateHz,
     POLL_RATES_HZ,
     startPoll,
@@ -119,9 +129,6 @@
   type ReadActionMode = "read" | "poll" | "record";
   let readActionMode = $state<ReadActionMode>("read");
   let actionMenuOpen = $state(false);
-  type OpenFileMode = "session" | "log";
-  let openFileMode = $state<OpenFileMode>("log");
-  let openFileMenuOpen = $state(false);
   let entitlements = $state<Entitlements>({
     tier: "free",
     can_poll: false,
@@ -132,7 +139,7 @@
     min_read_interval_sec: 10,
   });
 
-  const tabs: TabId[] = ["data", "chips", "console", "pools", "charts", "commands"];
+  const tabs: TabId[] = ["data", "chips", "console", "charts", "commands"];
   const CONNECTION_KEY = "minerpulse.connection";
 
   const chartsUnlocked = $derived(
@@ -176,6 +183,12 @@
         ? msg("toolbar.poll")
         : msg("toolbar.record"),
   );
+  const readActionIcon = $derived.by((): ToolbarIconName => {
+    if (readActionMode === "poll") return "poll";
+    if (readActionMode === "record") return "record";
+    return "read";
+  });
+  const compactToolbar = $derived(density === "compact");
   function readActionModeOptions(): Array<{ id: ReadActionMode; label: string }> {
     const options: Array<{ id: ReadActionMode; label: string }> = [
       { id: "read", label: msg("toolbar.read") },
@@ -187,18 +200,9 @@
     return options;
   }
 
-  const openFileLabel = $derived(
-    openFileMode === "session" ? msg("toolbar.openSession") : msg("toolbar.openLog"),
-  );
-
-  function openFileModeOptions(): Array<{ id: OpenFileMode; label: string }> {
-    const options: Array<{ id: OpenFileMode; label: string }> = [
-      { id: "log", label: msg("toolbar.openLog") },
-    ];
-    if (entitlements.can_play) {
-      options.unshift({ id: "session", label: msg("toolbar.openSession") });
-    }
-    return options;
+  function toggleActionMenu() {
+    if (connectionLocked) return;
+    actionMenuOpen = !actionMenuOpen;
   }
 
   function msg(key: MessageKey, args?: Record<string, string | number>) {
@@ -218,7 +222,6 @@
         chartsLayout,
         pollRateHz,
         readActionMode,
-        openFileMode,
       }),
     );
   }
@@ -341,7 +344,6 @@
       data: "tabs.data",
       chips: "tabs.chips",
       console: "tabs.console",
-      pools: "tabs.pools",
       charts: "tabs.charts",
       commands: "tabs.commands",
     };
@@ -637,16 +639,22 @@
     playerSpeed = state.speed;
   }
 
-  function stopPlayback() {
+  function unloadSessionPlayer() {
     sessionPlayer?.unload();
-    sessionLoaded = false;
-    sessionFileName = "";
     playbackActive = false;
     playerFrameIndex = 0;
     playerFrameTotal = 0;
     playerCurrentMs = 0;
     playerDurationMs = 0;
     playerSpeed = 1;
+  }
+
+  function stopPlayback() {
+    unloadSessionPlayer();
+    void closeOpenedSession();
+    sessionLoaded = false;
+    sessionFileName = "";
+    chartPoints = [];
     chartCursorMs = null;
     chartsLive = false;
   }
@@ -708,8 +716,8 @@
         return;
       }
       const path = await save({
-        defaultPath: `minerpulse-${Date.now()}.mpulse`,
-        filters: [{ name: "MinerPulse", extensions: ["mpulse"] }],
+        defaultPath: defaultSessionSaveName(),
+        filters: [{ name: "MinerPulse", extensions: ["mprs"] }],
       });
       if (!path || Array.isArray(path)) {
         connectionLocked = false;
@@ -768,75 +776,80 @@
     actionMenuOpen = false;
   }
 
-  function toggleActionMenu() {
-    if (connectionLocked) return;
-    openFileMenuOpen = false;
-    actionMenuOpen = !actionMenuOpen;
-  }
-
-  function toggleOpenFileMenu() {
-    if (busy || polling) return;
-    actionMenuOpen = false;
-    openFileMenuOpen = !openFileMenuOpen;
-  }
-
-  function setOpenFileMode(next: OpenFileMode) {
-    if (next === "session" && !entitlements.can_play) return;
-    openFileMode = next;
-    openFileMenuOpen = false;
-  }
-
-  function runOpenFileAction() {
-    if (busy || polling) return;
-    if (openFileMode === "session") {
-      if (!entitlements.can_play) return;
-      void openSessionFile();
-      return;
+  async function applyOpenedSnapshot(result: {
+    snapshot: MinerSnapshot;
+    miner_ip?: string | null;
+  }) {
+    snapshot = result.snapshot;
+    await invoke("remember_snapshot", { snapshot: result.snapshot });
+    if (result.miner_ip) {
+      ip = result.miner_ip;
+      saveConnection();
     }
-    void importFromFile();
   }
 
-  async function openSessionFile() {
+  async function openLoadedSession(payload: Extract<OpenMinerFileResponse, { kind: "session" }>) {
+    if (!sessionPlayer) initSessionPlayer();
+    sessionPlayer!.loadRemote(
+      {
+        frame_count: payload.frame_count,
+        timeline_ms: payload.timeline_ms,
+      },
+      getSessionFrame,
+    );
+    sessionLoaded = true;
+    sessionFileName = payload.file_label;
+    const firstFrame = await getSessionFrame(0);
+    snapshot = firstFrame.snapshot;
+    chartPoints = downsampleChartPoints(chartPointsFromStored(payload.chart_points));
+    chartCursorMs = firstFrame.t_ms;
+    chartsLive = false;
+    activeTab = "charts";
+    syncPlayerState(sessionPlayer!.getState());
+    if (payload.miner_ip) {
+      ip = payload.miner_ip;
+      saveConnection();
+    }
+    statusText = msg("status.sessionLoaded", { count: payload.frame_count });
+  }
+
+  async function openMinerFileAction() {
+    if (busy || polling) return;
+
     const path = await open({
-      title: msg("toolbar.openSession"),
+      title: msg("toolbar.open"),
       multiple: false,
-      filters: [{ name: "MinerPulse", extensions: ["mpulse"] }],
+      filters: [
+        {
+          name: "MinerPulse",
+          extensions: [...MINER_FILE_EXTENSIONS],
+        },
+      ],
     });
     if (!path || Array.isArray(path)) return;
 
     busy = true;
+    statusText = msg("status.loadingSession");
     try {
-      const file = await loadSessionFile(path);
-      if (file.kind !== "session" || file.frames.length === 0) {
-        const frame = file.frames[0];
-        if (frame) {
-          snapshot = frame.snapshot;
-          clearCharts();
-          pushChartPoint(frame.snapshot, 0);
-          await invoke("remember_snapshot", { snapshot: frame.snapshot });
-          if (file.miner_ip) {
-            ip = file.miner_ip;
-            saveConnection();
-          }
+      stopPlayback();
+      const result = await openMinerFile(path);
+      if (result.kind === "session") {
+        if (!entitlements.can_play) {
+          statusText = msg("error.NOT_SUPPORTED");
+          await closeOpenedSession();
+          return;
         }
-        stopPlayback();
+        await openLoadedSession(result);
         return;
       }
 
-      if (!sessionPlayer) initSessionPlayer();
-      sessionPlayer!.load(file.frames);
-      sessionLoaded = true;
-      sessionFileName = path.split(/[/\\]/).pop() ?? path;
-      snapshot = file.frames[0].snapshot;
-      chartPoints = chartPointsFromFrames(file.frames);
-      chartCursorMs = file.frames[0].t_ms;
-      chartsLive = false;
-      syncPlayerState(sessionPlayer!.getState());
-      if (file.miner_ip) {
-        ip = file.miner_ip;
-        saveConnection();
-      }
-      statusText = msg("status.sessionLoaded", { count: file.frames.length });
+      clearCharts();
+      await applyOpenedSnapshot(result);
+      pushChartPoint(result.snapshot, 0);
+      statusText =
+        result.kind === "log"
+          ? msg("import.opened", { name: result.source_label })
+          : msg("status.ready");
     } catch (err) {
       statusText = formatError(err);
     } finally {
@@ -851,8 +864,8 @@
     }
 
     const path = await save({
-      defaultPath: `minerpulse-${Date.now()}.mpulse`,
-      filters: [{ name: "MinerPulse", extensions: ["mpulse"] }],
+      defaultPath: defaultSnapshotSaveName(),
+      filters: [{ name: "MinerPulse", extensions: ["mpsn"] }],
     });
 
     if (!path) return;
@@ -925,39 +938,12 @@
     await refreshEntitlements();
   }
 
-  async function importFromFile() {
-    const path = await open({
-      title: msg("import.title"),
-      multiple: false,
-      filters: [
-        {
-          name: msg("import.fileFilter"),
-          extensions: ["txt", "log", "json", "mpulse"],
-        },
-      ],
-    });
-
-    if (!path || Array.isArray(path)) return;
-
-    busy = true;
-    try {
-      const result = await invoke<ParseImportResponse>("import_file_path", { path });
-      await applyImportedSnapshot(result);
-    } catch (err) {
-      statusText = formatError(err);
-    } finally {
-      busy = false;
-    }
-  }
-
   async function applyImportedSnapshot(result: ParseImportResponse) {
-    snapshot = result.snapshot;
-    await invoke("remember_snapshot", { snapshot: result.snapshot });
-
-    if (result.miner_ip) {
-      ip = result.miner_ip;
-      saveConnection();
-    }
+    stopPlayback();
+    clearCharts();
+    await applyOpenedSnapshot(result);
+    pushChartPoint(result.snapshot, 0);
+    statusText = msg("import.opened", { name: result.source_label });
   }
 
   onMount(() => {
@@ -989,9 +975,6 @@
             parsed.readActionMode === "record"
           ) {
             readActionMode = parsed.readActionMode;
-          }
-          if (parsed.openFileMode === "session" || parsed.openFileMode === "log") {
-            openFileMode = parsed.openFileMode;
           }
         } catch {
           /* ignore */
@@ -1175,7 +1158,6 @@
     chartsLayout;
     pollRateHz;
     readActionMode;
-    openFileMode;
     applyUiPrefs();
   });
 
@@ -1192,20 +1174,11 @@
   });
 
   $effect(() => {
-    if (openFileMode === "session" && !entitlements.can_play) {
-      openFileMode = "log";
-    }
-  });
-
-  $effect(() => {
-    if (!actionMenuOpen && !openFileMenuOpen) return;
+    if (!actionMenuOpen) return;
     const onDocumentClick = (event: MouseEvent) => {
       const target = event.target as Element;
       if (actionMenuOpen && !target.closest(".action-control")) {
         actionMenuOpen = false;
-      }
-      if (openFileMenuOpen && !target.closest(".open-file-control")) {
-        openFileMenuOpen = false;
       }
     };
     document.addEventListener("click", onDocumentClick);
@@ -1224,7 +1197,7 @@
       </div>
     </div>
   {/if}
-  <header class="toolbar">
+  <header class="toolbar" class:toolbar-compact={compactToolbar}>
     <div class="field host-field">
       <label for="ip">{msg("toolbar.ip")}</label>
       <div class="host-inputs">
@@ -1238,20 +1211,40 @@
           aria-label={msg("toolbar.port")}
         />
       </div>
-      <button class="btn" disabled={connectionLocked} onclick={openScan}>
-        {msg("toolbar.scan")}
+      <button
+        class="btn"
+        class:btn-icon-only={compactToolbar}
+        disabled={connectionLocked}
+        onclick={openScan}
+        title={msg("toolbar.scan")}
+        aria-label={compactToolbar ? msg("toolbar.scan") : undefined}
+      >
+        {#if compactToolbar}
+          <ToolbarIcon name="scan" />
+        {:else}
+          {msg("toolbar.scan")}
+        {/if}
       </button>
     </div>
 
     {#if entitlements.can_poll}
       {#if polling}
-        <button class="btn danger" disabled={busy} onclick={stopPolling}>
-          {msg("toolbar.stop")}
-        </button>
+        <ToolbarBtn
+          class="danger"
+          label={msg("toolbar.stop")}
+          icon="stop"
+          {density}
+          disabled={busy}
+          onclick={stopPolling}
+        />
       {:else if reading}
-        <button class="btn danger" onclick={cancelReading}>
-          {msg("toolbar.cancel")}
-        </button>
+        <ToolbarBtn
+          class="danger"
+          label={msg("toolbar.cancel")}
+          icon="cancel"
+          {density}
+          onclick={cancelReading}
+        />
       {:else}
         {#if readActionMode !== "read"}
           <div class="field poll-rate-field">
@@ -1261,6 +1254,7 @@
               class="btn poll-rate-select"
               bind:value={pollRateHz}
               disabled={connectionLocked}
+              title={msg("toolbar.pollRate")}
             >
               {#each POLL_RATES_HZ as rate (rate)}
                 <option value={rate}>{msg("toolbar.pollRateOption", { rate })}</option>
@@ -1273,13 +1267,20 @@
             <button
               type="button"
               class="split-action-main btn-with-spinner"
+              class:btn-icon-only={compactToolbar}
               disabled={(readActionMode === "read" ? readActionDisabled : busy || connectionLocked)}
+              title={readActionLabel}
+              aria-label={compactToolbar ? readActionLabel : undefined}
               onclick={runReadAction}
             >
               {#if reading && readActionMode === "read"}
                 <span class="btn-spinner" aria-hidden="true"></span>
               {/if}
-              {readActionLabel}
+              {#if compactToolbar}
+                <ToolbarIcon name={readActionIcon} />
+              {:else}
+                {readActionLabel}
+              {/if}
             </button>
             <button
               type="button"
@@ -1318,83 +1319,63 @@
       {/if}
     {:else}
       {#if reading}
-        <button class="btn danger" onclick={cancelReading}>
-          {msg("toolbar.cancel")}
-        </button>
+        <ToolbarBtn
+          class="danger"
+          label={msg("toolbar.cancel")}
+          icon="cancel"
+          {density}
+          onclick={cancelReading}
+        />
       {:else}
-      <button
-        class="btn primary btn-with-spinner"
+      <ToolbarBtn
+        class="primary btn-with-spinner"
+        label={msg("toolbar.read")}
+        icon="read"
+        {density}
         disabled={readActionDisabled}
         onclick={readMiner}
       >
         {#if reading}
           <span class="btn-spinner" aria-hidden="true"></span>
         {/if}
-        {msg("toolbar.read")}
-      </button>
+      </ToolbarBtn>
       {/if}
     {/if}
 
-    <div class="open-file-control action-control" class:open={openFileMenuOpen}>
-      <div class="split-action">
-        <button
-          type="button"
-          class="split-action-main"
-          disabled={busy || polling}
-          title={msg("import.dropHint")}
-          onclick={runOpenFileAction}
-        >
-          {openFileLabel}
-        </button>
-        <button
-          type="button"
-          class="split-action-toggle"
-          disabled={busy || polling}
-          aria-expanded={openFileMenuOpen}
-          aria-label={msg("toolbar.openFileMode")}
-          onclick={(event) => {
-            event.stopPropagation();
-            toggleOpenFileMenu();
-          }}
-        >
-          <span class="split-action-chevron" aria-hidden="true"></span>
-        </button>
-      </div>
-      {#if openFileMenuOpen}
-        <div class="action-menu" role="menu">
-          {#each openFileModeOptions() as mode (mode.id)}
-            <button
-              type="button"
-              role="menuitemradio"
-              class="action-menu-item"
-              class:active={openFileMode === mode.id}
-              aria-checked={openFileMode === mode.id}
-              onclick={(event) => {
-                event.stopPropagation();
-                setOpenFileMode(mode.id);
-              }}
-            >
-              {mode.label}
-            </button>
-          {/each}
-        </div>
-      {/if}
-    </div>
+    <ToolbarBtn
+      label={msg("toolbar.open")}
+      icon="open"
+      {density}
+      disabled={busy || polling}
+      onclick={openMinerFileAction}
+    />
 
-    <button class="btn" disabled={!snapshot || busy} onclick={saveSnapshot}>
-      {msg("toolbar.save")}
-    </button>
+    <ToolbarBtn
+      label={msg("toolbar.save")}
+      icon="save"
+      {density}
+      disabled={!snapshot || busy}
+      onclick={saveSnapshot}
+    />
 
     <div class="spacer"></div>
 
-    <button class="btn ghost" onclick={toggleTheme}>
-      {theme === "light" ? msg("toolbar.themeDark") : msg("toolbar.themeLight")}
-    </button>
-    <button class="btn ghost" onclick={toggleDensity}>
-      {density === "comfortable"
+    <ToolbarBtn
+      class="ghost"
+      label={theme === "light" ? msg("toolbar.themeDark") : msg("toolbar.themeLight")}
+      icon={theme === "light" ? "theme-dark" : "theme-light"}
+      {density}
+      onclick={toggleTheme}
+    />
+    <ToolbarBtn
+      class="ghost"
+      label={density === "comfortable"
         ? msg("toolbar.densityCompact")
         : msg("toolbar.densityComfortable")}
-    </button>
+      icon={density === "comfortable" ? "density-compact" : "density-comfortable"}
+      {density}
+      onclick={toggleDensity}
+    />
 
     <select
       class="btn"
@@ -1416,13 +1397,18 @@
       {tierLabel(entitlements.tier)}
     </button>
 
-    <button class="btn ghost" onclick={openAbout}>
-      {msg("toolbar.about")}
-    </button>
+    <ToolbarBtn
+      class="ghost"
+      label={msg("toolbar.about")}
+      icon="about"
+      {density}
+      onclick={openAbout}
+    />
   </header>
 
   <SessionPlayerBar
     {locale}
+    {density}
     visible={sessionLoaded && playerFrameTotal > 0}
     playing={playbackActive}
     speed={playerSpeed}
@@ -1478,17 +1464,11 @@
       {/if}
     {:else if activeTab === "console"}
       <div class="console-box">{snapshot?.raw_log || msg("status.noData")}</div>
-    {:else if activeTab === "pools"}
-      {#if snapshot}
-        <MinerPoolsPanel {snapshot} {locale} />
-      {:else}
-        <div class="locked-panel">{msg("pools.empty")}</div>
-      {/if}
     {:else if activeTab === "charts"}
       <MinerChartsPanel
         points={chartPoints}
         cursorMs={chartCursorMs}
-        live={chartsLiveNow}
+        live={chartsLiveNow || playbackActive}
         bind:layout={chartsLayout}
         {locale}
       />

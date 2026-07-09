@@ -112,12 +112,44 @@
     if (formatY) return formatY(value);
     return value.toFixed(value >= 100 ? 0 : 1);
   }
+
+  function valueAtCursor(item: LineChartSeries): number | null {
+    if (cursorIndex == null) return null;
+    const value = item.values[cursorIndex];
+    return Number.isFinite(value) ? value : null;
+  }
+
+  let cursorMarkers = $derived.by(() => {
+    if (cursorIndex == null) return [];
+    const count = series[0]?.values.length ?? 0;
+    if (count === 0) return [];
+
+    return series.flatMap((item) => {
+      const value = item.values[cursorIndex];
+      if (!Number.isFinite(value)) return [];
+      const pos = pointXY(value, cursorIndex, count, bounds.min, bounds.max);
+      return [{ item, value, x: pos.x, y: pos.y }];
+    });
+  });
+
+  let singleCursorValue = $derived.by(() => {
+    if (series.length !== 1 || cursorIndex == null) return null;
+    const value = series[0].values[cursorIndex];
+    return Number.isFinite(value) ? value : null;
+  });
 </script>
 
 <article class="chart-card" class:chart-card-compact={compact}>
   <div class="chart-head">
     <h3 class="chart-title">{title}</h3>
-    {#if unit}
+    {#if singleCursorValue != null}
+      <span class="chart-current-value">
+        {formatTick(singleCursorValue)}
+        {#if unit}
+          <span class="chart-unit">{unit}</span>
+        {/if}
+      </span>
+    {:else if unit}
       <span class="chart-unit">{unit}</span>
     {/if}
   </div>
@@ -180,6 +212,35 @@
       />
     {/if}
 
+    {#each cursorMarkers as marker (marker.item.id)}
+      <circle
+        cx={marker.x}
+        cy={marker.y}
+        r="4"
+        class="chart-cursor-point"
+        class:chart-line-accent={marker.item.id === "hashrate"}
+        fill={marker.item.id === "hashrate" ? undefined : marker.item.color}
+      />
+    {/each}
+
+    {#if singleCursorValue != null && cursorLineX != null && !compact}
+      {@const marker = cursorMarkers[0]}
+      {#if marker}
+        {@const labelX = Math.min(
+          cursorLineX + 8,
+          layout.width - layout.padRight - 4,
+        )}
+        <text
+          x={labelX}
+          y={Math.max(layout.padTop + 10, marker.y - 6)}
+          class="chart-cursor-value"
+          text-anchor="start"
+        >
+          {formatTick(singleCursorValue)}{unit ? ` ${unit}` : ""}
+        </text>
+      {/if}
+    {/if}
+
     {#if points.length > 0}
       <text x={layout.padLeft} y={layout.height - 8} class="chart-axis-label">
         {xLabel(0)}
@@ -199,9 +260,15 @@
   {#if series.length > 1}
     <div class="chart-legend">
       {#each series as item (item.id)}
-        <span class="chart-legend-item">
+        {@const cursorValue = valueAtCursor(item)}
+        <span class="chart-legend-item" class:has-value={cursorValue != null}>
           <span class="chart-legend-swatch" style={`background:${item.color}`}></span>
-          {item.label}
+          <span class="chart-legend-label">{item.label}</span>
+          {#if cursorValue != null}
+            <span class="chart-legend-value">
+              {formatTick(cursorValue)}{unit ? ` ${unit}` : ""}
+            </span>
+          {/if}
         </span>
       {/each}
     </div>

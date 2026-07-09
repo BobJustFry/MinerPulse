@@ -6,6 +6,7 @@ pub mod fetch_options;
 pub mod import;
 pub mod model;
 pub mod mpulse;
+pub mod mpulse_binary;
 pub mod rate_limit;
 pub mod tcp;
 pub mod trace;
@@ -28,10 +29,15 @@ pub use fetch_options::{FetchOptions, WhatsminerLuciAuth};
 pub use model::{MinerSnapshot, WhatsminerAccessInfo};
 pub use import::{import_file_content, ImportResult, MAX_IMPORT_BYTES};
 pub use mpulse::{
-    decode_mpulse_bytes, load_mpulse, save_session, save_snapshot, MpulseFile, MpulseFrame,
-    MpulseKind, DEFAULT_POLL_INTERVAL_SEC, DEFAULT_POLL_RATE_HZ, MAX_SESSION_DURATION_SEC,
-    MAX_SESSION_FILE_BYTES, POLL_RATES_HZ, normalize_poll_rate_hz, poll_interval_ms,
-    poll_wait_after_tick,
+    decode_mpulse_bytes, load_mpulse, open_mpulse_file, save_session, save_snapshot, MpulseFile,
+    MpulseFrame, MpulseKind, DEFAULT_POLL_INTERVAL_SEC, DEFAULT_POLL_RATE_HZ,
+    MAX_SESSION_DURATION_SEC, MAX_SESSION_FILE_BYTES, POLL_RATES_HZ, normalize_poll_rate_hz,
+    poll_interval_ms, poll_wait_after_tick,
+};
+pub use mpulse_binary::{
+    extension_for_kind, is_binary_mpulse, load_binary_mpulse, save_binary_mpulse,
+    BinarySessionMeta, LoadedBinarySession, StoredChartPoint, EXT_SESSION, EXT_SNAPSHOT,
+    LEGACY_EXT_SESSION, LEGACY_EXT_SNAPSHOT,
 };
 pub use rate_limit::RateLimiter;
 pub use tcp::TcpCgminerClient;

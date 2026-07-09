@@ -1,5 +1,7 @@
 <script lang="ts">
   import { t, type Locale, type MessageKey } from "$lib/i18n";
+  import ToolbarBtn from "$lib/components/ToolbarBtn.svelte";
+  import type { Density } from "$lib/types";
   import {
     formatTimelineMs,
     PLAYBACK_SPEEDS,
@@ -8,6 +10,7 @@
 
   let {
     locale,
+    density = "comfortable",
     visible,
     playing,
     speed,
@@ -24,6 +27,7 @@
     onSpeed,
   }: {
     locale: Locale;
+    density?: Density;
     visible: boolean;
     playing: boolean;
     speed: PlaybackSpeed;
@@ -84,18 +88,28 @@
           <span class="session-player-file">{fileLabel}</span>
         {/if}
       </div>
-      <button class="btn ghost session-player-close" type="button" onclick={onClose}>
-        {msg("player.close")}
-      </button>
+      <ToolbarBtn
+        class="ghost session-player-close"
+        label={msg("player.close")}
+        icon="close"
+        {density}
+        onclick={onClose}
+      />
     </div>
 
     <div class="session-player-controls">
       {#if playing}
-        <button class="btn" type="button" onclick={onPause}>{msg("toolbar.pause")}</button>
+        <ToolbarBtn label={msg("toolbar.pause")} icon="pause" {density} onclick={onPause} />
       {:else}
-        <button class="btn primary" type="button" onclick={onPlay}>{msg("toolbar.play")}</button>
+        <ToolbarBtn
+          class="primary"
+          label={msg("toolbar.play")}
+          icon="play"
+          {density}
+          onclick={onPlay}
+        />
       {/if}
-      <button class="btn" type="button" onclick={onStop}>{msg("player.rewind")}</button>
+      <ToolbarBtn label={msg("player.rewind")} icon="rewind" {density} onclick={onStop} />
     </div>
 
     <div class="session-player-timeline">

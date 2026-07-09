@@ -13,7 +13,9 @@
   } from "$lib/types";
 
   const CUSTOM_SUBNET_ID = "custom";
+  const FAVORITE_PREFIX = "fav:";
   const SCAN_CONFIG_KEY = "minerpulse.scanConfig";
+  const SCAN_FAVORITES_KEY = "minerpulse.scanFavorites";
   const SCAN_RESULTS_KEY = "minerpulse.scan";
 
   interface ScanConfig {
@@ -21,6 +23,13 @@
     customStart: string;
     customEnd: string;
     port: string;
+  }
+
+  interface FavoriteRange {
+    id: string;
+    start_ip: string;
+    end_ip: string;
+    label: string;
   }
 
   interface ScanProgressPayload {
@@ -45,6 +54,7 @@
   let appVersionNumber = $state("0.0.0");
   let appBuild = $state(0);
   let subnets = $state<ScanSubnet[]>([]);
+  let favorites = $state<FavoriteRange[]>([]);
   let selectedSubnetId = $state("");
   let customStart = $state("192.168.0.1");
   let customEnd = $state("192.168.0.254");
@@ -86,14 +96,94 @@
     await getCurrentWindow().close();
   }
 
+  function isFavoriteId(id: string): boolean {
+    return id.startsWith(FAVORITE_PREFIX);
+  }
+
+  function favoriteId(start: string, end: string): string {
+    return `${FAVORITE_PREFIX}${start}-${end}`;
+  }
+
+  function isValidIpv4(ip: string): boolean {
+    const parts = ip.trim().split(".");
+    if (parts.length !== 4) return false;
+    return parts.every((part) => {
+      if (!/^\d{1,3}$/.test(part)) return false;
+      const value = Number(part);
+      return value >= 0 && value <= 255;
+    });
+  }
+
+  function isValidRange(start: string, end: string): boolean {
+    if (!isValidIpv4(start) || !isValidIpv4(end)) return false;
+    return compareIp(start.trim(), end.trim()) <= 0;
+  }
+
+  function loadFavorites(): FavoriteRange[] {
+    const saved = localStorage.getItem(SCAN_FAVORITES_KEY);
+    if (!saved) return [];
+    try {
+      const parsed = JSON.parse(saved) as FavoriteRange[];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(
+        (item) =>
+          isFavoriteId(item.id) &&
+          isValidRange(item.start_ip, item.end_ip) &&
+          item.label.trim().length > 0,
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  function saveFavorites() {
+    if (!prefsLoaded) return;
+    localStorage.setItem(SCAN_FAVORITES_KEY, JSON.stringify(favorites));
+  }
+
+  function addFavoriteRange() {
+    const start = customStart.trim();
+    const end = customEnd.trim();
+    if (!isValidRange(start, end)) {
+      statusText = msg("scan.favoriteInvalid");
+      return;
+    }
+    const id = favoriteId(start, end);
+    if (favorites.some((item) => item.id === id)) {
+      statusText = msg("scan.favoriteDuplicate");
+      selectedSubnetId = id;
+      return;
+    }
+    const next: FavoriteRange = {
+      id,
+      start_ip: start,
+      end_ip: end,
+      label: `${start} — ${end}`,
+    };
+    favorites = [...favorites, next].sort((a, b) => compareIp(a.start_ip, b.start_ip));
+    selectedSubnetId = id;
+    statusText = msg("scan.favoriteAdded");
+    saveFavorites();
+  }
+
+  function removeSelectedFavorite() {
+    if (!isFavoriteId(selectedSubnetId)) return;
+    favorites = favorites.filter((item) => item.id !== selectedSubnetId);
+    selectedSubnetId = CUSTOM_SUBNET_ID;
+    saveFavorites();
+    statusText = msg("scan.favoriteRemoved");
+  }
+
   function loadScanPrefs(subnetList: ScanSubnet[]) {
+    favorites = loadFavorites();
     const savedConfig = localStorage.getItem(SCAN_CONFIG_KEY);
     if (savedConfig) {
       try {
         const cfg = JSON.parse(savedConfig) as ScanConfig;
         if (
           cfg.selectedSubnetId === CUSTOM_SUBNET_ID ||
-          subnetList.some((subnet) => subnet.id === cfg.selectedSubnetId)
+          subnetList.some((subnet) => subnet.id === cfg.selectedSubnetId) ||
+          favorites.some((favorite) => favorite.id === cfg.selectedSubnetId)
         ) {
           selectedSubnetId = cfg.selectedSubnetId;
         }
@@ -196,8 +286,20 @@
     return subnets.find((s) => s.id === selectedSubnetId);
   }
 
+  function selectedFavorite(): FavoriteRange | undefined {
+    return favorites.find((item) => item.id === selectedSubnetId);
+  }
+
   function buildScanRequest() {
     const scanPort = Number(port) || 4028;
+    const favorite = selectedFavorite();
+    if (favorite) {
+      return {
+        port: scanPort,
+        start_ip: favorite.start_ip,
+        end_ip: favorite.end_ip,
+      };
+    }
     if (selectedSubnetId === CUSTOM_SUBNET_ID) {
       return {
         port: scanPort,
@@ -358,9 +460,18 @@
     <label class="scan-field">
       <span>{msg("scan.subnet")}</span>
       <select bind:value={selectedSubnetId} disabled={scanning}>
-        {#each subnets as subnet (subnet.id)}
-          <option value={subnet.id}>{subnet.label}</option>
-        {/each}
+        <optgroup label={msg("scan.networkGroup")}>
+          {#each subnets as subnet (subnet.id)}
+            <option value={subnet.id}>{subnet.label}</option>
+          {/each}
+        </optgroup>
+        {#if favorites.length > 0}
+          <optgroup label={msg("scan.favoritesGroup")}>
+            {#each favorites as favorite (favorite.id)}
+              <option value={favorite.id}>{favorite.label}</option>
+            {/each}
+          </optgroup>
+        {/if}
         <option value={CUSTOM_SUBNET_ID}>{msg("scan.customSubnet")}</option>
       </select>
     </label>
@@ -375,6 +486,28 @@
           <span>{msg("scan.to")}</span>
           <input bind:value={customEnd} disabled={scanning} />
         </label>
+        <button
+          type="button"
+          class="btn scan-favorite-add"
+          disabled={scanning}
+          title={msg("scan.addFavorite")}
+          aria-label={msg("scan.addFavorite")}
+          onclick={addFavoriteRange}
+        >
+          ★
+        </button>
+      </div>
+    {:else if isFavoriteId(selectedSubnetId)}
+      <div class="scan-favorite-meta">
+        <span class="scan-favorite-label">{selectedFavorite()?.label}</span>
+        <button
+          type="button"
+          class="btn danger scan-favorite-remove"
+          disabled={scanning}
+          onclick={removeSelectedFavorite}
+        >
+          {msg("scan.removeFavorite")}
+        </button>
       </div>
     {/if}
 

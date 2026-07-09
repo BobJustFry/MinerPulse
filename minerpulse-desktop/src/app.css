@@ -354,8 +354,37 @@ button {
 
 .scan-range-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr auto;
   gap: 10px;
+  align-items: end;
+}
+
+.scan-favorite-add {
+  min-width: 40px;
+  padding-inline: 10px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.scan-favorite-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-base);
+}
+
+.scan-favorite-label {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.scan-favorite-remove {
+  flex-shrink: 0;
 }
 
 .scan-results-wrap {
@@ -548,6 +577,37 @@ button {
 
 .btn.ghost {
   background: transparent;
+}
+
+.btn-icon-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  min-width: 28px;
+  width: 28px;
+  padding: 5px;
+}
+
+.btn-icon-only .toolbar-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.toolbar-compact .poll-rate-field > label {
+  display: none;
+}
+
+.toolbar-compact .poll-rate-select {
+  min-width: 52px;
+  padding-inline: 6px;
+}
+
+.toolbar-compact .split-action-main.btn-icon-only {
+  min-width: 32px;
+  width: auto;
+  padding-inline: 8px;
 }
 
 .poll-rate-field label {
@@ -771,6 +831,10 @@ button {
 
 .chart-card-compact .chart-unit {
   font-size: clamp(10px, 0.72rem, 11px);
+}
+
+.chart-card-compact .chart-current-value {
+  font-size: clamp(11px, 0.82rem, 12px);
 }
 
 .chart-card-compact .chart-legend-item {
@@ -2221,6 +2285,19 @@ button {
   font-size: 12px;
 }
 
+.chart-current-value {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chart-current-value .chart-unit {
+  margin-left: 4px;
+  font-weight: 400;
+}
+
 .chart-svg {
   width: 100%;
   height: auto;
@@ -2254,6 +2331,21 @@ button {
   stroke-dasharray: 4 3;
 }
 
+.chart-cursor-point {
+  stroke: var(--bg-surface);
+  stroke-width: 1.5;
+}
+
+.chart-cursor-value {
+  fill: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: var(--bg-surface);
+  stroke-width: 3px;
+}
+
 .chart-axis-label {
   fill: var(--text-muted);
   font-size: 11px;
@@ -2272,6 +2364,16 @@ button {
   gap: 6px;
   color: var(--text-muted);
   font-size: 11px;
+}
+
+.chart-legend-item.has-value .chart-legend-label {
+  color: var(--text-muted);
+}
+
+.chart-legend-value {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .chart-legend-swatch {

@@ -2,13 +2,12 @@ use crate::drivers::avalon::refresh_avalon_board_chips_from_raw_log;
 use crate::entitlements::SubscriptionTier;
 use crate::error::MinerPulseError;
 use crate::model::MinerSnapshot;
+use crate::mpulse_binary::{is_binary_mpulse, save_binary_mpulse, LoadedBinarySession, StoredChartPoint};
 use chrono::Utc;
 use flate2::read::GzDecoder;
-use flate2::write::GzEncoder;
-use flate2::Compression;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::Path;
 
 pub const DEFAULT_POLL_RATE_HZ: u32 = 1;
@@ -98,12 +97,16 @@ impl MpulseFile {
         }
     }
 
-    pub fn push_recorded_frame(&mut self, t_ms: u64, mut snapshot: MinerSnapshot) {
-        snapshot.raw_log.clear();
+    pub fn push_recorded_frame(&mut self, t_ms: u64, snapshot: MinerSnapshot) {
+        let raw_log = if snapshot.raw_log.is_empty() {
+            String::new()
+        } else {
+            snapshot.raw_log.clone()
+        };
         self.frames.push(MpulseFrame {
             t_ms,
             snapshot,
-            raw_log: String::new(),
+            raw_log,
         });
     }
 
@@ -114,6 +117,82 @@ impl MpulseFile {
         self.frames
             .retain(|frame| frame.t_ms <= max_duration_ms);
     }
+}
+
+pub fn chart_point_from_snapshot(snapshot: &MinerSnapshot, t_ms: u64) -> StoredChartPoint {
+    let mut board_temps = snapshot
+        .thermal
+        .per_board_max_c
+        .iter()
+        .map(|value| *value as f32)
+        .collect::<Vec<_>>();
+    if board_temps.is_empty() {
+        board_temps = snapshot
+            .boards
+            .iter()
+            .filter_map(|board| board.chip_temp_max_c.or(board.temp_c))
+            .map(|value| value as f32)
+            .collect();
+    }
+    let fan_rpm = snapshot
+        .fans
+        .rpm
+        .iter()
+        .copied()
+        .max()
+        .or_else(|| snapshot.params.psu_fan_rpm);
+    StoredChartPoint {
+        t_ms,
+        hashrate_ghs: snapshot.hashrate.current_ghs,
+        board_temps,
+        power_w: snapshot.power.watts.map(|value| value as f32),
+        fan_rpm,
+    }
+}
+
+pub fn open_mpulse_file(path: &Path) -> Result<LoadedBinarySession, MinerPulseError> {
+    let bytes = fs::read(path).map_err(|_| {
+        MinerPulseError::with_code(crate::error::ErrorCode::IoError)
+    })?;
+    if bytes.len() > MAX_SESSION_FILE_BYTES {
+        return Err(MinerPulseError::with_code(
+            crate::error::ErrorCode::InvalidInput,
+        ));
+    }
+    if is_binary_mpulse(&bytes) {
+        return load_binary_mpulse_bytes(&bytes);
+    }
+    let json = decode_mpulse_bytes(&bytes)?;
+    let mut file: MpulseFile = serde_json::from_str(&json).map_err(|_| {
+        MinerPulseError::with_code(crate::error::ErrorCode::ParseFailed)
+    })?;
+    refresh_loaded_mpulse_frames(&mut file);
+    let chart_points = file
+        .frames
+        .iter()
+        .map(|frame| chart_point_from_snapshot(&frame.snapshot, frame.t_ms))
+        .collect::<Vec<_>>();
+    let timeline_ms = file.frames.iter().map(|frame| frame.t_ms).collect::<Vec<_>>();
+    Ok(LoadedBinarySession {
+        meta: crate::mpulse_binary::BinarySessionMeta {
+            format_version: file.format_version,
+            kind: file.kind,
+            miner_ip: file.miner_ip,
+            driver_id: file.driver_id,
+            poll_rate_hz: file.poll_rate_hz,
+            recorder_tier: file.recorder_tier,
+            recorded_at: file.recorded_at,
+            saved_at: file.saved_at,
+            frame_count: file.frames.len() as u32,
+        },
+        chart_points,
+        timeline_ms,
+        frames: file.frames,
+    })
+}
+
+fn load_binary_mpulse_bytes(bytes: &[u8]) -> Result<LoadedBinarySession, MinerPulseError> {
+    crate::mpulse_binary::load_binary_mpulse_bytes(bytes)
 }
 
 pub fn normalize_poll_rate_hz(rate: Option<u32>) -> u32 {
@@ -165,66 +244,37 @@ pub fn decode_mpulse_bytes(bytes: &[u8]) -> Result<String, MinerPulseError> {
 }
 
 pub fn load_mpulse(path: &Path) -> Result<MpulseFile, MinerPulseError> {
-    let meta = fs::metadata(path).map_err(|_| {
-        MinerPulseError::with_code(crate::error::ErrorCode::IoError)
-    })?;
-    if meta.len() as usize > MAX_SESSION_FILE_BYTES {
-        return Err(MinerPulseError::with_code(
-            crate::error::ErrorCode::InvalidInput,
-        ));
-    }
-
-    let bytes = fs::read(path).map_err(|_| {
-        MinerPulseError::with_code(crate::error::ErrorCode::IoError)
-    })?;
-    let json = decode_mpulse_bytes(&bytes)?;
-    let mut file: MpulseFile = serde_json::from_str(&json).map_err(|_| {
-        MinerPulseError::with_code(crate::error::ErrorCode::ParseFailed)
-    })?;
-    refresh_loaded_mpulse_frames(&mut file);
-    Ok(file)
+    let opened = open_mpulse_file(path)?;
+    Ok(MpulseFile {
+        format_version: opened.meta.format_version,
+        kind: opened.meta.kind,
+        saved_at: opened.meta.saved_at,
+        recorded_at: opened.meta.recorded_at,
+        recorder_tier: opened.meta.recorder_tier,
+        miner_ip: opened.meta.miner_ip,
+        hash_map_id: None,
+        driver_id: opened.meta.driver_id,
+        interval_sec: None,
+        poll_rate_hz: opened.meta.poll_rate_hz,
+        frames: opened.frames,
+    })
 }
 
 fn refresh_loaded_mpulse_frames(file: &mut MpulseFile) {
     for frame in &mut file.frames {
+        if frame.raw_log.is_empty() {
+            continue;
+        }
         refresh_avalon_board_chips_from_raw_log(&mut frame.snapshot, Some(&frame.raw_log));
     }
 }
 
 pub fn save_snapshot(path: &Path, file: &MpulseFile) -> Result<(), MinerPulseError> {
-    write_mpulse_file(path, file, false)
+    save_binary_mpulse(path, file)
 }
 
 pub fn save_session(path: &Path, file: &MpulseFile) -> Result<(), MinerPulseError> {
-    write_mpulse_file(path, file, true)
-}
-
-fn write_mpulse_file(path: &Path, file: &MpulseFile, compress: bool) -> Result<(), MinerPulseError> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|_| {
-            MinerPulseError::with_code(crate::error::ErrorCode::IoError)
-        })?;
-    }
-
-    let json = serde_json::to_vec(file).map_err(|_| {
-        MinerPulseError::with_code(crate::error::ErrorCode::IoError)
-    })?;
-
-    let payload = if compress {
-        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-        encoder
-            .write_all(&json)
-            .map_err(|_| MinerPulseError::with_code(crate::error::ErrorCode::IoError))?;
-        encoder
-            .finish()
-            .map_err(|_| MinerPulseError::with_code(crate::error::ErrorCode::IoError))?
-    } else {
-        json
-    };
-
-    fs::write(path, payload).map_err(|_| {
-        MinerPulseError::with_code(crate::error::ErrorCode::IoError)
-    })
+    save_binary_mpulse(path, file)
 }
 
 #[cfg(test)]
@@ -258,7 +308,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mpulse-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("session.mpulse");
+        let path = dir.join("session.mprs");
 
         let mut file = MpulseFile::new_session(
             "192.168.0.1",
@@ -273,7 +323,7 @@ mod tests {
         let loaded = load_mpulse(&path).unwrap();
         assert_eq!(loaded.kind, MpulseKind::Session);
         assert_eq!(loaded.frames.len(), 2);
-        assert!(loaded.frames[0].snapshot.raw_log.is_empty());
+        assert_eq!(loaded.frames[0].snapshot.raw_log, "sample log");
 
         let _ = fs::remove_dir_all(&dir);
     }

@@ -1,7 +1,7 @@
 export type Theme = "light" | "dark";
 export type Density = "compact" | "comfortable";
 export type Locale = "ru" | "en" | "zh-CN";
-export type TabId = "data" | "chips" | "console" | "pools" | "charts" | "commands";
+export type TabId = "data" | "chips" | "console" | "charts" | "commands";
 export type SubscriptionTier = "free" | "client" | "service";
 
 export interface Entitlements {

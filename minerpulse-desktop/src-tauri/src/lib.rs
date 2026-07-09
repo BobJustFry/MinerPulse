@@ -13,9 +13,10 @@ mod diagnostic_log;
 mod license;
 mod miner_credentials;
 mod secure_store;
+mod session_store;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -931,8 +932,84 @@ fn stop_poll(state: State<'_, AppState>) {
 }
 
 #[tauri::command]
-fn load_session_file(path: String) -> Result<MpulseFile, ErrorResponse> {
-    load_mpulse(PathBuf::from(path).as_path()).map_err(|e| ErrorResponse::from(&e))
+async fn open_miner_file(
+    store: State<'_, session_store::SessionStore>,
+    path: String,
+) -> Result<session_store::OpenMinerFileResponse, ErrorResponse> {
+    let path_for_store = path.clone();
+    let path_buf = PathBuf::from(path);
+    let parsed = tauri::async_runtime::spawn_blocking(move || {
+        session_store::parse_miner_file(&path_buf)
+    })
+    .await
+    .map_err(|_| ErrorResponse {
+        code: minerpulse_core::ErrorCode::IoError,
+        args: None,
+    })??;
+
+    match parsed {
+        session_store::ParseMinerFileResult::Session(opened) => {
+            let payload = store.install_session(opened, Path::new(&path_for_store));
+            Ok(session_store::OpenMinerFileResponse::Session {
+                miner_ip: payload.miner_ip,
+                driver_id: payload.driver_id,
+                poll_rate_hz: payload.poll_rate_hz,
+                frame_count: payload.frame_count,
+                timeline_ms: payload.timeline_ms,
+                chart_points: payload.chart_points,
+                file_label: payload.file_label,
+            })
+        }
+        session_store::ParseMinerFileResult::Snapshot {
+            snapshot,
+            source_label,
+            miner_ip,
+        } => {
+            store.close();
+            Ok(session_store::OpenMinerFileResponse::Snapshot {
+                snapshot,
+                source_label,
+                miner_ip,
+            })
+        }
+        session_store::ParseMinerFileResult::Log {
+            snapshot,
+            source_label,
+            miner_ip,
+        } => {
+            store.close();
+            Ok(session_store::OpenMinerFileResponse::Log {
+                snapshot,
+                source_label,
+                miner_ip,
+            })
+        }
+    }
+}
+
+#[tauri::command]
+fn get_session_frame(
+    store: State<'_, session_store::SessionStore>,
+    index: usize,
+) -> Result<minerpulse_core::MpulseFrame, ErrorResponse> {
+    store.get_frame(index)
+}
+
+#[tauri::command]
+fn close_opened_session(store: State<'_, session_store::SessionStore>) {
+    store.close();
+}
+
+#[tauri::command]
+async fn load_session_file(path: String) -> Result<MpulseFile, ErrorResponse> {
+    tauri::async_runtime::spawn_blocking(move || {
+        load_mpulse(PathBuf::from(path).as_path()).map_err(|e| ErrorResponse::from(&e))
+    })
+    .await
+    .map_err(|_| ErrorResponse {
+        code: minerpulse_core::ErrorCode::IoError,
+        args: None,
+    })?
 }
 
 #[tauri::command]
@@ -1338,6 +1415,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(MinerIoGate::new())
         .manage(ReadSession::new())
+        .manage(session_store::SessionStore::new())
         .manage(AppState {
             rate_limiter: Mutex::new(RateLimiter::new(10)),
             tier: Mutex::new(default_tier()),
@@ -1366,6 +1444,9 @@ pub fn run() {
             stop_poll,
             get_poll_status,
             load_session_file,
+            open_miner_file,
+            get_session_frame,
+            close_opened_session,
             save_snapshot_file,
             get_app_version,
             list_scan_subnets,
