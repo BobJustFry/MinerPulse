@@ -86,11 +86,14 @@ impl From<&MinerPulseError> for ErrorResponse {
                         .as_ref()
                         .and_then(|m| m.parse::<u16>().ok())
                         .map(|port| serde_json::json!({ "port": port }))
+                } else if let Some(text) = message.as_ref() {
+                    if let Ok(sec) = text.parse::<u64>() {
+                        Some(serde_json::json!({ "sec": sec }))
+                    } else {
+                        Some(serde_json::json!({ "message": text }))
+                    }
                 } else {
-                    message
-                        .as_ref()
-                        .and_then(|s| s.parse::<u64>().ok())
-                        .map(|sec| serde_json::json!({ "sec": sec }))
+                    None
                 };
                 ErrorResponse { code: *code, args }
             }

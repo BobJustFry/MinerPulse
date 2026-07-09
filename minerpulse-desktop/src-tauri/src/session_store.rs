@@ -197,8 +197,8 @@ fn parse_log_file(path: &Path) -> Result<ParseMinerFileResult, ErrorResponse> {
         .file_name()
         .and_then(|name| name.to_str())
         .map(str::to_string);
-    let result = import_file_content(&content, filename.as_deref())
-        .map_err(|e| ErrorResponse::from(&e))?;
+    let result =
+        import_file_content(&content, filename.as_deref()).map_err(|e| ErrorResponse::from(&e))?;
     Ok(ParseMinerFileResult::Log {
         snapshot: result.snapshot,
         source_label: result.source_label,

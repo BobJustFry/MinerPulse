@@ -255,6 +255,63 @@ pub fn enable_api_switch_luci(host: &str, username: &str, password: &str) -> boo
     false
 }
 
+/// Change super password via LuCI web UI (fallback when API 4433 blocks default password).
+pub fn change_super_password_luci(
+    host: &str,
+    username: &str,
+    _old_password: &str,
+    new_password: &str,
+) -> bool {
+    let client = match build_luci_client() {
+        Ok(client) => client,
+        Err(_) => return false,
+    };
+
+    for scheme in ["https", "http"] {
+        let base = format!("{scheme}://{host}");
+        let cookie = match luci_login(&client, &base, username, _old_password) {
+            Some(cookie) => cookie,
+            None => continue,
+        };
+
+        let endpoints = [
+            format!("{base}/cgi-bin/luci/admin/system/passwd"),
+            format!("{base}/cgi-bin/luci/admin/system/admin"),
+        ];
+        let field_sets: [&[(&str, &str)]; 2] = [
+            &[
+                ("cbi.submit", "1"),
+                ("pwd1", new_password),
+                ("pwd2", new_password),
+            ],
+            &[
+                ("cbi.submit", "1"),
+                ("password", new_password),
+                ("password_confirm", new_password),
+            ],
+        ];
+
+        for url in endpoints {
+            for fields in field_sets {
+                let response = client
+                    .post(&url)
+                    .header("Cookie", &cookie)
+                    .header("Referer", &url)
+                    .form(fields)
+                    .send();
+                if let Ok(resp) = response {
+                    let code = resp.status().as_u16();
+                    if code == 200 || code == 302 {
+                        return verify_luci_login(host, username, new_password);
+                    }
+                }
+            }
+        }
+    }
+
+    false
+}
+
 fn build_luci_client() -> Result<Client, ()> {
     build_luci_client_with_timeout(HTTP_TIMEOUT)
 }

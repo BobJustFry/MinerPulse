@@ -171,23 +171,23 @@ export interface ErrorResponse {
 }
 
 export interface WhatsminerControlState {
-  api_switch?: boolean | null;
-  api_reachable: boolean;
+  apiSwitch?: boolean | null;
+  apiReachable: boolean;
   mining?: boolean | null;
-  fast_boot?: boolean | null;
-  web_pools?: boolean | null;
-  led_mode?: string | null;
-  power_mode?: string | null;
-  power_limit_w?: number | null;
-  target_freq_pct?: number | null;
-  upfreq_speed?: number | null;
-  power_percent?: number | null;
-  heat_mode?: string | null;
-  protection_mode?: boolean | null;
+  fastBoot?: boolean | null;
+  webPools?: boolean | null;
+  ledMode?: string | null;
+  powerMode?: string | null;
+  powerLimitW?: number | null;
+  targetFreqPct?: number | null;
+  upfreqSpeed?: number | null;
+  powerPercent?: number | null;
+  heatMode?: string | null;
+  protectionMode?: boolean | null;
   timezone?: string | null;
-  ntp_servers: string[];
+  ntpServers: string[];
   model?: string | null;
-  writes_blocked: boolean;
+  writesBlocked: boolean;
 }
 
 export type WhatsminerControlAction =

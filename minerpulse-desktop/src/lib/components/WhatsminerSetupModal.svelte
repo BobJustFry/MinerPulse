@@ -1,5 +1,6 @@
 <script lang="ts">
   import { t, type Locale, type MessageKey } from "$lib/i18n";
+  import ManagedModalCard from "$lib/components/ManagedModalCard.svelte";
   import type { WhatsminerAccessInfo } from "$lib/types";
 
   let {
@@ -97,8 +98,11 @@
 
 {#if open}
   <div class="modal-backdrop whatsminer-setup-backdrop" role="presentation">
-    <div
-      class="modal-card whatsminer-auth-modal"
+    <ManagedModalCard
+      layoutId="whatsminer-setup"
+      class="whatsminer-auth-modal"
+      defaultWidth={420}
+      dragDisabled={anyBusy}
       role="dialog"
       aria-modal="true"
       aria-labelledby="whatsminer-setup-title"
@@ -190,7 +194,7 @@
           </button>
         </div>
       </form>
-    </div>
+    </ManagedModalCard>
   </div>
 {/if}
 

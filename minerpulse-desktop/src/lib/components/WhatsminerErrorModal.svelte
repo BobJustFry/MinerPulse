@@ -6,6 +6,7 @@
     pickLocalizedText,
     type WhatsminerErrorEntry,
   } from "$lib/whatsminerErrors";
+  import ManagedModalCard from "$lib/components/ManagedModalCard.svelte";
 
   let {
     open = $bindable(false),
@@ -64,7 +65,7 @@
 
 {#if open}
   <div class="modal-backdrop" onclick={onBackdropClick} role="presentation">
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="error-modal-title">
+    <ManagedModalCard layoutId="whatsminer-error" defaultWidth={560} role="dialog" aria-modal="true" aria-labelledby="error-modal-title">
       <header class="modal-head">
         <div>
           <div class="modal-kicker">{msg("errors.modalTitle")}</div>
@@ -110,6 +111,6 @@
           </div>
         </div>
       {/if}
-    </div>
+    </ManagedModalCard>
   </div>
 {/if}

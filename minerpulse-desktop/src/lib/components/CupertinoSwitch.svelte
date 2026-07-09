@@ -3,11 +3,15 @@
     checked = $bindable(false),
     disabled = false,
     label = "",
+    hint = "",
+    apiWrite = false,
     onchange,
   }: {
     checked?: boolean;
     disabled?: boolean;
     label?: string;
+    hint?: string;
+    apiWrite?: boolean;
     onchange?: (value: boolean) => void | Promise<void>;
   } = $props();
 
@@ -26,6 +30,7 @@
   class:is-disabled={disabled}
   aria-pressed={checked}
   aria-label={label}
+  title={hint || undefined}
   {disabled}
   onclick={toggle}
 >
@@ -33,7 +38,9 @@
     <span class="cupertino-switch-thumb"></span>
   </span>
   {#if label}
-    <span class="cupertino-switch-label">{label}</span>
+    <span class="cupertino-switch-label">
+      {label}{#if apiWrite}<span class="api-write-mark" aria-hidden="true"> *</span>{/if}
+    </span>
   {/if}
 </button>
 
@@ -86,5 +93,10 @@
 
   .cupertino-switch-label {
     font-size: 0.92rem;
+  }
+
+  .api-write-mark {
+    color: var(--accent);
+    font-weight: 700;
   }
 </style>

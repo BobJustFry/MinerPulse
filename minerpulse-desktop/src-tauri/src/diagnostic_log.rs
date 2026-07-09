@@ -105,8 +105,7 @@ fn build_zip(
     zip.start_file("manifest.json", options)
         .map_err(|e| e.to_string())?;
     let manifest_bytes = serde_json::to_vec_pretty(manifest).map_err(|e| e.to_string())?;
-    zip.write_all(&manifest_bytes)
-        .map_err(|e| e.to_string())?;
+    zip.write_all(&manifest_bytes).map_err(|e| e.to_string())?;
 
     zip.finish().map_err(|e| e.to_string())?;
     fs::metadata(archive_path)
@@ -167,13 +166,10 @@ pub async fn upload_diagnostic_log(
         format!("{safe_name}.zip")
     };
 
-    let temp_dir = app
-        .path()
-        .temp_dir()
-        .map_err(|_| ErrorResponse {
-            code: ErrorCode::IoError,
-            args: None,
-        })?;
+    let temp_dir = app.path().temp_dir().map_err(|_| ErrorResponse {
+        code: ErrorCode::IoError,
+        args: None,
+    })?;
     let archive_path = temp_dir.join(&archive_name);
 
     let manifest = serde_json::json!({
@@ -184,10 +180,11 @@ pub async fn upload_diagnostic_log(
         "uploaded_at_utc": chrono::Utc::now().to_rfc3339(),
     });
 
-    let _size_bytes = build_zip(&log_path, &archive_path, &manifest).map_err(|_| ErrorResponse {
-        code: ErrorCode::IoError,
-        args: None,
-    })?;
+    let _size_bytes =
+        build_zip(&log_path, &archive_path, &manifest).map_err(|_| ErrorResponse {
+            code: ErrorCode::IoError,
+            args: None,
+        })?;
 
     let bytes = fs::read(&archive_path).map_err(|_| ErrorResponse {
         code: ErrorCode::IoError,
@@ -226,13 +223,7 @@ pub async fn upload_diagnostic_log(
         .send()
         .await
         .map_err(|e| {
-            event(
-                &app,
-                "ERROR",
-                "upload",
-                "http_fail",
-                &e.to_string(),
-            );
+            event(&app, "ERROR", "upload", "http_fail", &e.to_string());
             ErrorResponse {
                 code: ErrorCode::ConnFailed,
                 args: None,
@@ -288,9 +279,6 @@ fn app_version_meta() -> (String, u32) {
         .and_then(|v| v.as_str())
         .unwrap_or("0.0.0")
         .to_string();
-    let build = meta
-        .get("build")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
+    let build = meta.get("build").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
     (version, build)
 }

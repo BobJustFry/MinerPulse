@@ -152,10 +152,7 @@ fn app_meta() -> (String, u32) {
         .and_then(|v| v.as_str())
         .unwrap_or("0.0.0")
         .to_string();
-    let build = meta
-        .get("build")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
+    let build = meta.get("build").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
     (version, build)
 }
 
@@ -293,7 +290,6 @@ impl LicenseState {
     }
 
     async fn refresh_remote(&self, app: &AppHandle, refresh: String) -> Result<(), ErrorResponse> {
-
         let device = {
             let mut store = self.store.lock().unwrap();
             ensure_device_identity(&mut store);
@@ -302,7 +298,10 @@ impl LicenseState {
 
         let url = format!("{}/v1/license/refresh", api_base());
         let mut body = serde_json::Map::new();
-        body.insert("refresh_token".to_string(), serde_json::Value::String(refresh));
+        body.insert(
+            "refresh_token".to_string(),
+            serde_json::Value::String(refresh),
+        );
         if let serde_json::Value::Object(device_obj) = device {
             for (key, value) in device_obj {
                 body.insert(key, value);
@@ -336,7 +335,11 @@ impl LicenseState {
         Ok(())
     }
 
-    pub async fn activate(&self, app: AppHandle, code: String) -> Result<LicenseInfo, ErrorResponse> {
+    pub async fn activate(
+        &self,
+        app: AppHandle,
+        code: String,
+    ) -> Result<LicenseInfo, ErrorResponse> {
         let device = {
             let mut store = self.store.lock().unwrap();
             ensure_device_identity(&mut store);
@@ -344,7 +347,10 @@ impl LicenseState {
         };
         let url = format!("{}/v1/license/activate", api_base());
         let mut body = serde_json::Map::new();
-        body.insert("code".to_string(), serde_json::Value::String(code.trim().to_string()));
+        body.insert(
+            "code".to_string(),
+            serde_json::Value::String(code.trim().to_string()),
+        );
         if let serde_json::Value::Object(device_obj) = device {
             for (key, value) in device_obj {
                 body.insert(key, value);
@@ -409,7 +415,10 @@ impl LicenseState {
         };
         let url = format!("{}/v1/auth/login", api_base());
         let mut body = serde_json::Map::new();
-        body.insert("email".to_string(), serde_json::Value::String(email.trim().to_string()));
+        body.insert(
+            "email".to_string(),
+            serde_json::Value::String(email.trim().to_string()),
+        );
         body.insert("password".to_string(), serde_json::Value::String(password));
         if let serde_json::Value::Object(device_obj) = device {
             for (key, value) in device_obj {
@@ -497,7 +506,9 @@ impl LicenseState {
 }
 
 #[tauri::command]
-pub async fn get_license_info(state: State<'_, LicenseState>) -> Result<LicenseInfo, ErrorResponse> {
+pub async fn get_license_info(
+    state: State<'_, LicenseState>,
+) -> Result<LicenseInfo, ErrorResponse> {
     Ok(state.info())
 }
 

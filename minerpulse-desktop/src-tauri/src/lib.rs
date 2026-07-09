@@ -1,13 +1,14 @@
 use minerpulse_core::drivers::registry::{fetch_whatsminer, fetch_with_detect};
-use minerpulse_core::{
-    enable_api_switch, import_file_content, list_scan_subnets as discover_subnets, load_mpulse,
-    probe_whatsminer_access, save_session, save_snapshot, scan_network, scan_network_streaming,
-    test_luci_credentials, compute_needs_setup, EntitlementGate, ErrorResponse, FetchOptions, MinerPulseError,
-    MinerSnapshot, MpulseFile, RateLimiter, ScanRequest, ScanResult, ScanSubnet, SubscriptionTier,
-    TcpCgminerClient, WhatsminerAccessInfo, WhatsminerLuciAuth,
-    MAX_SESSION_DURATION_SEC, normalize_poll_rate_hz, poll_interval_ms, poll_wait_after_tick,
-};
 use minerpulse_core::model::BoardChipMap;
+use minerpulse_core::{
+    compute_needs_setup, enable_api_switch, import_file_content,
+    list_scan_subnets as discover_subnets, load_mpulse, normalize_poll_rate_hz, poll_interval_ms,
+    poll_wait_after_tick, probe_whatsminer_access, save_session, save_snapshot, scan_network,
+    scan_network_streaming, test_luci_credentials, EntitlementGate, ErrorResponse, FetchOptions,
+    MinerPulseError, MinerSnapshot, MpulseFile, RateLimiter, ScanRequest, ScanResult, ScanSubnet,
+    SubscriptionTier, TcpCgminerClient, WhatsminerAccessInfo, WhatsminerLuciAuth,
+    MAX_SESSION_DURATION_SEC,
+};
 
 mod diagnostic_log;
 mod license;
@@ -199,9 +200,7 @@ async fn read_miner(
     if !g.can_poll() {
         let state = app.state::<AppState>();
         let mut limiter = state.rate_limiter.lock().unwrap();
-        limiter
-            .try_acquire()
-            .map_err(|e| ErrorResponse::from(&e))?;
+        limiter.try_acquire().map_err(|e| ErrorResponse::from(&e))?;
     }
 
     let cloud_auth = if request.whatsminer_auth.is_none() {
@@ -217,7 +216,13 @@ async fn read_miner(
     };
     let read_session = app.state::<ReadSession>();
     let cancel = read_session.begin();
-    diagnostic_log::event(&app, "INFO", "read", "session_begin", "prior cancelled if any");
+    diagnostic_log::event(
+        &app,
+        "INFO",
+        "read",
+        "session_begin",
+        "prior cancelled if any",
+    );
     let options = read_fetch_options(request.whatsminer_auth, cloud_auth, Some(cancel.clone()));
     let ip = request.ip.clone();
     let gate = app.state::<MinerIoGate>().0.clone();
@@ -234,7 +239,11 @@ async fn read_miner(
             "INFO",
             "read",
             "fetch_done",
-            &format!("ms={} ok={}", fetch_started.elapsed().as_millis(), result.is_ok()),
+            &format!(
+                "ms={} ok={}",
+                fetch_started.elapsed().as_millis(),
+                result.is_ok()
+            ),
         );
         result
     });
@@ -535,11 +544,11 @@ async fn probe_whatsminer_access_command(
         let _io = gate.lock().unwrap_or_else(|e| e.into_inner());
         probe_whatsminer_access(&ip, &options, false)
     })
-        .await
-        .map_err(|_| ErrorResponse {
-            code: minerpulse_core::ErrorCode::InvalidInput,
-            args: None,
-        })?;
+    .await
+    .map_err(|_| ErrorResponse {
+        code: minerpulse_core::ErrorCode::InvalidInput,
+        args: None,
+    })?;
     let needs_setup = compute_needs_setup(&status, true, true);
     if let Some(mac) = &status.mac {
         creds.remember_ip_mac(&request.ip, mac);
@@ -600,11 +609,11 @@ async fn enable_whatsminer_api(
         let _io = gate.lock().unwrap_or_else(|e| e.into_inner());
         probe_whatsminer_access(&ip, &options, false)
     })
-        .await
-        .map_err(|_| ErrorResponse {
-            code: minerpulse_core::ErrorCode::InvalidInput,
-            args: None,
-        })?;
+    .await
+    .map_err(|_| ErrorResponse {
+        code: minerpulse_core::ErrorCode::InvalidInput,
+        args: None,
+    })?;
     if let Some(mac) = &status.mac {
         creds.remember_ip_mac(&request.ip, mac);
     }
@@ -793,12 +802,7 @@ fn run_poll_loop(
     let mut cached_board_chips = Vec::<BoardChipMap>::new();
     let mut cached_chip_log = String::new();
     let mut session = if recording {
-        Some(MpulseFile::new_session(
-            ip,
-            "unknown",
-            tier,
-            poll_rate_hz,
-        ))
+        Some(MpulseFile::new_session(ip, "unknown", tier, poll_rate_hz))
     } else {
         None
     };
@@ -814,8 +818,7 @@ fn run_poll_loop(
 
         let tick_start = Instant::now();
 
-        let full_refresh =
-            frame_index == 0 || frame_index % WHATSMINER_FULL_REFRESH_FRAMES == 0;
+        let full_refresh = frame_index == 0 || frame_index % WHATSMINER_FULL_REFRESH_FRAMES == 0;
         let mut options = fetch_options.clone();
         options.fast_poll = cached_driver == "whatsminer" && !full_refresh;
 
@@ -835,8 +838,12 @@ fn run_poll_loop(
                         snapshot.board_chips = cached_board_chips.clone();
                     }
                     // Keep the chip section visible in the console between full refreshes.
-                    if !cached_chip_log.is_empty() && !snapshot.raw_log.contains("--- btminer log ---") {
-                        snapshot.raw_log.push_str("\n--- btminer log (cached) ---\n");
+                    if !cached_chip_log.is_empty()
+                        && !snapshot.raw_log.contains("--- btminer log ---")
+                    {
+                        snapshot
+                            .raw_log
+                            .push_str("\n--- btminer log (cached) ---\n");
                         snapshot.raw_log.push_str(&cached_chip_log);
                     }
                 } else {
@@ -938,14 +945,13 @@ async fn open_miner_file(
 ) -> Result<session_store::OpenMinerFileResponse, ErrorResponse> {
     let path_for_store = path.clone();
     let path_buf = PathBuf::from(path);
-    let parsed = tauri::async_runtime::spawn_blocking(move || {
-        session_store::parse_miner_file(&path_buf)
-    })
-    .await
-    .map_err(|_| ErrorResponse {
-        code: minerpulse_core::ErrorCode::IoError,
-        args: None,
-    })??;
+    let parsed =
+        tauri::async_runtime::spawn_blocking(move || session_store::parse_miner_file(&path_buf))
+            .await
+            .map_err(|_| ErrorResponse {
+                code: minerpulse_core::ErrorCode::IoError,
+                args: None,
+            })??;
 
     match parsed {
         session_store::ParseMinerFileResult::Session(opened) => {
@@ -1053,31 +1059,32 @@ async fn open_scan_window(app: AppHandle) -> Result<(), ErrorResponse> {
         .get_webview_window(MAIN_WINDOW_LABEL)
         .ok_or_else(io_error)?;
 
-    let version_meta = serde_json::from_str::<Value>(env!("MINERPULSE_VERSION_JSON")).unwrap_or_else(|_| {
-        serde_json::json!({
-            "version": "0.0.0",
-            "build": 0,
-            "product": "Miner Pulse"
-        })
-    });
+    let version_meta = serde_json::from_str::<Value>(env!("MINERPULSE_VERSION_JSON"))
+        .unwrap_or_else(|_| {
+            serde_json::json!({
+                "version": "0.0.0",
+                "build": 0,
+                "product": "Miner Pulse"
+            })
+        });
     let scan_title = format_app_display(
         version_meta["product"].as_str().unwrap_or("Miner Pulse"),
         version_meta["version"].as_str().unwrap_or("0.0.0"),
         version_meta["build"].as_u64().unwrap_or(0) as u32,
     );
 
-    let scan_window = WebviewWindowBuilder::new(&app, SCAN_WINDOW_LABEL, WebviewUrl::App("/scan".into()))
-        .title(&scan_title)
+    let scan_window =
+        WebviewWindowBuilder::new(&app, SCAN_WINDOW_LABEL, WebviewUrl::App("/scan".into()))
+            .title(&scan_title)
         .inner_size(540.0, 680.0)
         .min_inner_size(420.0, 480.0)
-        .center()
         .decorations(false)
-        .parent(&main)
-        .map_err(|_| io_error())?
-        .always_on_top(true)
-        .shadow(true)
-        .build()
-        .map_err(|_| io_error())?;
+            .parent(&main)
+            .map_err(|_| io_error())?
+            .always_on_top(true)
+            .shadow(true)
+            .build()
+            .map_err(|_| io_error())?;
 
     configure_window_chrome(&scan_window, true);
 
@@ -1203,8 +1210,12 @@ struct ParseImportResponse {
 }
 
 #[tauri::command]
-fn parse_import_file(content: String, filename: Option<String>) -> Result<ParseImportResponse, ErrorResponse> {
-    let result = import_file_content(&content, filename.as_deref()).map_err(|e| ErrorResponse::from(&e))?;
+fn parse_import_file(
+    content: String,
+    filename: Option<String>,
+) -> Result<ParseImportResponse, ErrorResponse> {
+    let result =
+        import_file_content(&content, filename.as_deref()).map_err(|e| ErrorResponse::from(&e))?;
     Ok(ParseImportResponse {
         snapshot: result.snapshot,
         source_label: result.source_label,
@@ -1256,7 +1267,8 @@ fn import_file_path(path: String) -> Result<ParseImportResponse, ErrorResponse> 
         .and_then(|name| name.to_str())
         .map(str::to_string);
 
-    let result = import_file_content(&content, filename.as_deref()).map_err(|e| ErrorResponse::from(&e))?;
+    let result =
+        import_file_content(&content, filename.as_deref()).map_err(|e| ErrorResponse::from(&e))?;
     Ok(ParseImportResponse {
         snapshot: result.snapshot,
         source_label: result.source_label,
@@ -1299,16 +1311,52 @@ struct WhatsminerControlExportRequest {
     path: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct WhatsminerPasswordChangeRequest {
+    ip: String,
+    username: String,
+    old_password: String,
+    new_password: String,
+}
+
 #[tauri::command]
 async fn get_whatsminer_control_state(
     app: AppHandle,
     request: WhatsminerControlGetRequest,
 ) -> Result<minerpulse_core::WhatsminerControlState, ErrorResponse> {
     let ip = request.ip.clone();
+    let password = request.password.clone();
     let gate = app.state::<MinerIoGate>().0.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let _io = gate.lock().unwrap_or_else(|e| e.into_inner());
-        minerpulse_core::read_control_state(&ip).map_err(ErrorResponse::from)
+        let pwd = if password.is_empty() {
+            None
+        } else {
+            Some(password.as_str())
+        };
+        minerpulse_core::read_control_state_with_auth(&ip, pwd).map_err(|e| ErrorResponse::from(&e))
+    })
+    .await
+    .map_err(|_| ErrorResponse {
+        code: minerpulse_core::ErrorCode::InvalidInput,
+        args: None,
+    })?
+}
+
+#[tauri::command]
+async fn change_whatsminer_super_password(
+    app: AppHandle,
+    request: WhatsminerPasswordChangeRequest,
+) -> Result<(), ErrorResponse> {
+    let ip = request.ip.clone();
+    let username = request.username.clone();
+    let old_password = request.old_password.clone();
+    let new_password = request.new_password.clone();
+    let gate = app.state::<MinerIoGate>().0.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _io = gate.lock().unwrap_or_else(|e| e.into_inner());
+        minerpulse_core::change_super_password(&ip, &username, &old_password, &new_password)
+            .map_err(|e| ErrorResponse::from(&e))
     })
     .await
     .map_err(|_| ErrorResponse {
@@ -1330,7 +1378,7 @@ async fn apply_whatsminer_control(
     tauri::async_runtime::spawn_blocking(move || {
         let _io = gate.lock().unwrap_or_else(|e| e.into_inner());
         minerpulse_core::apply_control_action(&ip, port, &password, &action)
-            .map_err(ErrorResponse::from)
+            .map_err(|e| ErrorResponse::from(&e))
     })
     .await
     .map_err(|_| ErrorResponse {
@@ -1350,7 +1398,7 @@ async fn export_whatsminer_log(
     let gate = app.state::<MinerIoGate>().0.clone();
     let bytes = tauri::async_runtime::spawn_blocking(move || {
         let _io = gate.lock().unwrap_or_else(|e| e.into_inner());
-        minerpulse_core::export_miner_log(&ip, &password).map_err(ErrorResponse::from)
+        minerpulse_core::export_miner_log(&ip, &password).map_err(|e| ErrorResponse::from(&e))
     })
     .await
     .map_err(|_| ErrorResponse {
@@ -1410,16 +1458,20 @@ fn format_app_display(product: &str, version: &str, build: u32) -> String {
 
 #[tauri::command]
 fn get_app_version() -> AppVersionInfo {
-    let meta = serde_json::from_str::<Value>(env!("MINERPULSE_VERSION_JSON")).unwrap_or_else(|_| {
-        serde_json::json!({
-            "version": "0.0.0",
-            "build": 0,
-            "product": "Miner Pulse"
-        })
-    });
+    let meta =
+        serde_json::from_str::<Value>(env!("MINERPULSE_VERSION_JSON")).unwrap_or_else(|_| {
+            serde_json::json!({
+                "version": "0.0.0",
+                "build": 0,
+                "product": "Miner Pulse"
+            })
+        });
     let version = meta["version"].as_str().unwrap_or("0.0.0").to_string();
     let build = meta["build"].as_u64().unwrap_or(0) as u32;
-    let product = meta["product"].as_str().unwrap_or("Miner Pulse").to_string();
+    let product = meta["product"]
+        .as_str()
+        .unwrap_or("Miner Pulse")
+        .to_string();
     AppVersionInfo {
         display: format_app_display(&product, &version, build),
         version,
@@ -1495,6 +1547,7 @@ fn sync_window_frame(app: tauri::AppHandle, theme: String) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -1545,6 +1598,7 @@ pub fn run() {
             remember_snapshot,
             send_miner_command,
             get_whatsminer_control_state,
+            change_whatsminer_super_password,
             apply_whatsminer_control,
             export_whatsminer_log,
             sync_window_frame,
@@ -1567,14 +1621,15 @@ pub fn run() {
                 }
             });
             if let Some(window) = app.get_webview_window("main") {
-                let meta = serde_json::from_str::<serde_json::Value>(env!("MINERPULSE_VERSION_JSON"))
-                    .unwrap_or_else(|_| {
-                        serde_json::json!({
-                            "version": "0.0.0",
-                            "build": 0,
-                            "product": "Miner Pulse"
-                        })
-                    });
+                let meta =
+                    serde_json::from_str::<serde_json::Value>(env!("MINERPULSE_VERSION_JSON"))
+                        .unwrap_or_else(|_| {
+                            serde_json::json!({
+                                "version": "0.0.0",
+                                "build": 0,
+                                "product": "Miner Pulse"
+                            })
+                        });
                 let version = meta["version"].as_str().unwrap_or("0.0.0");
                 let build = meta["build"].as_u64().unwrap_or(0) as u32;
                 let product = meta["product"].as_str().unwrap_or("Miner Pulse");

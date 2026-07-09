@@ -1,4 +1,6 @@
-use super::access::{api_request, fetch_device_info, generate_api_token, parse_device_info};
+use super::access::{api_request, enable_api_switch, fetch_device_info, generate_api_token};
+#[cfg(test)]
+use super::access::parse_device_info;
 use super::legacy4028::send_legacy_command;
 use crate::error::{ErrorCode, MinerPulseError};
 use serde::{Deserialize, Serialize};
@@ -57,7 +59,23 @@ pub struct WhatsminerControlApplyResult {
     pub state: Option<WhatsminerControlState>,
 }
 
+pub fn action_requires_v3_write(action: &WhatsminerControlAction) -> bool {
+    !matches!(
+        action,
+        WhatsminerControlAction::SetMining { .. }
+            | WhatsminerControlAction::SetPowerMode { .. }
+            | WhatsminerControlAction::Reboot
+    )
+}
+
 pub fn read_control_state(host: &str) -> Result<WhatsminerControlState, MinerPulseError> {
+    read_control_state_with_auth(host, None)
+}
+
+pub fn read_control_state_with_auth(
+    host: &str,
+    password: Option<&str>,
+) -> Result<WhatsminerControlState, MinerPulseError> {
     let device = fetch_device_info(host).ok_or_else(MinerPulseError::conn_failed)?;
     if !device.code_ok {
         return Err(MinerPulseError::Coded {
@@ -72,8 +90,101 @@ pub fn read_control_state(host: &str) -> Result<WhatsminerControlState, MinerPul
 
     let mut state = build_control_state(&device, &miner_setting, system_setting.as_ref());
     state.led_mode = led_mode;
-    state.writes_blocked = false;
+    if state.api_switch == Some(false) {
+        state.writes_blocked = false;
+    } else if let Some(p) = password.filter(|p| !p.is_empty()) {
+        state.writes_blocked = !probe_v3_write_access(host, p);
+    }
     Ok(state)
+}
+
+pub fn change_super_password(
+    host: &str,
+    username: &str,
+    old_password: &str,
+    new_password: &str,
+) -> Result<(), MinerPulseError> {
+    match change_super_password_api(host, old_password, new_password) {
+        Ok(()) => Ok(()),
+        Err(err) if api_password_change_blocked(&err) => {
+            if super::luci::change_super_password_luci(host, username, old_password, new_password) {
+                Ok(())
+            } else {
+                Err(MinerPulseError::Coded {
+                    code: ErrorCode::InvalidInput,
+                    message: Some("default_password_change_blocked".into()),
+                })
+            }
+        }
+        Err(err) => Err(err),
+    }
+}
+
+fn api_password_change_blocked(err: &MinerPulseError) -> bool {
+    match err {
+        MinerPulseError::Coded { message, .. } => message
+            .as_deref()
+            .map(|m| {
+                let lower = m.to_ascii_lowercase();
+                lower.contains("password") || lower.contains("default_password")
+            })
+            .unwrap_or(false),
+    }
+}
+
+fn change_super_password_api(
+    host: &str,
+    old_password: &str,
+    new_password: &str,
+) -> Result<(), MinerPulseError> {
+    const CMD: &str = "set.user.change_passwd";
+    let device = fetch_device_info(host).ok_or_else(MinerPulseError::conn_failed)?;
+    let salt = device
+        .salt
+        .as_deref()
+        .ok_or_else(MinerPulseError::conn_failed)?;
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let token = generate_api_token(CMD, old_password, salt, ts);
+    let plain = json!({
+        "account": "super",
+        "old": old_password,
+        "new": new_password,
+    })
+    .to_string();
+    let param = super::crypto::encrypt_v3_param(CMD, old_password, salt, ts, &plain)?;
+    let payload = json!({
+        "cmd": CMD,
+        "param": param,
+        "ts": ts,
+        "token": token,
+        "account": "super",
+    });
+    let raw = api_request(host, &payload.to_string()).ok_or_else(MinerPulseError::conn_failed)?;
+    let value: Value = serde_json::from_str(&raw).map_err(|_| MinerPulseError::with_code(ErrorCode::ParseFailed))?;
+    if value.get("code").and_then(|c| c.as_i64()) != Some(0) {
+        let message = value
+            .get("msg")
+            .map(value_to_string)
+            .unwrap_or_else(|| "change_password_failed".into());
+        return Err(MinerPulseError::Coded {
+            code: ErrorCode::InvalidInput,
+            message: Some(message),
+        });
+    }
+    Ok(())
+}
+
+/// Harmless write probe: re-apply current LED mode via API v3.
+pub fn probe_v3_write_access(host: &str, password: &str) -> bool {
+    let led_mode = fetch_device_led_mode(host).unwrap_or_else(|| "auto".into());
+    match signed_api_request_with_account(host, password, "super", "set.system.led", json!(led_mode))
+    {
+        Ok(response) => response.get("code").and_then(|c| c.as_i64()) == Some(0),
+        Err(_) => false,
+    }
 }
 
 pub fn apply_control_action(
@@ -82,6 +193,25 @@ pub fn apply_control_action(
     password: &str,
     action: &WhatsminerControlAction,
 ) -> Result<WhatsminerControlApplyResult, MinerPulseError> {
+    let pre_state = read_control_state(host).ok();
+    let enabling_api_switch = matches!(
+        action,
+        WhatsminerControlAction::SetApiSwitch { enabled: true }
+    ) && pre_state
+        .as_ref()
+        .is_some_and(|s| s.api_switch == Some(false));
+
+    if action_requires_v3_write(action)
+        && !enabling_api_switch
+        && !probe_v3_write_access(host, password)
+    {
+        return Ok(WhatsminerControlApplyResult {
+            ok: false,
+            message: Some("default_password_blocked".into()),
+            state: read_control_state_with_auth(host, Some(password)).ok(),
+        });
+    }
+
     let v3_result = apply_control_action_v3(host, password, action);
     match v3_result {
         Ok(result) if result.ok || !is_password_blocked(result.message.as_deref()) => return Ok(result),
@@ -89,11 +219,16 @@ pub fn apply_control_action(
             if let Ok(legacy) = apply_control_action_legacy(host, port, password, action) {
                 return Ok(legacy);
             }
+            if let Some(fallback) = try_enable_api_switch_luci(host, password, action, enabling_api_switch) {
+                return Ok(fallback);
+            }
             Ok(WhatsminerControlApplyResult {
                 ok: false,
                 message: result.message.or(Some("default_password_blocked".into())),
-                state: read_control_state(host).ok().map(|mut s| {
-                    s.writes_blocked = true;
+                state: read_control_state_with_auth(host, Some(password)).ok().map(|mut s| {
+                    if s.api_switch != Some(false) {
+                        s.writes_blocked = true;
+                    }
                     s
                 }),
             })
@@ -102,9 +237,38 @@ pub fn apply_control_action(
             if let Ok(legacy) = apply_control_action_legacy(host, port, password, action) {
                 return Ok(legacy);
             }
+            if let Some(fallback) = try_enable_api_switch_luci(host, password, action, enabling_api_switch) {
+                return Ok(fallback);
+            }
             Err(err)
         }
     }
+}
+
+fn try_enable_api_switch_luci(
+    host: &str,
+    password: &str,
+    action: &WhatsminerControlAction,
+    enabling_api_switch: bool,
+) -> Option<WhatsminerControlApplyResult> {
+    if !enabling_api_switch {
+        return None;
+    }
+    if !enable_api_switch(host, "admin", password) {
+        return None;
+    }
+    let verified = verify_action_with_auth(host, Some(password), action).unwrap_or(false);
+    Some(WhatsminerControlApplyResult {
+        ok: verified,
+        message: if verified {
+            None
+        } else if action_may_need_reboot(action) {
+            Some("reboot_required".into())
+        } else {
+            Some("verify_failed".into())
+        },
+        state: read_control_state_with_auth(host, Some(password)).ok(),
+    })
 }
 
 fn is_password_blocked(message: Option<&str>) -> bool {
@@ -134,7 +298,7 @@ fn apply_control_action_v3(
         return Ok(WhatsminerControlApplyResult {
             ok: false,
             message: Some(desc),
-            state: read_control_state(host).ok(),
+            state: read_control_state_with_auth(host, Some(password)).ok(),
         });
     }
 
@@ -146,15 +310,17 @@ fn apply_control_action_v3(
         });
     }
 
-    let verified = verify_action(host, action)?;
+    let verified = verify_action_with_auth(host, Some(password), action)?;
     Ok(WhatsminerControlApplyResult {
         ok: verified,
         message: if verified {
             None
+        } else if action_may_need_reboot(action) {
+            Some("reboot_required".into())
         } else {
             Some("verify_failed".into())
         },
-        state: read_control_state(host).ok(),
+        state: read_control_state_with_auth(host, Some(password)).ok(),
     })
 }
 
@@ -173,17 +339,27 @@ fn apply_control_action_legacy(
     let response = send_legacy_command(host, port, password, cmd)?;
     let ok = response.get("STATUS").and_then(|v| v.as_str()) == Some("S");
     thread::sleep(VERIFY_DELAY);
-    Ok(WhatsminerControlApplyResult {
-        ok,
-        message: if ok {
-            None
-        } else {
-            response
+    if !ok {
+        return Ok(WhatsminerControlApplyResult {
+            ok: false,
+            message: response
                 .get("Msg")
                 .and_then(|v| v.as_str())
-                .map(str::to_string)
+                .map(str::to_string),
+            state: read_control_state_with_auth(host, Some(password)).ok(),
+        });
+    }
+    let verified = verify_action_with_auth(host, Some(password), action).unwrap_or(false);
+    Ok(WhatsminerControlApplyResult {
+        ok: verified,
+        message: if verified {
+            None
+        } else if action_may_need_reboot(action) {
+            Some("reboot_required".into())
+        } else {
+            Some("verify_failed".into())
         },
-        state: read_control_state(host).ok(),
+        state: read_control_state_with_auth(host, Some(password)).ok(),
     })
 }
 
@@ -361,10 +537,28 @@ fn build_control_state(
     }
 }
 
-fn verify_action(host: &str, action: &WhatsminerControlAction) -> Result<bool, MinerPulseError> {
+pub fn action_may_need_reboot(action: &WhatsminerControlAction) -> bool {
+    matches!(
+        action,
+        WhatsminerControlAction::SetApiSwitch { .. }
+            | WhatsminerControlAction::SetFastBoot { .. }
+            | WhatsminerControlAction::SetWebPools { .. }
+            | WhatsminerControlAction::SetPowerLimit { .. }
+            | WhatsminerControlAction::SetTargetFreq { .. }
+            | WhatsminerControlAction::SetUpfreqSpeed { .. }
+            | WhatsminerControlAction::SetPowerPercent { .. }
+            | WhatsminerControlAction::RestoreSettings
+    )
+}
+
+fn verify_action_with_auth(
+    host: &str,
+    password: Option<&str>,
+    action: &WhatsminerControlAction,
+) -> Result<bool, MinerPulseError> {
     thread::sleep(VERIFY_DELAY);
     for _ in 0..VERIFY_ATTEMPTS {
-        if let Ok(state) = read_control_state(host) {
+        if let Ok(state) = read_control_state_with_auth(host, password) {
             if action_matches_state(action, &state) {
                 return Ok(true);
             }
@@ -440,6 +634,18 @@ mod tests {
 
     const LIVE_HOST: &str = "192.168.35.31";
     const LIVE_PASS: &str = "admin";
+
+    #[test]
+    fn writes_blocked_false_when_api_switch_off() {
+        let device = parse_device_info(
+            r#"{"code":0,"msg":{"system":{"apiswitch":"0"},"miner":{"working":"true","type":"M50"},"salt":"abc"}}"#,
+        )
+        .unwrap();
+        let miner = serde_json::json!({ "power-mode": "normal" });
+        let state = build_control_state(&device, &miner, None);
+        assert_eq!(state.api_switch, Some(false));
+        assert!(!state.writes_blocked);
+    }
 
     #[test]
     fn parses_control_state_fields() {

@@ -157,18 +157,20 @@
           <span>{msg("data.uptime")}: {formatUptime(snapshot.uptime_sec)}</span>
         {/if}
       </div>
+      {#if isWhatsminer()}
+        <div class="data-control-anchor">
+          <button
+            type="button"
+            class="btn primary data-control-btn"
+            disabled={controlDisabled}
+            onclick={() => onOpenControl?.()}
+          >
+            {msg("control.open")}
+          </button>
+        </div>
+      {/if}
     </div>
     <div class="data-hero-side">
-      {#if isWhatsminer()}
-        <button
-          type="button"
-          class="btn-secondary data-control-btn"
-          disabled={controlDisabled}
-          onclick={() => onOpenControl?.()}
-        >
-          {msg("control.open")}
-        </button>
-      {/if}
       <span class="data-status-pill tone-{statusTone(snapshot.status)}">
         {#if statusMessageKey(snapshot.status)}
           {msg(statusMessageKey(snapshot.status) as MessageKey)}

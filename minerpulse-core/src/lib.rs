@@ -20,7 +20,8 @@ pub use drivers::registry::{
     model_from_stats, DriverRegistry,
 };
 pub use drivers::whatsminer::control::{
-    apply_control_action, export_miner_log, read_control_state, WhatsminerControlAction,
+    action_requires_v3_write, action_may_need_reboot, apply_control_action, change_super_password, export_miner_log,
+    read_control_state, read_control_state_with_auth, WhatsminerControlAction,
     WhatsminerControlApplyResult, WhatsminerControlState,
 };
 pub use drivers::whatsminer::access::{

@@ -38,16 +38,8 @@ fn platform_encrypt(plaintext: &[u8]) -> Result<Vec<u8>, String> {
             pbData: plaintext.as_ptr() as *mut u8,
         };
         let mut output = CRYPT_INTEGER_BLOB::default();
-        CryptProtectData(
-            &mut input,
-            None,
-            None,
-            None,
-            None,
-            0,
-            &mut output,
-        )
-        .map_err(|e| format!("dpapi_encrypt: {e}"))?;
+        CryptProtectData(&mut input, None, None, None, None, 0, &mut output)
+            .map_err(|e| format!("dpapi_encrypt: {e}"))?;
         Ok(read_and_free_blob(&mut output))
     }
 }
@@ -62,16 +54,8 @@ fn platform_decrypt(cipher: &[u8]) -> Result<Vec<u8>, String> {
             pbData: cipher.as_ptr() as *mut u8,
         };
         let mut output = CRYPT_INTEGER_BLOB::default();
-        CryptUnprotectData(
-            &mut input,
-            None,
-            None,
-            None,
-            None,
-            0,
-            &mut output,
-        )
-        .map_err(|e| format!("dpapi_decrypt: {e}"))?;
+        CryptUnprotectData(&mut input, None, None, None, None, 0, &mut output)
+            .map_err(|e| format!("dpapi_decrypt: {e}"))?;
         Ok(read_and_free_blob(&mut output))
     }
 }

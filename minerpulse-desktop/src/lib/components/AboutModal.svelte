@@ -3,6 +3,7 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { t, type Locale, type MessageKey } from "$lib/i18n";
   import { formatAppError } from "$lib/formatAppError";
+  import ManagedModalCard from "$lib/components/ManagedModalCard.svelte";
 
   const GITHUB_URL = "https://github.com/BobJustFry/MinerPulse";
   const TELEGRAM_URL = "https://t.me/miner_pulse";
@@ -122,7 +123,14 @@
 
 {#if open}
   <div class="modal-backdrop" onclick={onBackdropClick} role="presentation">
-    <div class="modal-card about-modal" role="dialog" aria-modal="true" aria-labelledby="about-modal-title">
+    <ManagedModalCard
+      layoutId="about"
+      class="about-modal"
+      defaultWidth={460}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="about-modal-title"
+    >
       <header class="modal-head">
         <div>
           <div class="modal-kicker">{product}</div>
@@ -236,6 +244,6 @@
           <p class="about-upload-status" class:about-upload-error={logUploadError}>{logUploadMessage}</p>
         {/if}
       </div>
-    </div>
+    </ManagedModalCard>
   </div>
 {/if}

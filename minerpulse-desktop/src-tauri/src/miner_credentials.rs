@@ -1,6 +1,5 @@
 use minerpulse_core::{
-    drivers::whatsminer::access::normalize_mac,
-    ErrorCode, ErrorResponse, WhatsminerLuciAuth,
+    drivers::whatsminer::access::normalize_mac, ErrorCode, ErrorResponse, WhatsminerLuciAuth,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -149,8 +148,7 @@ impl MinerCredentialsState {
     }
 
     fn access_token(app: &AppHandle) -> Option<String> {
-        app.try_state::<LicenseState>()?
-            .access_token()
+        app.try_state::<LicenseState>()?.access_token()
     }
 
     pub fn remember_ip_mac(&self, ip: &str, mac: &str) {
@@ -216,7 +214,12 @@ impl MinerCredentialsState {
             })
     }
 
-    pub fn upsert_local(&self, mac: &str, username: &str, password: &str) -> Result<(), ErrorResponse> {
+    pub fn upsert_local(
+        &self,
+        mac: &str,
+        username: &str,
+        password: &str,
+    ) -> Result<(), ErrorResponse> {
         let mac = normalize_mac(mac);
         let mut store = self.store.lock().unwrap();
         if let Some(entry) = store.credentials.iter_mut().find(|e| e.mac == mac) {
@@ -276,7 +279,10 @@ impl MinerCredentialsState {
         Ok(())
     }
 
-    pub async fn pull_remote(&self, app: &AppHandle) -> Result<Vec<MinerCredentialMeta>, ErrorResponse> {
+    pub async fn pull_remote(
+        &self,
+        app: &AppHandle,
+    ) -> Result<Vec<MinerCredentialMeta>, ErrorResponse> {
         let token = Self::access_token(app).ok_or_else(|| cred_err("not_logged_in"))?;
         let url = format!("{}/v1/account/miner-credentials/sync", api_base());
         let res = self
@@ -431,7 +437,10 @@ impl MinerCredentialsState {
                     "ok",
                     &format!("shared={shared}"),
                 );
-                let _ = app.emit("miner-credentials://sync", serde_json::json!({ "ok": true }));
+                let _ = app.emit(
+                    "miner-credentials://sync",
+                    serde_json::json!({ "ok": true }),
+                );
             }
             _ => {
                 let code = result

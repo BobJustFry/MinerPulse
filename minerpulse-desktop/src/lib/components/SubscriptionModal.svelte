@@ -3,6 +3,7 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { t, type Locale, type MessageKey } from "$lib/i18n";
   import { formatAppError } from "$lib/formatAppError";
+  import ManagedModalCard from "$lib/components/ManagedModalCard.svelte";
   import type { Entitlements, ErrorResponse, LicenseInfo } from "$lib/types";
 
   let {
@@ -123,8 +124,11 @@
 
 {#if open}
   <div class="modal-backdrop" onclick={onBackdropClick} role="presentation">
-    <div
-      class="modal-card subscription-modal"
+    <ManagedModalCard
+      layoutId="subscription"
+      class="subscription-modal"
+      defaultWidth={440}
+      dragDisabled={busy}
       role="dialog"
       aria-modal="true"
       aria-labelledby="subscription-modal-title"
@@ -252,6 +256,6 @@
           <p class="subscription-error">{error}</p>
         {/if}
       </div>
-    </div>
+    </ManagedModalCard>
   </div>
 {/if}

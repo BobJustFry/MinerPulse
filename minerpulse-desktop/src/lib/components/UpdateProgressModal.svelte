@@ -3,6 +3,7 @@
   import { relaunch } from "@tauri-apps/plugin-process";
   import { t, type Locale, type MessageKey } from "$lib/i18n";
   import { formatUpdateVersion } from "$lib/updateCheck";
+  import ManagedModalCard from "$lib/components/ManagedModalCard.svelte";
 
   type UpdatePhase =
     | "checking"
@@ -213,8 +214,11 @@
 
 {#if open}
   <div class="modal-backdrop update-progress-backdrop" onclick={onBackdropClick} role="presentation">
-    <div
-      class="modal-card update-progress-modal"
+    <ManagedModalCard
+      layoutId="update-progress"
+      class="update-progress-modal"
+      defaultWidth={440}
+      resizable={false}
       role="dialog"
       aria-modal="true"
       aria-labelledby="update-progress-title"
@@ -275,6 +279,6 @@
           {/if}
         </div>
       </div>
-    </div>
+    </ManagedModalCard>
   </div>
 {/if}

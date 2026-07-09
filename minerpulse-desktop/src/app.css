@@ -991,6 +991,7 @@ button {
 .data-hero {
   display: flex;
   justify-content: space-between;
+  align-items: stretch;
   gap: 20px;
   padding: 20px 22px;
   border: 1px solid var(--border);
@@ -999,6 +1000,13 @@ button {
     linear-gradient(135deg, var(--accent-soft), transparent 55%),
     var(--bg-surface);
   box-shadow: var(--shadow-sm);
+}
+
+.data-hero-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
 }
 
 .data-hero-vendor {
@@ -1031,6 +1039,25 @@ button {
   align-items: flex-end;
   gap: 8px;
   min-width: 140px;
+}
+
+.data-control-anchor {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: auto;
+  padding-top: 14px;
+}
+
+.data-control-btn {
+  min-height: 34px;
+  padding: 7px 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  box-shadow: var(--shadow-sm);
+}
+
+.data-control-btn:hover:not(:disabled) {
+  filter: brightness(1.05);
 }
 
 .data-hero-hash {
@@ -1080,6 +1107,7 @@ button {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 16px;
+  flex: 1 1 auto;
 }
 
 .data-section {

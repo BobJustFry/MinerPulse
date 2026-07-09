@@ -416,6 +416,25 @@
     await readMiner();
   }
 
+  async function onWhatsminerControlPasswordChanged(newPassword: string) {
+    whatsminerPassword = newPassword;
+    whatsminerCustomAuth = true;
+    saveConnection();
+    const mac = snapshot?.identity.mac;
+    if (mac) {
+      try {
+        await invoke("save_miner_credential", {
+          mac,
+          username: whatsminerUser.trim() || "admin",
+          password: newPassword,
+          ip,
+        });
+      } catch {
+        /* best-effort */
+      }
+    }
+  }
+
   async function readMiner() {
     if (polling) return;
 
@@ -1588,7 +1607,9 @@
     {ip}
     port={Number(port) || 4028}
     password={whatsminerPassword || "admin"}
+    username={whatsminerUser.trim() || "admin"}
     busy={controlActionDisabled}
     onApplied={afterControlApplied}
+    onPasswordChanged={onWhatsminerControlPasswordChanged}
   />
 </div>

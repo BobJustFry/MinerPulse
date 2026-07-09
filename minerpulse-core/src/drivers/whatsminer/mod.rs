@@ -1,6 +1,7 @@
 pub mod access;
 mod btminer_log;
 pub mod control;
+mod crypto;
 mod errors;
 mod layout;
 pub mod legacy4028;
