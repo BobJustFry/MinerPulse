@@ -4,6 +4,15 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { formatAppError } from "$lib/formatAppError";
   import { t, type Locale, type MessageKey } from "$lib/i18n";
+  import {
+    formatIpv4Input,
+    netFieldValid,
+    type NetFieldKey,
+  } from "$lib/netInput";
+  import {
+    posixTimezoneForZonename,
+    WHATSMINER_TIMEZONES,
+  } from "$lib/whatsminerTimezones";
   import CupertinoSwitch from "$lib/components/CupertinoSwitch.svelte";
   import CraneApplyAnimation from "$lib/components/CraneApplyAnimation.svelte";
   import ManagedModalCard from "$lib/components/ManagedModalCard.svelte";
@@ -163,6 +172,20 @@
     advancedBaseline != null && advancedDraft != null && advancedDiffers(advancedBaseline, advancedDraft),
   );
   const liquidCooling = $derived(controlState?.liquidCooling === true);
+  const timezoneOptions = $derived.by(() => {
+    const list = [...WHATSMINER_TIMEZONES];
+    const current = advancedDraft?.zonename?.trim();
+    if (current && !list.includes(current)) {
+      list.push(current);
+      list.sort((a, b) => a.localeCompare(b));
+    }
+    return list;
+  });
+  const advancedStaticNetBlocking = $derived(
+    advancedDraft != null &&
+      !advancedDraft.net_dhcp &&
+      !advancedStaticNetComplete(advancedDraft),
+  );
 
   function emptyPools(): PoolDraft[] {
     return Array.from({ length: 3 }, () => ({ url: "", worker: "", password: "" }));
@@ -292,6 +315,45 @@
     advancedDraft = { ...advancedDraft, [key]: value };
   }
 
+  function advancedStaticNetComplete(draft: AdvancedDraft): boolean {
+    if (draft.net_dhcp) return true;
+    return (
+      netFieldValid("net_ip", draft.net_ip) &&
+      netFieldValid("net_mask", draft.net_mask) &&
+      netFieldValid("net_gate", draft.net_gate) &&
+      netFieldValid("net_dns", draft.net_dns)
+    );
+  }
+
+  function setZonename(zonename: string) {
+    if (!advancedDraft) return;
+    advancedDraft = {
+      ...advancedDraft,
+      zonename,
+      timezone: posixTimezoneForZonename(zonename),
+    };
+  }
+
+  function setNetIpv4Field(key: NetFieldKey, raw: string) {
+    setAdvancedField(key, formatIpv4Input(raw));
+  }
+
+  function netFieldErrorKey(key: NetFieldKey, value: string): MessageKey | null {
+    const v = value.trim();
+    if (!v) return "control.advanced.netRequired";
+    if (netFieldValid(key, v)) return null;
+    if (key === "net_mask") return "control.advanced.netMaskInvalid";
+    if (key === "net_ip") return "control.advanced.netIpInvalid";
+    if (key === "net_gate") return "control.advanced.netGatewayInvalid";
+    return "control.advanced.netDnsInvalid";
+  }
+
+  function showNetFieldError(key: NetFieldKey, value: string): boolean {
+    const v = value.trim();
+    if (!v) return false;
+    return !netFieldValid(key, v);
+  }
+
   function buildAdvancedActions(base: AdvancedDraft, next: AdvancedDraft): WhatsminerControlAction[] {
     const actions: WhatsminerControlAction[] = [];
     if (base.fan_poweroff_cool !== next.fan_poweroff_cool) {
@@ -355,6 +417,10 @@
 
   async function commitAdvancedDraft() {
     if (!advancedBaseline || !advancedDraft || applying) return;
+    if (!advancedStaticNetComplete(advancedDraft)) {
+      errorText = msg("control.advanced.netInvalid");
+      return;
+    }
     const actions = buildAdvancedActions(advancedBaseline, advancedDraft);
     if (actions.length === 0) return;
     await runActions(actions);
@@ -1412,28 +1478,31 @@
           {#each poolsDraft as pool, index (index)}
             <section class="control-section" class:api-blocked={apiSwitchOff}>
               <h4>{msg("control.pools.slot", { n: index + 1 })}</h4>
-              <div class="control-pool-fields">
-                <label class="password-field">
+              <div class="control-fields">
+                <label class="control-field-stack">
                   <span>{msg("control.pools.url")}</span>
                   <input
+                    class="control-input"
                     type="text"
                     value={pool.url}
                     disabled={controlDisabled(true)}
                     oninput={(e) => setPoolField(index, "url", e.currentTarget.value)}
                   />
                 </label>
-                <label class="password-field">
+                <label class="control-field-stack">
                   <span>{msg("control.pools.worker")}</span>
                   <input
+                    class="control-input"
                     type="text"
                     value={pool.worker}
                     disabled={controlDisabled(true)}
                     oninput={(e) => setPoolField(index, "worker", e.currentTarget.value)}
                   />
                 </label>
-                <label class="password-field">
+                <label class="control-field-stack">
                   <span>{msg("control.pools.password")}</span>
                   <input
+                    class="control-input"
                     type="password"
                     value={pool.password}
                     disabled={controlDisabled(true)}
@@ -1495,22 +1564,29 @@
                   type="button"
                   class="btn btn-icon-only control-step-btn"
                   disabled={controlDisabled(true) || advancedDraft.fan_temp_offset <= -30}
-                  onclick={() => setAdvancedField("fan_temp_offset", advancedDraft.fan_temp_offset - 1)}>−</button>
+                  onclick={() => {
+                    if (!advancedDraft) return;
+                    setAdvancedField("fan_temp_offset", advancedDraft.fan_temp_offset - 1);
+                  }}>−</button>
                 <strong class="control-step-value">{advancedDraft.fan_temp_offset}</strong>
                 <button
                   type="button"
                   class="btn btn-icon-only control-step-btn"
                   disabled={controlDisabled(true) || advancedDraft.fan_temp_offset >= 0}
-                  onclick={() => setAdvancedField("fan_temp_offset", advancedDraft.fan_temp_offset + 1)}>+</button>
+                  onclick={() => {
+                    if (!advancedDraft) return;
+                    setAdvancedField("fan_temp_offset", advancedDraft.fan_temp_offset + 1);
+                  }}>+</button>
               </div>
             </div>
           </section>
 
           <section class="control-section" class:api-blocked={apiSwitchOff}>
             <h4>{msg("control.advanced.coin")}</h4>
-            <label class="password-field">
+            <label class="control-field-row">
               <span>{markApiWrite(msg("control.advanced.cointype"))}</span>
               <select
+                class="control-select"
                 disabled={controlDisabled(true)}
                 value={advancedDraft.cointype}
                 onchange={(e) => setAdvancedField("cointype", e.currentTarget.value)}
@@ -1543,9 +1619,10 @@
 
           <section class="control-section" class:api-blocked={apiSwitchOff}>
             <h4>{msg("control.advanced.network")}</h4>
-            <label class="password-field">
+            <label class="control-field-row">
               <span>{markApiWrite(msg("control.advanced.hostname"))}</span>
               <input
+                class="control-input"
                 type="text"
                 value={advancedDraft.hostname}
                 disabled={controlDisabled(true)}
@@ -1561,49 +1638,88 @@
               onchange={(enabled) => setAdvancedField("net_dhcp", enabled)}
             />
             {#if !advancedDraft.net_dhcp}
-              <div class="control-pool-fields">
-                <label class="password-field">
-                  <span>{msg("control.advanced.netIp")}</span>
-                  <input type="text" value={advancedDraft.net_ip} disabled={controlDisabled(true)} oninput={(e) => setAdvancedField("net_ip", e.currentTarget.value)} />
-                </label>
-                <label class="password-field">
-                  <span>{msg("control.advanced.netMask")}</span>
-                  <input type="text" value={advancedDraft.net_mask} disabled={controlDisabled(true)} oninput={(e) => setAdvancedField("net_mask", e.currentTarget.value)} />
-                </label>
-                <label class="password-field">
-                  <span>{msg("control.advanced.netGate")}</span>
-                  <input type="text" value={advancedDraft.net_gate} disabled={controlDisabled(true)} oninput={(e) => setAdvancedField("net_gate", e.currentTarget.value)} />
-                </label>
-                <label class="password-field">
-                  <span>{msg("control.advanced.netDns")}</span>
-                  <input type="text" value={advancedDraft.net_dns} disabled={controlDisabled(true)} oninput={(e) => setAdvancedField("net_dns", e.currentTarget.value)} />
-                </label>
+              <div class="control-net-fields">
+                {#each [
+                  { key: "net_ip", label: "control.advanced.netIp", placeholder: "192.168.0.100" },
+                  { key: "net_mask", label: "control.advanced.netMask", placeholder: "255.255.255.0" },
+                  { key: "net_gate", label: "control.advanced.netGate", placeholder: "192.168.0.1" },
+                  { key: "net_dns", label: "control.advanced.netDns", placeholder: "8.8.8.8" },
+                ] as field (field.key)}
+                  {@const netKey = field.key as NetFieldKey}
+                  {@const netValue = advancedDraft[netKey]}
+                  <div class="control-field-row" class:invalid={showNetFieldError(netKey, netValue)}>
+                    <span>{msg(field.label as MessageKey)}</span>
+                    <div class="control-field-input-wrap">
+                      <input
+                        class="control-input control-input-mono"
+                        type="text"
+                        inputmode="decimal"
+                        autocomplete="off"
+                        placeholder={field.placeholder}
+                        value={netValue}
+                        disabled={controlDisabled(true)}
+                        oninput={(e) => setNetIpv4Field(netKey, e.currentTarget.value)}
+                      />
+                      {#if showNetFieldError(netKey, netValue)}
+                        <span class="control-field-error">{msg(netFieldErrorKey(netKey, netValue)!)}</span>
+                      {/if}
+                    </div>
+                  </div>
+                {/each}
               </div>
             {/if}
           </section>
 
           <section class="control-section" class:api-blocked={apiSwitchOff}>
             <h4>{msg("control.advanced.time")}</h4>
-            <div class="control-pool-fields">
-              <label class="password-field">
+            <div class="control-fields">
+              <label class="control-field-row">
                 <span>{markApiWrite(msg("control.advanced.timezone"))}</span>
-                <input type="text" value={advancedDraft.timezone} disabled={controlDisabled(true)} oninput={(e) => setAdvancedField("timezone", e.currentTarget.value)} />
+                <select
+                  class="control-select control-select-wide"
+                  disabled={controlDisabled(true)}
+                  value={advancedDraft.zonename}
+                  onchange={(e) => setZonename(e.currentTarget.value)}
+                >
+                  {#each timezoneOptions as zone (zone)}
+                    <option value={zone}>{zone}</option>
+                  {/each}
+                </select>
               </label>
-              <label class="password-field">
-                <span>{markApiWrite(msg("control.advanced.zonename"))}</span>
-                <input type="text" value={advancedDraft.zonename} disabled={controlDisabled(true)} oninput={(e) => setAdvancedField("zonename", e.currentTarget.value)} />
-              </label>
-              <label class="password-field">
+              <label class="control-field-row">
                 <span>{markApiWrite(msg("control.advanced.ntp"))}</span>
-                <input type="text" value={advancedDraft.ntp_servers} disabled={controlDisabled(true)} oninput={(e) => setAdvancedField("ntp_servers", e.currentTarget.value)} />
+                <input
+                  class="control-input control-input-wide"
+                  type="text"
+                  value={advancedDraft.ntp_servers}
+                  disabled={controlDisabled(true)}
+                  placeholder="pool.ntp.org,time.google.com"
+                  oninput={(e) => setAdvancedField("ntp_servers", e.currentTarget.value)}
+                />
               </label>
             </div>
             <div class="control-stepper">
               <span>{markApiWrite(msg("control.advanced.timeRandom"))}</span>
               <div class="control-stepper-actions">
-                <input type="number" min="0" max="120" value={advancedDraft.time_random_start} disabled={controlDisabled(true)} oninput={(e) => setAdvancedField("time_random_start", Number(e.currentTarget.value) || 0)} />
-                <span>–</span>
-                <input type="number" min="0" max="120" value={advancedDraft.time_random_stop} disabled={controlDisabled(true)} oninput={(e) => setAdvancedField("time_random_stop", Number(e.currentTarget.value) || 0)} />
+                <input
+                  class="control-input control-input-num"
+                  type="number"
+                  min="0"
+                  max="120"
+                  value={advancedDraft.time_random_start}
+                  disabled={controlDisabled(true)}
+                  oninput={(e) => setAdvancedField("time_random_start", Number(e.currentTarget.value) || 0)}
+                />
+                <span class="control-range-sep">–</span>
+                <input
+                  class="control-input control-input-num"
+                  type="number"
+                  min="0"
+                  max="120"
+                  value={advancedDraft.time_random_stop}
+                  disabled={controlDisabled(true)}
+                  oninput={(e) => setAdvancedField("time_random_stop", Number(e.currentTarget.value) || 0)}
+                />
               </div>
             </div>
           </section>
@@ -1614,7 +1730,7 @@
             <div class="control-actions">
               <input
                 type="number"
-                class="control-inline-input"
+                class="control-input control-input-num"
                 min="0"
                 placeholder="W"
                 bind:value={tempPowerWatts}
@@ -1700,7 +1816,7 @@
             <button
               type="button"
               class="btn primary btn-with-spinner control-apply-btn"
-              disabled={modalBusy || controlDisabled(true)}
+              disabled={modalBusy || controlDisabled(true) || advancedStaticNetBlocking}
               onclick={() => void commitAdvancedDraft()}
             >
               {#if applying}
@@ -1820,18 +1936,109 @@
     color: var(--accent);
   }
 
-  .control-pool-fields {
+  .control-fields {
     display: grid;
     gap: 0.65rem;
   }
 
-  .control-inline-input {
-    width: 6rem;
+  .control-net-fields {
+    display: grid;
+    gap: 0.45rem;
+    margin-top: 0.35rem;
+  }
+
+  .control-field-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    font-size: 0.88rem;
+  }
+
+  .control-field-row > span:first-child {
+    flex: 0 0 7.25rem;
+    padding-top: 0.45rem;
+    color: var(--text-muted);
+    line-height: 1.3;
+  }
+
+  .control-field-input-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+  }
+
+  .control-field-row.invalid .control-input {
+    border-color: var(--danger);
+  }
+
+  .control-field-error {
+    font-size: 0.78rem;
+    line-height: 1.3;
+    color: var(--danger);
+  }
+
+  .control-field-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.88rem;
+  }
+
+  .control-field-stack > span {
+    color: var(--text-muted);
+  }
+
+  .control-input,
+  .control-select {
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 0.4rem 0.55rem;
+    padding: 0.45rem 0.6rem;
     background: var(--bg-elevated);
     color: var(--text-primary);
+    font: inherit;
+    transition: border-color 120ms, box-shadow 120ms;
+  }
+
+  .control-input:focus,
+  .control-select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+
+  .control-input:disabled,
+  .control-select:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .control-input-mono {
+    width: 11.5rem;
+    max-width: 100%;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+  }
+
+  .control-input-wide,
+  .control-select-wide {
+    width: min(18rem, 100%);
+    max-width: 100%;
+  }
+
+  .control-select-wide {
+    max-height: 12rem;
+  }
+
+  .control-input-num {
+    width: 4.5rem;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .control-range-sep {
+    color: var(--text-muted);
   }
 
   .control-danger h4 {
@@ -1890,6 +2097,10 @@
     padding: 0.45rem 0.6rem;
     background: var(--bg-elevated);
     color: var(--text-primary);
+  }
+
+  .control-section .control-select {
+    min-width: 6rem;
   }
 
   .password-field input:focus {
