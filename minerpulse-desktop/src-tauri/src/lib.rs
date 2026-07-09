@@ -1,7 +1,7 @@
 use minerpulse_core::drivers::registry::{fetch_whatsminer, fetch_with_detect};
 use minerpulse_core::model::BoardChipMap;
 use minerpulse_core::{
-    compute_needs_setup, enable_api_switch, import_file_content,
+    compute_needs_setup, enable_api_switch_detailed, import_file_content,
     list_scan_subnets as discover_subnets, load_mpulse, normalize_poll_rate_hz, poll_interval_ms,
     poll_wait_after_tick, probe_whatsminer_access, save_session, save_snapshot, scan_network,
     scan_network_streaming, test_luci_credentials, EntitlementGate, ErrorResponse, FetchOptions,
@@ -132,6 +132,46 @@ impl ReadSession {
     }
 }
 
+/// One active log export; cancel stops the blocking download cooperatively.
+struct ExportLogSession {
+    active_cancel: Mutex<Option<Arc<AtomicBool>>>,
+}
+
+impl ExportLogSession {
+    fn new() -> Self {
+        Self {
+            active_cancel: Mutex::new(None),
+        }
+    }
+
+    fn begin(&self) -> Arc<AtomicBool> {
+        let mut guard = self.active_cancel.lock().unwrap();
+        if let Some(previous) = guard.take() {
+            previous.store(true, Ordering::SeqCst);
+        }
+        let cancel = Arc::new(AtomicBool::new(false));
+        *guard = Some(cancel.clone());
+        cancel
+    }
+
+    fn cancel_active(&self) {
+        let mut guard = self.active_cancel.lock().unwrap();
+        if let Some(active) = guard.take() {
+            active.store(true, Ordering::SeqCst);
+        }
+    }
+
+    fn finish(&self, cancel: &Arc<AtomicBool>) {
+        let mut guard = self.active_cancel.lock().unwrap();
+        if guard
+            .as_ref()
+            .is_some_and(|active| Arc::ptr_eq(active, cancel))
+        {
+            *guard = None;
+        }
+    }
+}
+
 struct AppState {
     rate_limiter: Mutex<RateLimiter>,
     tier: Mutex<SubscriptionTier>,
@@ -162,7 +202,7 @@ fn read_fetch_options(
         .or(cloud_auth);
     FetchOptions {
         luci_auth,
-        fast_poll: true,
+        fast_poll: false,
         fetch_chips: true,
         cancel,
     }
@@ -568,6 +608,7 @@ struct EnableWhatsminerApiRequest {
 #[derive(Debug, Serialize)]
 struct EnableWhatsminerApiResponse {
     enabled: bool,
+    message: Option<String>,
     access: WhatsminerAccessInfo,
 }
 
@@ -588,7 +629,7 @@ async fn enable_whatsminer_api(
         let password = password.clone();
         move || {
             let _io = gate.lock().unwrap_or_else(|e| e.into_inner());
-            enable_api_switch(&ip, &username, &password)
+            enable_api_switch_detailed(&ip, &username, &password)
         }
     })
     .await
@@ -618,8 +659,9 @@ async fn enable_whatsminer_api(
         creds.remember_ip_mac(&request.ip, mac);
     }
     Ok(EnableWhatsminerApiResponse {
-        enabled,
-        access: status.to_info(!enabled || !status.luci_auth_ok),
+        enabled: enabled.ok,
+        message: enabled.message.map(str::to_string),
+        access: status.to_info(!enabled.ok || !status.luci_auth_ok),
     })
 }
 
@@ -1300,6 +1342,7 @@ struct WhatsminerControlGetRequest {
 struct WhatsminerControlApplyRequest {
     ip: String,
     port: Option<u16>,
+    username: Option<String>,
     password: String,
     action: minerpulse_core::WhatsminerControlAction,
 }
@@ -1372,12 +1415,16 @@ async fn apply_whatsminer_control(
 ) -> Result<minerpulse_core::WhatsminerControlApplyResult, ErrorResponse> {
     let ip = request.ip.clone();
     let port = request.port.unwrap_or(4028);
+    let username = request
+        .username
+        .filter(|u| !u.trim().is_empty())
+        .unwrap_or_else(|| "admin".to_string());
     let password = request.password.clone();
     let action = request.action.clone();
     let gate = app.state::<MinerIoGate>().0.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let _io = gate.lock().unwrap_or_else(|e| e.into_inner());
-        minerpulse_core::apply_control_action(&ip, port, &password, &action)
+        minerpulse_core::apply_control_action(&ip, port, &username, &password, &action)
             .map_err(|e| ErrorResponse::from(&e))
     })
     .await
@@ -1388,6 +1435,11 @@ async fn apply_whatsminer_control(
 }
 
 #[tauri::command]
+fn cancel_whatsminer_log_export(export_session: State<ExportLogSession>) {
+    export_session.cancel_active();
+}
+
+#[tauri::command]
 async fn export_whatsminer_log(
     app: AppHandle,
     request: WhatsminerControlExportRequest,
@@ -1395,16 +1447,22 @@ async fn export_whatsminer_log(
     let ip = request.ip.clone();
     let password = request.password.clone();
     let path = PathBuf::from(&request.path);
+    let export_session = app.state::<ExportLogSession>();
+    let cancel = export_session.begin();
+    let cancel_worker = cancel.clone();
     let gate = app.state::<MinerIoGate>().0.clone();
-    let bytes = tauri::async_runtime::spawn_blocking(move || {
+    let result = tauri::async_runtime::spawn_blocking(move || {
         let _io = gate.lock().unwrap_or_else(|e| e.into_inner());
-        minerpulse_core::export_miner_log(&ip, &password).map_err(|e| ErrorResponse::from(&e))
+        minerpulse_core::export_miner_log(&ip, 4028, &password, Some(&cancel_worker))
+            .map_err(|e| ErrorResponse::from(&e))
     })
     .await
     .map_err(|_| ErrorResponse {
         code: minerpulse_core::ErrorCode::InvalidInput,
         args: None,
-    })??;
+    })?;
+    export_session.finish(&cancel);
+    let bytes = result?;
     std::fs::write(&path, bytes).map_err(|_| ErrorResponse {
         code: minerpulse_core::ErrorCode::IoError,
         args: None,
@@ -1554,6 +1612,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(MinerIoGate::new())
         .manage(ReadSession::new())
+        .manage(ExportLogSession::new())
         .manage(session_store::SessionStore::new())
         .manage(AppState {
             rate_limiter: Mutex::new(RateLimiter::new(10)),
@@ -1601,6 +1660,7 @@ pub fn run() {
             change_whatsminer_super_password,
             apply_whatsminer_control,
             export_whatsminer_log,
+            cancel_whatsminer_log_export,
             sync_window_frame,
         ])
         .setup(|app| {

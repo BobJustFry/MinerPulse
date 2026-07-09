@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { t, type Locale, type MessageKey } from "$lib/i18n";
   import WhatsminerErrorModal from "$lib/components/WhatsminerErrorModal.svelte";
   import {
@@ -39,16 +38,21 @@
   let errorModalOpen = $state(false);
   let selectedErrorCode = $state("");
 
-  onMount(() => {
-    if (snapshot.identity.vendor === "whatsminer" && (snapshot.faults?.length ?? 0) > 0) {
-      loadWhatsminerErrorCatalog()
-        .then((catalog) => {
-          errorCatalog = catalog;
-        })
-        .catch(() => {
-          errorCatalog = null;
-        });
+  $effect(() => {
+    if (snapshot.identity.vendor !== "whatsminer" || (snapshot.faults?.length ?? 0) === 0) {
+      return;
     }
+    let cancelled = false;
+    loadWhatsminerErrorCatalog()
+      .then((catalog) => {
+        if (!cancelled) errorCatalog = catalog;
+      })
+      .catch(() => {
+        if (!cancelled) errorCatalog = null;
+      });
+    return () => {
+      cancelled = true;
+    };
   });
 
   function msg(key: MessageKey, args?: Record<string, string | number>) {
@@ -68,10 +72,29 @@
     return values.join(" / ");
   }
 
-  function faultLabel(code: string): string {
-    if (!errorCatalog) return code;
+  function faultName(code: string): string | null {
+    if (!errorCatalog) return null;
     const entry = lookupWhatsminerError(errorCatalog, code);
-    return entry ? pickLocalizedText(locale, entry.name, code) : code;
+    if (!entry) return null;
+    const name = pickLocalizedText(locale, entry.name, "").trim();
+    if (!name || name.toLowerCase() === code.trim().toLowerCase()) return null;
+    return name;
+  }
+
+  function formatFaultTime(raw: string): string {
+    const normalized = raw.trim().replace("T", " ");
+    const parsed = new Date(normalized);
+    if (!Number.isNaN(parsed.getTime())) {
+      const loc = locale === "ru" ? "ru-RU" : locale === "zh-CN" ? "zh-CN" : "en-US";
+      return parsed.toLocaleString(loc, {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+    }
+    return normalized;
   }
 
   function openError(code: string) {
@@ -352,20 +375,28 @@
     {/if}
 
     {#if isWhatsminer() && (snapshot.faults?.length ?? 0) > 0}
-      <section class="data-section span-full">
+      <section class="data-section span-full data-faults-section">
         <header class="data-section-head">{msg("data.group.errors")}</header>
-        <div class="fault-list">
+        <div class="fault-grid">
           {#each snapshot.faults ?? [] as fault (fault.code + (fault.occurred_at ?? ""))}
+            {@const name = faultName(fault.code)}
             <button
               type="button"
-              class="fault-link"
+              class="fault-card"
               title={msg("errors.openHint")}
               onclick={() => openError(fault.code)}
             >
-              <span class="fault-code">{fault.code}</span>
-              <span class="fault-name">{faultLabel(fault.code)}</span>
+              <div class="fault-card-top">
+                <span class="fault-code-badge">{fault.code}</span>
+                <span class="fault-card-action" aria-hidden="true">›</span>
+              </div>
+              {#if name}
+                <div class="fault-card-name">{name}</div>
+              {/if}
               {#if fault.occurred_at}
-                <span class="fault-time">{fault.occurred_at}</span>
+                <time class="fault-card-time" datetime={fault.occurred_at}>
+                  {formatFaultTime(fault.occurred_at)}
+                </time>
               {/if}
             </button>
           {/each}

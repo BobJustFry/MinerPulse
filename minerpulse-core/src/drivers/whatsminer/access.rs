@@ -1,10 +1,12 @@
 use super::options::WhatsminerFetchOptions;
+use crate::error::{ErrorCode, MinerPulseError};
 use crate::model::WhatsminerAccessInfo;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
 use std::net::TcpStream;
+use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use super::luci::enable_api_switch_luci;
@@ -259,6 +261,104 @@ fn api_transact_timed(
     let mut buf = vec![0u8; resp_len];
     stream.read_exact(&mut buf).map_err(|_| ())?;
     String::from_utf8(buf).map_err(|_| ())
+}
+
+const LOG_V3_CHUNK: usize = 10240;
+
+/// API 3.0 `get.log.download`: JSON header with `logsize`, then raw chunks on same socket.
+pub fn download_log_v3(host: &str, cancel: Option<&AtomicBool>) -> Result<Vec<u8>, MinerPulseError> {
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+    use std::sync::atomic::Ordering;
+    use std::time::Duration;
+
+    fn check_cancel(cancel: Option<&AtomicBool>) -> Result<(), MinerPulseError> {
+        if cancel.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+            return Err(MinerPulseError::operation_cancelled());
+        }
+        Ok(())
+    }
+
+    fn read_fully(
+        stream: &mut TcpStream,
+        buf: &mut [u8],
+        cancel: Option<&AtomicBool>,
+    ) -> Result<(), MinerPulseError> {
+        let mut off = 0;
+        while off < buf.len() {
+            check_cancel(cancel)?;
+            match stream.read(&mut buf[off..]) {
+                Ok(0) => return Err(MinerPulseError::stream_broken()),
+                Ok(n) => off += n,
+                Err(_) => return Err(MinerPulseError::stream_broken()),
+            }
+        }
+        Ok(())
+    }
+
+    check_cancel(cancel)?;
+    let addr = format!("{host}:{WHATSMINER_API_PORT}");
+    let mut stream = TcpStream::connect_timeout(
+        &addr.parse().map_err(|_| MinerPulseError::conn_failed())?,
+        Duration::from_secs(5),
+    )
+    .map_err(|_| MinerPulseError::conn_failed())?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(120)))
+        .map_err(|_| MinerPulseError::conn_failed())?;
+    stream
+        .set_write_timeout(Some(Duration::from_secs(10)))
+        .map_err(|_| MinerPulseError::conn_failed())?;
+
+    let payload = r#"{"cmd":"get.log.download"}"#;
+    let bytes = payload.as_bytes();
+    stream
+        .write_all(&(bytes.len() as u32).to_le_bytes())
+        .map_err(|_| MinerPulseError::stream_broken())?;
+    stream
+        .write_all(bytes)
+        .map_err(|_| MinerPulseError::stream_broken())?;
+
+    let mut len_buf = [0u8; 4];
+    read_fully(&mut stream, &mut len_buf, cancel)?;
+    let resp_len = u32::from_le_bytes(len_buf) as usize;
+    if resp_len == 0 || resp_len > 256 * 1024 {
+        return Err(MinerPulseError::with_code(ErrorCode::ParseFailed));
+    }
+    let mut header = vec![0u8; resp_len];
+    read_fully(&mut stream, &mut header, cancel)?;
+
+    let value: Value = serde_json::from_slice(&header)
+        .map_err(|_| MinerPulseError::with_code(ErrorCode::ParseFailed))?;
+    if value.get("code").and_then(|c| c.as_i64()) != Some(0) {
+        return Err(MinerPulseError::Coded {
+            code: ErrorCode::ParseFailed,
+            message: value
+                .get("msg")
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
+        });
+    }
+
+    let total: usize = value
+        .get("msg")
+        .and_then(|m| m.get("logsize"))
+        .and_then(|v| v.as_str())
+        .or_else(|| value.get("msg").and_then(|v| v.as_str()))
+        .ok_or_else(|| MinerPulseError::with_code(ErrorCode::ParseFailed))?
+        .trim()
+        .parse()
+        .map_err(|_| MinerPulseError::with_code(ErrorCode::ParseFailed))?;
+
+    let mut out = Vec::with_capacity(total);
+    while out.len() < total {
+        check_cancel(cancel)?;
+        let need = LOG_V3_CHUNK.min(total - out.len());
+        let mut chunk = vec![0u8; need];
+        read_fully(&mut stream, &mut chunk, cancel)?;
+        out.extend_from_slice(&chunk);
+    }
+    Ok(out)
 }
 
 pub fn parse_device_info(json: &str) -> Option<DeviceInfoProbe> {

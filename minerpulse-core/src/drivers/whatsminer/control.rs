@@ -1,4 +1,5 @@
 use super::access::{api_request, enable_api_switch, fetch_device_info, generate_api_token};
+use super::luci::test_luci_credentials;
 #[cfg(test)]
 use super::access::parse_device_info;
 use super::legacy4028::send_legacy_command;
@@ -23,7 +24,7 @@ pub struct WhatsminerControlState {
     pub led_mode: Option<String>,
     pub power_mode: Option<String>,
     pub power_limit_w: Option<u32>,
-    pub target_freq_pct: Option<u32>,
+    pub target_freq_pct: Option<i32>,
     pub upfreq_speed: Option<u32>,
     pub power_percent: Option<u32>,
     pub heat_mode: Option<String>,
@@ -44,7 +45,7 @@ pub enum WhatsminerControlAction {
     SetLed { mode: String },
     SetPowerMode { mode: String },
     SetPowerLimit { watts: u32 },
-    SetTargetFreq { percent: u32 },
+    SetTargetFreq { percent: i32 },
     SetUpfreqSpeed { speed: u32 },
     SetPowerPercent { percent: u32 },
     Reboot,
@@ -57,6 +58,19 @@ pub struct WhatsminerControlApplyResult {
     pub ok: bool,
     pub message: Option<String>,
     pub state: Option<WhatsminerControlState>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ApiSwitchEnableResult {
+    pub ok: bool,
+    pub message: Option<&'static str>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum V3ApiSwitchAttempt {
+    Enabled,
+    Unsupported,
+    Failed,
 }
 
 pub fn action_requires_v3_write(action: &WhatsminerControlAction) -> bool {
@@ -74,7 +88,7 @@ pub fn read_control_state(host: &str) -> Result<WhatsminerControlState, MinerPul
 
 pub fn read_control_state_with_auth(
     host: &str,
-    password: Option<&str>,
+    _password: Option<&str>,
 ) -> Result<WhatsminerControlState, MinerPulseError> {
     let device = fetch_device_info(host).ok_or_else(MinerPulseError::conn_failed)?;
     if !device.code_ok {
@@ -90,11 +104,7 @@ pub fn read_control_state_with_auth(
 
     let mut state = build_control_state(&device, &miner_setting, system_setting.as_ref());
     state.led_mode = led_mode;
-    if state.api_switch == Some(false) {
-        state.writes_blocked = false;
-    } else if let Some(p) = password.filter(|p| !p.is_empty()) {
-        state.writes_blocked = !probe_v3_write_access(host, p);
-    }
+    state.writes_blocked = false;
     Ok(state)
 }
 
@@ -187,12 +197,37 @@ pub fn probe_v3_write_access(host: &str, password: &str) -> bool {
     }
 }
 
+/// Harmless write probe via legacy 4028 (same path as WhatsMinerTool Remote Ctrl).
+pub fn probe_legacy_write_access(host: &str, port: u16, password: &str) -> bool {
+    let enabled = read_control_state(host)
+        .ok()
+        .and_then(|s| s.fast_boot)
+        .unwrap_or(false);
+    let cmd = if enabled {
+        r#"{"token":"{sign}","cmd":"enable_btminer_fast_boot"}"#
+    } else {
+        r#"{"token":"{sign}","cmd":"disable_btminer_fast_boot"}"#
+    };
+    send_legacy_command(host, port, password, cmd)
+        .map(|response| response.get("STATUS").and_then(|v| v.as_str()) == Some("S"))
+        .unwrap_or(false)
+}
+
+fn action_has_legacy_path(action: &WhatsminerControlAction) -> bool {
+    legacy_command_template(action).is_some()
+}
+
 pub fn apply_control_action(
     host: &str,
     port: u16,
+    username: &str,
     password: &str,
     action: &WhatsminerControlAction,
 ) -> Result<WhatsminerControlApplyResult, MinerPulseError> {
+    if matches!(action, WhatsminerControlAction::SetApiSwitch { enabled: true }) {
+        return apply_api_switch_enable(host, username, password, action);
+    }
+
     let pre_state = read_control_state(host).ok();
     let enabling_api_switch = matches!(
         action,
@@ -201,43 +236,27 @@ pub fn apply_control_action(
         .as_ref()
         .is_some_and(|s| s.api_switch == Some(false));
 
-    if action_requires_v3_write(action)
-        && !enabling_api_switch
-        && !probe_v3_write_access(host, password)
-    {
-        return Ok(WhatsminerControlApplyResult {
-            ok: false,
-            message: Some("default_password_blocked".into()),
-            state: read_control_state_with_auth(host, Some(password)).ok(),
-        });
+    // WhatsMinerTool path: TCP 4028 + get_token (API 2.x manual).
+    if action_has_legacy_path(action) {
+        return apply_control_action_legacy(host, port, password, action);
     }
 
+    // API 3.0 path: TCP 4433 set.* (whatsminer-api-3.0.0 doc).
     let v3_result = apply_control_action_v3(host, password, action);
     match v3_result {
-        Ok(result) if result.ok || !is_password_blocked(result.message.as_deref()) => return Ok(result),
+        Ok(result) if result.ok => Ok(result),
         Ok(result) => {
-            if let Ok(legacy) = apply_control_action_legacy(host, port, password, action) {
-                return Ok(legacy);
-            }
-            if let Some(fallback) = try_enable_api_switch_luci(host, password, action, enabling_api_switch) {
+            if let Some(fallback) =
+                try_enable_api_switch_luci(host, username, password, action, enabling_api_switch)
+            {
                 return Ok(fallback);
             }
-            Ok(WhatsminerControlApplyResult {
-                ok: false,
-                message: result.message.or(Some("default_password_blocked".into())),
-                state: read_control_state_with_auth(host, Some(password)).ok().map(|mut s| {
-                    if s.api_switch != Some(false) {
-                        s.writes_blocked = true;
-                    }
-                    s
-                }),
-            })
+            Ok(result)
         }
         Err(err) => {
-            if let Ok(legacy) = apply_control_action_legacy(host, port, password, action) {
-                return Ok(legacy);
-            }
-            if let Some(fallback) = try_enable_api_switch_luci(host, password, action, enabling_api_switch) {
+            if let Some(fallback) =
+                try_enable_api_switch_luci(host, username, password, action, enabling_api_switch)
+            {
                 return Ok(fallback);
             }
             Err(err)
@@ -245,8 +264,97 @@ pub fn apply_control_action(
     }
 }
 
+fn classify_v3_api_switch_response(value: &Value) -> V3ApiSwitchAttempt {
+    let code = value.get("code").and_then(|c| c.as_i64()).unwrap_or(-1);
+    if code == 0 {
+        return V3ApiSwitchAttempt::Enabled;
+    }
+    let msg = value
+        .get("msg")
+        .and_then(|m| m.as_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if code == -2 && msg.contains("invalid command") {
+        return V3ApiSwitchAttempt::Unsupported;
+    }
+    V3ApiSwitchAttempt::Failed
+}
+
+fn try_enable_api_switch_v3(host: &str, password: &str) -> V3ApiSwitchAttempt {
+    let response = match signed_api_request(host, password, "set.system.apiswitch", json!("enable")) {
+        Ok(value) => value,
+        Err(_) => return V3ApiSwitchAttempt::Failed,
+    };
+    classify_v3_api_switch_response(&response)
+}
+
+fn api_switch_is_on(host: &str) -> bool {
+    fetch_device_info(host).is_some_and(|info| info.api_switch == Some(true))
+}
+
+/// Enable API Switch via LuCI and, when supported, API 3.0. Returns a stable message code on failure.
+pub fn enable_api_switch_detailed(
+    host: &str,
+    username: &str,
+    password: &str,
+) -> ApiSwitchEnableResult {
+    if enable_api_switch(host, username, password) || api_switch_is_on(host) {
+        return ApiSwitchEnableResult {
+            ok: true,
+            message: None,
+        };
+    }
+
+    let v3 = try_enable_api_switch_v3(host, password);
+    if v3 == V3ApiSwitchAttempt::Enabled && api_switch_is_on(host) {
+        return ApiSwitchEnableResult {
+            ok: true,
+            message: None,
+        };
+    }
+
+    let message = if !test_luci_credentials(host, username, password) {
+        Some("api_switch_web_auth_failed")
+    } else if v3 == V3ApiSwitchAttempt::Unsupported {
+        Some("api_switch_manual_required")
+    } else {
+        Some("api_switch_enable_failed")
+    };
+    ApiSwitchEnableResult {
+        ok: false,
+        message,
+    }
+}
+
+fn apply_api_switch_enable(
+    host: &str,
+    username: &str,
+    password: &str,
+    action: &WhatsminerControlAction,
+) -> Result<WhatsminerControlApplyResult, MinerPulseError> {
+    let result = enable_api_switch_detailed(host, username, password);
+    if result.ok {
+        let verified = verify_action_with_auth(host, Some(password), action).unwrap_or(false);
+        return Ok(WhatsminerControlApplyResult {
+            ok: verified,
+            message: if verified {
+                None
+            } else {
+                Some("verify_failed".into())
+            },
+            state: read_control_state_with_auth(host, Some(password)).ok(),
+        });
+    }
+    Ok(WhatsminerControlApplyResult {
+        ok: false,
+        message: result.message.map(str::to_string),
+        state: read_control_state_with_auth(host, Some(password)).ok(),
+    })
+}
+
 fn try_enable_api_switch_luci(
     host: &str,
+    username: &str,
     password: &str,
     action: &WhatsminerControlAction,
     enabling_api_switch: bool,
@@ -254,7 +362,7 @@ fn try_enable_api_switch_luci(
     if !enabling_api_switch {
         return None;
     }
-    if !enable_api_switch(host, "admin", password) {
+    if !enable_api_switch(host, username, password) {
         return None;
     }
     let verified = verify_action_with_auth(host, Some(password), action).unwrap_or(false);
@@ -269,15 +377,6 @@ fn try_enable_api_switch_luci(
         },
         state: read_control_state_with_auth(host, Some(password)).ok(),
     })
-}
-
-fn is_password_blocked(message: Option<&str>) -> bool {
-    message
-        .map(|m| {
-            let lower = m.to_ascii_lowercase();
-            lower.contains("password") || lower.contains("default_password_blocked")
-        })
-        .unwrap_or(false)
 }
 
 fn apply_control_action_v3(
@@ -336,7 +435,7 @@ fn apply_control_action_legacy(
             message: None,
         }
     })?;
-    let response = send_legacy_command(host, port, password, cmd)?;
+    let response = send_legacy_command(host, port, password, &cmd)?;
     let ok = response.get("STATUS").and_then(|v| v.as_str()) == Some("S");
     thread::sleep(VERIFY_DELAY);
     if !ok {
@@ -363,47 +462,67 @@ fn apply_control_action_legacy(
     })
 }
 
-fn legacy_command_template(action: &WhatsminerControlAction) -> Option<&'static str> {
+fn legacy_command_template(action: &WhatsminerControlAction) -> Option<String> {
     Some(match action {
         WhatsminerControlAction::SetMining { enabled: true } => {
-            r#"{"token":"{sign}","cmd":"power_on"}"#
+            r#"{"token":"{sign}","cmd":"power_on"}"#.into()
         }
         WhatsminerControlAction::SetMining { enabled: false } => {
-            r#"{"token":"{sign}","cmd":"power_off"}"#
+            r#"{"token":"{sign}","cmd":"power_off"}"#.into()
+        }
+        WhatsminerControlAction::SetFastBoot { enabled: true } => {
+            r#"{"token":"{sign}","cmd":"enable_btminer_fast_boot"}"#.into()
+        }
+        WhatsminerControlAction::SetFastBoot { enabled: false } => {
+            r#"{"token":"{sign}","cmd":"disable_btminer_fast_boot"}"#.into()
+        }
+        WhatsminerControlAction::SetWebPools { enabled: true } => {
+            r#"{"token":"{sign}","cmd":"enable_web_pools"}"#.into()
+        }
+        WhatsminerControlAction::SetWebPools { enabled: false } => {
+            r#"{"token":"{sign}","cmd":"disable_web_pools"}"#.into()
+        }
+        WhatsminerControlAction::SetLed { mode } if mode == "auto" => {
+            r#"{"token":"{sign}","cmd":"set_led","param":"auto"}"#.into()
         }
         WhatsminerControlAction::SetPowerMode { mode } => match mode.as_str() {
-            "low" => r#"{"token":"{sign}","cmd":"set_low_power"}"#,
-            "high" => r#"{"token":"{sign}","cmd":"set_high_power"}"#,
-            _ => r#"{"token":"{sign}","cmd":"set_normal_power"}"#,
+            "low" => r#"{"token":"{sign}","cmd":"set_low_power"}"#.into(),
+            "high" => r#"{"token":"{sign}","cmd":"set_high_power"}"#.into(),
+            _ => r#"{"token":"{sign}","cmd":"set_normal_power"}"#.into(),
         },
-        WhatsminerControlAction::Reboot => r#"{"token":"{sign}","cmd":"reboot"}"#,
-        _ => return None,
+        WhatsminerControlAction::SetPowerLimit { watts } => {
+            format!(r#"{{"token":"{{sign}}","cmd":"adjust_power_limit","power_limit":"{watts}"}}"#)
+        }
+        WhatsminerControlAction::SetTargetFreq { percent } => {
+            format!(r#"{{"token":"{{sign}}","cmd":"set_target_freq","percent":"{percent}"}}"#)
+        }
+        WhatsminerControlAction::SetUpfreqSpeed { speed } => {
+            format!(r#"{{"token":"{{sign}}","cmd":"adjust_upfreq_speed","upfreq_speed":"{speed}"}}"#)
+        }
+        WhatsminerControlAction::SetPowerPercent { percent } => {
+            format!(r#"{{"token":"{{sign}}","cmd":"set_power_pct","percent":"{percent}"}}"#)
+        }
+        WhatsminerControlAction::Reboot => r#"{"token":"{sign}","cmd":"reboot"}"#.into(),
+        WhatsminerControlAction::RestoreSettings => {
+            r#"{"token":"{sign}","cmd":"factory_reset"}"#.into()
+        }
+        WhatsminerControlAction::SetLed { .. } | WhatsminerControlAction::SetApiSwitch { .. } => {
+            return None;
+        }
     })
 }
 
-pub fn export_miner_log(host: &str, password: &str) -> Result<Vec<u8>, MinerPulseError> {
-    let response = signed_api_request(host, password, "get.log.download", json!(""))?;
-    let code = response.get("code").and_then(|c| c.as_i64()).unwrap_or(-1);
-    if code != 0 {
-        return Err(MinerPulseError::Coded {
-            code: ErrorCode::ParseFailed,
-            message: response
-                .get("desc")
-                .and_then(|v| v.as_str())
-                .map(str::to_string),
-        });
+pub fn export_miner_log(
+    host: &str,
+    port: u16,
+    password: &str,
+    cancel: Option<&std::sync::atomic::AtomicBool>,
+) -> Result<Vec<u8>, MinerPulseError> {
+    match super::legacy4028::download_logs(host, port, password, cancel) {
+        Ok(bytes) => Ok(bytes),
+        Err(e) if e.code() == ErrorCode::OperationCancelled => Err(e),
+        Err(_) => super::access::download_log_v3(host, cancel),
     }
-    let msg = response.get("msg").ok_or_else(|| MinerPulseError::with_code(ErrorCode::ParseFailed))?;
-    if let Some(text) = msg.as_str() {
-        return Ok(text.as_bytes().to_vec());
-    }
-    if let Some(data) = msg.get("data").and_then(|v| v.as_str()) {
-        use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-        return BASE64
-            .decode(data)
-            .map_err(|_| MinerPulseError::with_code(ErrorCode::ParseFailed));
-    }
-    serde_json::to_vec(msg).map_err(|_| MinerPulseError::with_code(ErrorCode::ParseFailed))
 }
 
 fn action_to_cmd(action: &WhatsminerControlAction) -> Result<(&'static str, Value), MinerPulseError> {
@@ -517,7 +636,7 @@ fn build_control_state(
         led_mode: None,
         power_mode: json_str(miner_setting, "power-mode"),
         power_limit_w: json_u32(miner_setting, "power-limit"),
-        target_freq_pct: json_u32(miner_setting, "target-freq"),
+        target_freq_pct: json_i64(miner_setting, "target-freq").and_then(|v| i32::try_from(v).ok()),
         upfreq_speed: json_u32(miner_setting, "upfreq-speed"),
         power_percent: json_u32(miner_setting, "power-percent").or_else(|| json_u32(miner_setting, "power")),
         heat_mode: heat_mode.clone(),
@@ -636,6 +755,32 @@ mod tests {
     const LIVE_PASS: &str = "admin";
 
     #[test]
+    fn classifies_v3_api_switch_unsupported() {
+        let value = serde_json::json!({
+            "code": -2,
+            "msg": "invalid command",
+            "desc": "set.system.apiswitch"
+        });
+        assert_eq!(
+            classify_v3_api_switch_response(&value),
+            V3ApiSwitchAttempt::Unsupported
+        );
+    }
+
+    #[test]
+    fn classifies_v3_api_switch_enabled() {
+        let value = serde_json::json!({
+            "code": 0,
+            "msg": "ok",
+            "desc": "set.system.apiswitch"
+        });
+        assert_eq!(
+            classify_v3_api_switch_response(&value),
+            V3ApiSwitchAttempt::Enabled
+        );
+    }
+
+    #[test]
     fn writes_blocked_false_when_api_switch_off() {
         let device = parse_device_info(
             r#"{"code":0,"msg":{"system":{"apiswitch":"0"},"miner":{"working":"true","type":"M50"},"salt":"abc"}}"#,
@@ -645,6 +790,14 @@ mod tests {
         let state = build_control_state(&device, &miner, None);
         assert_eq!(state.api_switch, Some(false));
         assert!(!state.writes_blocked);
+    }
+
+    #[test]
+    #[ignore = "live miner on LAN"]
+    fn live_export_miner_log() {
+        let bytes = export_miner_log("192.168.35.31", 4028, "admin", None).expect("export");
+        assert!(!bytes.is_empty());
+        eprintln!("export_miner_log {} bytes", bytes.len());
     }
 
     #[test]
@@ -669,6 +822,17 @@ mod tests {
     }
 
     #[test]
+    fn parses_negative_target_freq() {
+        let device = parse_device_info(
+            r#"{"code":0,"msg":{"system":{"apiswitch":"1"},"miner":{"working":"true","type":"M50"},"salt":"abc"}}"#,
+        )
+        .unwrap();
+        let miner = serde_json::json!({ "target-freq": -25 });
+        let state = build_control_state(&device, &miner, None);
+        assert_eq!(state.target_freq_pct, Some(-25));
+    }
+
+    #[test]
     #[ignore = "live miner on LAN"]
     fn live_read_control_state() {
         let state = read_control_state(LIVE_HOST).expect("read");
@@ -678,10 +842,28 @@ mod tests {
 
     #[test]
     #[ignore = "live miner on LAN"]
+    fn live_enable_api_switch_35() {
+        let host = "192.168.35.35";
+        let before = read_control_state(host).expect("read");
+        eprintln!("before api_switch={:?}", before.api_switch);
+        let result = apply_control_action(
+            host,
+            4028,
+            "admin",
+            "admin",
+            &WhatsminerControlAction::SetApiSwitch { enabled: true },
+        )
+        .expect("apply");
+        eprintln!("result ok={} msg={:?}", result.ok, result.message);
+    }
+
+    #[test]
+    #[ignore = "live miner on LAN"]
     fn live_toggle_mining_roundtrip() {
         let off = apply_control_action(
             LIVE_HOST,
             4028,
+            "admin",
             LIVE_PASS,
             &WhatsminerControlAction::SetMining { enabled: false },
         )
@@ -692,6 +874,7 @@ mod tests {
         let on = apply_control_action(
             LIVE_HOST,
             4028,
+            "admin",
             LIVE_PASS,
             &WhatsminerControlAction::SetMining { enabled: true },
         )
@@ -722,6 +905,7 @@ mod tests {
         let result = apply_control_action(
             LIVE_HOST,
             4028,
+            "admin",
             LIVE_PASS,
             &WhatsminerControlAction::SetFastBoot { enabled: target },
         )
@@ -731,6 +915,7 @@ mod tests {
         let restore = apply_control_action(
             LIVE_HOST,
             4028,
+            "admin",
             LIVE_PASS,
             &WhatsminerControlAction::SetFastBoot {
                 enabled: !target,
@@ -748,6 +933,7 @@ mod tests {
         let result = apply_control_action(
             LIVE_HOST,
             4028,
+            "admin",
             LIVE_PASS,
             &WhatsminerControlAction::SetWebPools { enabled: target },
         )
@@ -757,6 +943,7 @@ mod tests {
         let restore = apply_control_action(
             LIVE_HOST,
             4028,
+            "admin",
             LIVE_PASS,
             &WhatsminerControlAction::SetWebPools {
                 enabled: !target,

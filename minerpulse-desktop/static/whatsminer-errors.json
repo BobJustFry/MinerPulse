@@ -1523,6 +1523,25 @@
       }
     },
     {
+      "code": "5052",
+      "category": "board",
+      "name": {
+        "en": "Slot2 chip temp protect",
+        "ru": "Температурная защита чипов Slot2",
+        "zh-CN": "Slot2 芯片温度保护"
+      },
+      "description": {
+        "en": "Chip temperature protection triggered on hashboard slot 2 (SM2).",
+        "ru": "Сработала температурная защита чипов на слоте 2 (SM2).",
+        "zh-CN": "算力板 Slot2（SM2）芯片温度保护触发。"
+      },
+      "action": {
+        "en": "Check ambient temperature, airflow, and hashboard cooling; reduce power mode if needed.",
+        "ru": "Проверьте температуру окружающей среды, обдув и охлаждение хеш-платы; при необходимости снизьте режим мощности.",
+        "zh-CN": "检查环境温度、风道与算力板散热，必要时降低功耗模式。"
+      }
+    },
+    {
       "code": "600",
       "category": "environment",
       "name": {
@@ -1558,6 +1577,25 @@
         "en": "Improve ventilation and reduce ambient temperature.",
         "ru": "Улучшите вентиляцию и снизьте температуру окружающей среды.",
         "zh-CN": "改善通风并降低环境温度。"
+      }
+    },
+    {
+      "code": "6030",
+      "category": "board",
+      "name": {
+        "en": "Chip temp overheat",
+        "ru": "Перегрев чипов",
+        "zh-CN": "芯片温度过高"
+      },
+      "description": {
+        "en": "One or more ASIC chips exceeded safe operating temperature.",
+        "ru": "Один или несколько ASIC-чипов превысили безопасную рабочую температуру.",
+        "zh-CN": "一个或多个 ASIC 芯片超过安全工作温度。"
+      },
+      "action": {
+        "en": "Check cooling, clean hashboards, improve ventilation, and reduce power mode.",
+        "ru": "Проверьте охлаждение, очистите хеш-платы, улучшите вентиляцию и снизьте режим мощности.",
+        "zh-CN": "检查散热、清理算力板、改善通风并降低功耗模式。"
       }
     },
     {

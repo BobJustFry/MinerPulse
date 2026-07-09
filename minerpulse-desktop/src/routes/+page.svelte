@@ -512,13 +512,24 @@
     statusText = msg("status.readCancelled");
   }
 
+  function mapApiSwitchEnableMessage(code?: string | null): string {
+    if (code === "api_switch_web_auth_failed") return msg("control.apiSwitch.webAuthFailed");
+    if (code === "api_switch_manual_required") return msg("control.apiSwitch.manualRequired");
+    if (code === "api_switch_enable_failed") return msg("control.apiSwitch.enableFailed");
+    return msg("auth.statusApiOff");
+  }
+
   async function enableWhatsminerApi() {
     const username = whatsminerUser.trim();
     if (!username) return;
     whatsminerEnableBusy = true;
     whatsminerAuthError = "";
     try {
-      const response = await invokeWithTimeout<{ enabled: boolean; access: WhatsminerAccessInfo }>(
+      const response = await invokeWithTimeout<{
+        enabled: boolean;
+        message?: string | null;
+        access: WhatsminerAccessInfo;
+      }>(
         "enable_whatsminer_api",
         {
           request: { ip, username, password: whatsminerPassword },
@@ -527,7 +538,7 @@
       );
       whatsminerSetupAccess = response.access;
       if (!response.enabled) {
-        whatsminerAuthError = msg("auth.statusApiOff");
+        whatsminerAuthError = mapApiSwitchEnableMessage(response.message);
       }
     } catch (err) {
       whatsminerAuthError = formatError(err);
@@ -550,9 +561,14 @@
         WHATSMINER_AUTH_TEST_TIMEOUT_MS,
       );
       whatsminerTestOk = response.ok;
-      if (response.mac && whatsminerSetupAccess) {
-        whatsminerSetupAccess = { ...whatsminerSetupAccess, mac: response.mac };
-      } else if (response.mac) {
+      if (response.ok && whatsminerSetupAccess) {
+        whatsminerSetupAccess = {
+          ...whatsminerSetupAccess,
+          luci_reachable: true,
+          luci_auth_ok: true,
+          mac: response.mac ?? whatsminerSetupAccess.mac,
+        };
+      } else if (response.ok) {
         whatsminerSetupAccess = {
           mac: response.mac,
           api_switch: null,
@@ -626,7 +642,23 @@
       );
 
       if ((response.snapshot.board_chips?.length ?? 0) === 0 && !isSnapshotEmpty(response.snapshot)) {
-        whatsminerAuthError = msg("auth.invalid");
+        const raw = response.snapshot.raw_log ?? "";
+        const protect = /temp protect|temp overheat|chip temp/i.test(raw);
+        if (protect) {
+          whatsminerCustomAuth = !isDefaultWhatsminerCredentials(username, whatsminerPassword);
+          saveConnection();
+          snapshot = response.snapshot;
+          clearCharts();
+          pushChartPoint(response.snapshot, 0);
+          statusText = msg("auth.chipMapProtect");
+          whatsminerAuthOpen = false;
+          whatsminerAuthError = "";
+          const retry = pendingAuthRetry;
+          pendingAuthRetry = null;
+          if (retry) await retry();
+          return;
+        }
+        whatsminerAuthError = msg("auth.chipMapEmpty");
         whatsminerSetupAccess = response.snapshot.whatsminer_access ?? whatsminerSetupAccess;
         return;
       }

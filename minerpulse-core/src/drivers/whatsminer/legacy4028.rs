@@ -10,6 +10,11 @@ use ecb::{Decryptor, Encryptor};
 use md5::compute as md5_hash;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use std::io::{Read, Write};
+use std::net::{SocketAddr, TcpStream};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
+use std::time::Duration;
 
 type Aes256EcbEnc = Encryptor<Aes256>;
 type Aes256EcbDec = Decryptor<Aes256>;
@@ -59,6 +64,193 @@ pub fn send_legacy_command(
         let plain = aes_decrypt_ecb(&cipher, &aes_key)?;
         let json_text = trim_json_suffix(&plain);
         return serde_json::from_str(json_text)
+                .map_err(|_| MinerPulseError::with_code(ErrorCode::ParseFailed));
+        }
+    }
+    Ok(outer)
+}
+
+/// API 2.x §3.12: `download_logs` on TCP 4028, then binary payload on same socket.
+pub fn download_logs(
+    host: &str,
+    port: u16,
+    password: &str,
+    cancel: Option<&AtomicBool>,
+) -> Result<Vec<u8>, MinerPulseError> {
+    const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+    const IO_TIMEOUT: Duration = Duration::from_secs(120);
+
+    check_log_cancel(cancel)?;
+    let token = fetch_legacy_token(host, port, password)?;
+    check_log_cancel(cancel)?;
+    let api_cmd = format!(r#"{{"token":"{}","cmd":"download_logs"}}"#, token.sign);
+    let aes_key = legacy_aes_key(&token.key);
+    let encrypted = aes_encrypt_ecb(&api_cmd, &aes_key)?;
+    let packet = serde_json::json!({
+        "enc": 1,
+        "data": BASE64.encode(&encrypted),
+    });
+
+    let addr: SocketAddr = format!("{host}:{port}")
+        .parse()
+        .map_err(|_| MinerPulseError::with_code(ErrorCode::InvalidInput))?;
+    let mut stream = TcpStream::connect_timeout(&addr, CONNECT_TIMEOUT)
+        .map_err(|_| MinerPulseError::conn_failed())?;
+    stream
+        .set_read_timeout(Some(IO_TIMEOUT))
+        .map_err(|_| MinerPulseError::conn_failed())?;
+    stream
+        .set_write_timeout(Some(Duration::from_secs(10)))
+        .map_err(|_| MinerPulseError::conn_failed())?;
+    stream.set_nodelay(true).ok();
+
+    stream
+        .write_all(packet.to_string().as_bytes())
+        .map_err(|_| MinerPulseError::stream_broken())?;
+
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 8192];
+    let (value, binary_start) = loop {
+        check_log_cancel(cancel)?;
+        if let Some(end) = first_json_object_end(&buf) {
+            match decode_legacy_wire_bytes(&buf[..end], &aes_key) {
+                Ok(v) if v.get("STATUS").and_then(|s| s.as_str()) == Some("S") => {
+                    break (v, end);
+                }
+                Ok(v) => {
+                    let message = v
+                        .get("Msg")
+                        .and_then(|m| m.as_str())
+                        .map(str::to_string);
+                    return Err(MinerPulseError::Coded {
+                        code: ErrorCode::ParseFailed,
+                        message,
+                    });
+                }
+                Err(_) => {}
+            }
+        }
+        match stream.read(&mut chunk) {
+            Ok(0) => {
+                return Err(MinerPulseError::with_code(ErrorCode::ParseFailed));
+            }
+            Ok(n) => buf.extend_from_slice(&chunk[..n]),
+            Err(_) => {
+                if buf.is_empty() {
+                    return Err(MinerPulseError::stream_broken());
+                }
+                return Err(MinerPulseError::with_code(ErrorCode::ParseFailed));
+            }
+        }
+    };
+
+    let len: usize = value
+        .get("Msg")
+        .and_then(|m| m.get("logfilelen"))
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| MinerPulseError::with_code(ErrorCode::ParseFailed))?
+        .trim()
+        .parse()
+        .map_err(|_| MinerPulseError::with_code(ErrorCode::ParseFailed))?;
+
+    let mut data = vec![0u8; len];
+    let already = buf.len().saturating_sub(binary_start).min(len);
+    if already > 0 {
+        data[..already].copy_from_slice(&buf[binary_start..binary_start + already]);
+    }
+    if already < len {
+        thread::sleep(Duration::from_millis(10));
+        read_fully(&mut stream, &mut data[already..], cancel)?;
+    }
+    Ok(data)
+}
+
+fn check_log_cancel(cancel: Option<&AtomicBool>) -> Result<(), MinerPulseError> {
+    if cancel.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+        return Err(MinerPulseError::operation_cancelled());
+    }
+    Ok(())
+}
+
+fn read_fully(
+    stream: &mut TcpStream,
+    buf: &mut [u8],
+    cancel: Option<&AtomicBool>,
+) -> Result<(), MinerPulseError> {
+    let mut off = 0;
+    while off < buf.len() {
+        check_log_cancel(cancel)?;
+        match stream.read(&mut buf[off..]) {
+            Ok(0) => return Err(MinerPulseError::stream_broken()),
+            Ok(n) => off += n,
+            Err(_) => return Err(MinerPulseError::stream_broken()),
+        }
+    }
+    Ok(())
+}
+
+/// Unlike normal 4028 commands, `download_logs` does not terminate the JSON header with `<EOF>`;
+/// binary payload follows immediately on the same socket.
+fn first_json_object_end(buf: &[u8]) -> Option<usize> {
+    let start = buf.iter().position(|&b| b == b'{')?;
+    let slice = &buf[start..];
+    let mut depth = 0i32;
+    let mut in_str = false;
+    let mut esc = false;
+    for (i, &b) in slice.iter().enumerate() {
+        if in_str {
+            if esc {
+                esc = false;
+            } else if b == b'\\' {
+                esc = true;
+            } else if b == b'"' {
+                in_str = false;
+            }
+            continue;
+        }
+        match b {
+            b'"' => in_str = true,
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(start + i + 1);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn decode_legacy_wire_bytes(buf: &[u8], aes_key: &[u8; 32]) -> Result<Value, MinerPulseError> {
+    let page = std::str::from_utf8(buf)
+        .map_err(|_| MinerPulseError::with_code(ErrorCode::ParseFailed))?;
+    decode_legacy_wire_json(page.trim(), aes_key)
+}
+
+fn decode_legacy_wire_json(page: &str, aes_key: &[u8; 32]) -> Result<Value, MinerPulseError> {
+    let outer: Value =
+        serde_json::from_str(page).map_err(|_| MinerPulseError::with_code(ErrorCode::ParseFailed))?;
+    if let Some(data) = outer.get("enc").and_then(|v| v.as_str()) {
+        if data.len() > 8 {
+            let cipher = BASE64
+                .decode(data)
+                .map_err(|_| MinerPulseError::with_code(ErrorCode::ParseFailed))?;
+            let plain = aes_decrypt_ecb(&cipher, aes_key)?;
+            let json_text = trim_json_suffix(&plain);
+            return serde_json::from_str(json_text)
+                .map_err(|_| MinerPulseError::with_code(ErrorCode::ParseFailed));
+        }
+    }
+    if outer.get("enc").and_then(|v| v.as_i64()) == Some(1) {
+        if let Some(data) = outer.get("data").and_then(|v| v.as_str()) {
+            let cipher = BASE64
+                .decode(data)
+                .map_err(|_| MinerPulseError::with_code(ErrorCode::ParseFailed))?;
+            let plain = aes_decrypt_ecb(&cipher, aes_key)?;
+            let json_text = trim_json_suffix(&plain);
+            return serde_json::from_str(json_text)
                 .map_err(|_| MinerPulseError::with_code(ErrorCode::ParseFailed));
         }
     }
@@ -243,6 +435,14 @@ fn to64(value: u32, count: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "live miner on LAN"]
+    fn live_download_logs() {
+        let bytes = super::download_logs("192.168.35.31", 4028, "admin", None).expect("download_logs");
+        assert!(!bytes.is_empty(), "log should not be empty");
+        eprintln!("downloaded {} bytes", bytes.len());
+    }
 
     #[test]
     #[ignore = "live miner on LAN"]

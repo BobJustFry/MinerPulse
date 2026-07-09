@@ -2,11 +2,12 @@
   import { invoke } from "@tauri-apps/api/core";
   import { save } from "@tauri-apps/plugin-dialog";
   import { openUrl } from "@tauri-apps/plugin-opener";
+  import { formatAppError } from "$lib/formatAppError";
   import { t, type Locale, type MessageKey } from "$lib/i18n";
   import CupertinoSwitch from "$lib/components/CupertinoSwitch.svelte";
   import CraneApplyAnimation from "$lib/components/CraneApplyAnimation.svelte";
   import ManagedModalCard from "$lib/components/ManagedModalCard.svelte";
-  import type { WhatsminerControlAction, WhatsminerControlState } from "$lib/types";
+  import type { ErrorResponse, WhatsminerControlAction, WhatsminerControlState } from "$lib/types";
 
   type ControlDraft = {
     mining: boolean;
@@ -27,6 +28,7 @@
     | "verifying"
     | "waiting_online"
     | "monitoring"
+    | "exporting"
     | "success"
     | "error"
     | "reboot_offer";
@@ -80,9 +82,22 @@
   let monitorCancelled = $state(false);
   let pendingExpectedDraft = $state<ControlDraft | null>(null);
   let pendingChangedKeys = $state<(keyof ControlDraft)[]>([]);
+  let newPasswordInput = $state("");
+  let confirmPasswordInput = $state("");
+  let passwordChanging = $state(false);
+  let passwordError = $state("");
+  let passwordSuccess = $state("");
+  let exportFlow = $state(false);
+  let exportRunId = 0;
 
   const modalBusy = $derived(
-    busy || loading || applying || verifyingAuth || applyPhase === "monitoring" || applyPhase === "waiting_online",
+    busy ||
+      loading ||
+      applying ||
+      verifyingAuth ||
+      passwordChanging ||
+      applyPhase === "monitoring" ||
+      applyPhase === "waiting_online",
   );
   const applyOverlayOpen = $derived(applyPhase !== "idle");
   const authOverlayOpen = $derived(authPromptOpen && !applyOverlayOpen);
@@ -96,26 +111,42 @@
         return msg("control.phase.waitingOnline");
       case "monitoring":
         return msg("control.phase.monitoring");
+      case "exporting":
+        return msg("control.phase.exporting");
       case "success":
-        return msg("control.phase.success");
+        return exportFlow ? msg("control.phase.exportSuccess") : msg("control.phase.success");
       case "error":
-        return msg("control.phase.error");
+        return exportFlow ? msg("control.phase.exportError") : msg("control.phase.error");
       case "reboot_offer":
         return msg("control.reboot.hint");
       default:
         return "";
     }
   });
-  const v3Blocked = $derived(
-    Boolean(controlState?.writesBlocked) && controlState?.apiSwitch !== false,
-  );
   const apiSwitchOff = $derived(controlState?.apiSwitch === false);
   const hasPendingChanges = $derived(
     baseline != null && draft != null && draftDiffers(baseline, draft),
   );
 
+  function formatErr(err: unknown): string {
+    return formatAppError(locale, err);
+  }
+
   function msg(key: MessageKey, args?: Record<string, string | number>) {
     return t(locale, key, args);
+  }
+
+  const NUMERIC_FIELDS = [
+    { key: "power_limit_w", label: "control.powerLimit", tip: "control.tip.powerLimit", min: 0, max: 99999, step: 50 },
+    { key: "target_freq_pct", label: "control.targetFreq", tip: "control.tip.targetFreq", min: -100, max: 100, step: 1 },
+    { key: "upfreq_speed", label: "control.upfreqSpeed", tip: "control.tip.upfreqSpeed", min: 0, max: 9, step: 1 },
+    { key: "power_percent", label: "control.powerPercent", tip: "control.tip.powerPercent", min: 0, max: 100, step: 1 },
+  ] as const;
+
+  type NumericFieldKey = (typeof NUMERIC_FIELDS)[number]["key"];
+
+  function clampNumeric(value: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, value));
   }
 
   function markApiWrite(label: string): string {
@@ -127,10 +158,9 @@
     return msg(tipKey);
   }
 
-  function controlDisabled(requiresApiWrite = false, allowWhenApiOff = false): boolean {
+  function controlDisabled(requiresApiWrite = false): boolean {
     if (modalBusy) return true;
-    if (requiresApiWrite && !allowWhenApiOff && apiSwitchOff) return true;
-    if (requiresApiWrite && v3Blocked) return true;
+    if (requiresApiWrite && apiSwitchOff) return true;
     return false;
   }
 
@@ -175,14 +205,6 @@
     draft = { ...draft, [key]: value };
   }
 
-  function actionRequiresV3(action: WhatsminerControlAction): boolean {
-    return !(
-      "set_mining" in action ||
-      "set_power_mode" in action ||
-      "reboot" in action
-    );
-  }
-
   function buildPendingActions(base: ControlDraft, next: ControlDraft): WhatsminerControlAction[] {
     const actions: WhatsminerControlAction[] = [];
     if (base.mining !== next.mining) actions.push({ set_mining: { enabled: next.mining } });
@@ -213,7 +235,75 @@
     if (message === "default_password_blocked") return msg("control.auth.required");
     if (message === "verify_failed") return msg("control.verifyFailed");
     if (message === "reboot_required") return msg("control.reboot.hint");
+    if (message === "api_switch_web_auth_failed") return msg("control.apiSwitch.webAuthFailed");
+    if (message === "api_switch_manual_required") return msg("control.apiSwitch.manualRequired");
+    if (message === "api_switch_enable_failed") return msg("control.apiSwitch.enableFailed");
     return message;
+  }
+
+  function mapPasswordError(err: unknown): string {
+    const e = err as { args?: { message?: string } };
+    const code = e?.args?.message;
+    if (code === "default_password_change_blocked") return msg("control.password.defaultBlocked");
+    if (code === "change_password_failed") return msg("control.password.failed");
+    if (code) return mapResultMessage(code);
+    return formatAppError(locale, err);
+  }
+
+  function resetPasswordForm() {
+    newPasswordInput = "";
+    confirmPasswordInput = "";
+    passwordError = "";
+    passwordSuccess = "";
+  }
+
+  async function submitPasswordChange() {
+    const next = newPasswordInput.trim();
+    const confirm = confirmPasswordInput.trim();
+    const current = sessionPassword.trim() || "admin";
+    if (!ip.trim() || passwordChanging) return;
+
+    passwordError = "";
+    passwordSuccess = "";
+
+    if (next.length < 4) {
+      passwordError = msg("control.password.tooShort");
+      return;
+    }
+    if (next !== confirm) {
+      passwordError = msg("control.password.mismatch");
+      return;
+    }
+    if (next === current) {
+      passwordError = msg("control.password.sameAsCurrent");
+      return;
+    }
+
+    passwordChanging = true;
+    try {
+      await invoke("change_whatsminer_super_password", {
+        request: {
+          ip: ip.trim(),
+          username: username.trim() || "admin",
+          old_password: current,
+          new_password: next,
+        },
+      });
+      sessionPassword = next;
+      resetPasswordForm();
+      passwordSuccess = msg("control.password.success");
+      await onPasswordChanged?.(next);
+      authDismissed = false;
+      authPromptOpen = false;
+      await refresh(next, false, { promptOnBlocked: false });
+      setTimeout(() => {
+        if (passwordSuccess) passwordSuccess = "";
+      }, 4000);
+    } catch (err) {
+      passwordError = mapPasswordError(err);
+    } finally {
+      passwordChanging = false;
+    }
   }
 
   function sleep(ms: number) {
@@ -249,6 +339,7 @@
     applying = false;
     applyPhase = "idle";
     applyStatus = "idle";
+    exportFlow = false;
   }
 
   function scheduleApplyIdle(delayMs = 1400) {
@@ -259,10 +350,27 @@
     }, delayMs);
   }
 
+  function dismissApplyOverlay() {
+    applying = false;
+    applyPhase = "idle";
+    applyStatus = "idle";
+    exportFlow = false;
+  }
+
+  function cancelApplyOperation() {
+    const wasExport = applyPhase === "exporting";
+    if (wasExport) {
+      exportRunId += 1;
+      void invoke("cancel_whatsminer_log_export");
+    } else {
+      monitorCancelled = true;
+    }
+    dismissApplyOverlay();
+    errorText = msg(wasExport ? "control.export.cancelled" : "control.monitor.cancelled");
+  }
+
   function cancelMonitor() {
-    monitorCancelled = true;
-    resetApplyFlow();
-    errorText = msg("control.monitor.cancelled");
+    cancelApplyOperation();
   }
 
   function openAuthPrompt() {
@@ -286,7 +394,7 @@
     authError = "";
     try {
       const ok = await refresh(candidate, false, { promptOnBlocked: false });
-      if (ok && controlState && !controlState.writesBlocked) {
+      if (ok && controlState) {
         sessionPassword = candidate;
         authPromptOpen = false;
         authDismissed = false;
@@ -321,8 +429,8 @@
   }
 
   function close() {
-    if (applyPhase === "monitoring" || applyPhase === "waiting_online") {
-      cancelMonitor();
+    if (applyPhase === "monitoring" || applyPhase === "waiting_online" || applyPhase === "exporting") {
+      cancelApplyOperation();
       return;
     }
     if (modalBusy) return;
@@ -358,7 +466,7 @@
   ) {
     const authPassword = overridePassword ?? sessionPassword;
     if (!ip.trim() || !authPassword) return false;
-    const promptOnBlocked = options.promptOnBlocked ?? true;
+    const promptOnBlocked = options.promptOnBlocked ?? false;
     if (!silent) loading = true;
     if (!silent) errorText = "";
     try {
@@ -367,21 +475,13 @@
       });
       if (!silent) {
         syncDraftFromState(controlState);
-        if (controlState.writesBlocked && controlState.apiSwitch !== false) {
-          sessionPassword = authPassword;
-          if (promptOnBlocked && !authDismissed) {
-            authPasswordInput = authPassword;
-            authPromptOpen = true;
-          }
-        } else {
-          sessionPassword = authPassword;
-          authPromptOpen = false;
-          authError = "";
-        }
+        sessionPassword = authPassword;
+        authPromptOpen = false;
+        authError = "";
       }
       return true;
     } catch (err) {
-      if (!silent) errorText = String(err);
+      if (!silent) errorText = formatErr(err);
       return false;
     } finally {
       if (!silent) loading = false;
@@ -431,8 +531,7 @@
       applyStatus = "success";
       pendingBatch = null;
       await onApplied?.();
-      authDismissed = false;
-      await refresh(undefined, false, { promptOnBlocked: true });
+      await refresh(undefined, false, { promptOnBlocked: false });
       scheduleApplyIdle();
       return true;
     }
@@ -491,7 +590,7 @@
     const result = await invoke<{ ok: boolean; message?: string | null; state?: WhatsminerControlState | null }>(
       "apply_whatsminer_control",
       {
-        request: { ip: ip.trim(), port, password: sessionPassword, action },
+        request: { ip: ip.trim(), port, username: username.trim() || "admin", password: sessionPassword, action },
       },
     );
     if (result.state) {
@@ -502,7 +601,7 @@
 
     const message = mapResultMessage(result.message);
     errorText = message;
-    if (result.message === "default_password_blocked" || (controlState?.writesBlocked && controlState?.apiSwitch !== false)) {
+    if (result.message === "default_password_blocked") {
       openAuthPrompt();
     }
     if (result.message === "reboot_required") {
@@ -514,19 +613,12 @@
   async function runActions(actions: WhatsminerControlAction[], options: { restoreFlow?: boolean } = {}) {
     if (!ip.trim() || !sessionPassword || applying || actions.length === 0 || !baseline || !draft) return;
 
-    const needsV3 = actions.some(actionRequiresV3);
-    if (needsV3 && v3Blocked) {
-      pendingBatch = actions;
-      openAuthPrompt();
-      errorText = msg("control.auth.required");
-      return;
-    }
-
     const apiEnabling = baseline.api_switch === false && draft.api_switch === true;
     const expected = { ...draft };
     const keys = changedKeys(baseline, expected);
 
     applying = true;
+    exportFlow = false;
     monitorCancelled = false;
     applyPhase = "sending";
     applyStatus = "loading";
@@ -559,8 +651,7 @@
         pendingBatch = null;
         await onApplied?.();
         if (apiEnabling) {
-          authDismissed = false;
-          await refresh(undefined, false, { promptOnBlocked: true });
+          await refresh(undefined, false, { promptOnBlocked: false });
         }
         scheduleApplyIdle();
         return;
@@ -578,7 +669,7 @@
     } catch (err) {
       applyPhase = "error";
       applyStatus = "error";
-      errorText = String(err);
+      errorText = formatErr(err);
       scheduleApplyIdle();
     } finally {
       if (!applyPhaseKeepsBusy(applyPhase as ApplyPhase)) {
@@ -613,7 +704,7 @@
     } catch (err) {
       applyPhase = "error";
       applyStatus = "error";
-      errorText = String(err);
+      errorText = formatErr(err);
       scheduleApplyIdle();
     } finally {
       if (!applyPhaseKeepsBusy(applyPhase as ApplyPhase)) applying = false;
@@ -626,46 +717,49 @@
   }
 
   async function exportLog() {
-    if (v3Blocked) {
-      openAuthPrompt();
-      errorText = msg("control.auth.required");
-      return;
-    }
     if (!confirm(msg("control.exportConfirm"))) return;
     const path = await save({
       defaultPath: `whatsminer-log-${ip.replace(/\./g, "-")}.txt`,
       filters: [{ name: "Log", extensions: ["txt", "log"] }],
     });
     if (!path) return;
+    const runId = exportRunId + 1;
+    exportRunId = runId;
+    exportFlow = true;
+    monitorCancelled = false;
     applying = true;
+    applyPhase = "exporting";
     applyStatus = "loading";
     errorText = "";
     try {
       await invoke("export_whatsminer_log", {
         request: { ip: ip.trim(), password: sessionPassword, path },
       });
+      if (runId !== exportRunId) return;
+      applyPhase = "success";
       applyStatus = "success";
+      scheduleApplyIdle();
     } catch (err) {
+      if (runId !== exportRunId) return;
+      const code = (err as ErrorResponse)?.code;
+      if (code === "OPERATION_CANCELLED") return;
+      applyPhase = "error";
       applyStatus = "error";
-      errorText = String(err);
-      if (String(err).toLowerCase().includes("password")) {
+      errorText = formatErr(err);
+      if (formatErr(err).toLowerCase().includes("password")) {
         openAuthPrompt();
       }
+      scheduleApplyIdle();
     } finally {
-      applying = false;
-      setTimeout(() => {
-        if (!applying && applyStatus !== "loading") applyStatus = "idle";
-      }, 900);
+      if (runId === exportRunId && !applyPhaseKeepsBusy(applyPhase as ApplyPhase)) {
+        applying = false;
+      }
     }
   }
 
-  function adjustDraftNumber(
-    field: "power_limit_w" | "target_freq_pct" | "upfreq_speed" | "power_percent",
-    delta: number,
-    step: number,
-  ) {
+  function adjustDraftNumber(field: NumericFieldKey, delta: number, step: number, min: number, max: number) {
     if (!draft) return;
-    setDraftField(field, Math.max(0, draft[field] + delta * step));
+    setDraftField(field, clampNumeric(draft[field] + delta * step, min, max));
   }
 
   function fieldChanged(key: keyof ControlDraft): boolean {
@@ -676,7 +770,9 @@
     if (!open || !ip.trim()) return;
     sessionPassword = password || "admin";
     authDismissed = false;
-    void refresh();
+    authPromptOpen = false;
+    resetPasswordForm();
+    void refresh(undefined, false, { promptOnBlocked: false });
   });
 </script>
 
@@ -744,12 +840,12 @@
         <div class="control-apply-overlay" role="status" aria-live="polite">
           {#if applyPhase !== "reboot_offer"}
             <CraneApplyAnimation
-              active={applyPhase === "sending" || applyPhase === "verifying" || applyPhase === "monitoring" || applyPhase === "waiting_online"}
+              active={applyPhase === "sending" || applyPhase === "verifying" || applyPhase === "monitoring" || applyPhase === "waiting_online" || applyPhase === "exporting"}
               status={applyStatus}
             />
             <p class="control-apply-status">{applyStatusText}</p>
-            {#if applyPhase === "monitoring" || applyPhase === "waiting_online"}
-              <button type="button" class="btn" onclick={cancelMonitor}>{msg("control.monitor.cancel")}</button>
+            {#if applyPhase === "monitoring" || applyPhase === "waiting_online" || applyPhase === "exporting"}
+              <button type="button" class="btn" onclick={cancelApplyOperation}>{msg("control.apply.cancel")}</button>
             {/if}
           {:else}
             <p class="control-apply-status">{msg("control.reboot.hint")}</p>
@@ -777,15 +873,7 @@
       </header>
 
       <div class="modal-body control-body">
-        {#if controlState?.writesBlocked && controlState?.apiSwitch !== false && authDismissed && !authPromptOpen}
-          <div class="control-auth-dismissed">
-            <p class="control-hint warn">{msg("control.defaultPasswordBlocked")}</p>
-            <button type="button" class="btn" disabled={modalBusy} onclick={openAuthPrompt}>
-              {msg("control.auth.retry")}
-            </button>
-          </div>
-        {/if}
-        {#if controlState?.apiSwitch === false}
+        {#if apiSwitchOff}
           <p class="control-hint warn">{msg("control.apiSwitchOff")}</p>
         {/if}
         {#if errorText}
@@ -808,7 +896,7 @@
                 hint={controlHint("control.tip.apiSwitch", false)}
                 apiWrite
                 checked={draft.api_switch}
-                disabled={controlDisabled(true, true)}
+                disabled={modalBusy}
                 onchange={(enabled) => setDraftField("api_switch", enabled)}
               />
               <CupertinoSwitch
@@ -830,7 +918,7 @@
             </div>
           </section>
 
-          <section class="control-section" class:v3-blocked={v3Blocked} class:api-blocked={apiSwitchOff}>
+          <section class="control-section" class:api-blocked={apiSwitchOff}>
             <h4
               class="control-hint-label"
               class:field-changed={fieldChanged("led_mode")}
@@ -876,47 +964,85 @@
             </div>
           </section>
 
-          <section class="control-section" class:v3-blocked={v3Blocked} class:api-blocked={apiSwitchOff}>
+          <section class="control-section" class:api-blocked={apiSwitchOff}>
             <h4 class="control-hint-label" title={apiSwitchOff ? msg("control.apiSwitchDisabledHint") : undefined}>
               {markApiWrite(msg("control.section.numeric"))}
             </h4>
-            {#each [
-              { key: "power_limit_w", label: "control.powerLimit", tip: "control.tip.powerLimit", value: draft.power_limit_w, step: 50 },
-              { key: "target_freq_pct", label: "control.targetFreq", tip: "control.tip.targetFreq", value: draft.target_freq_pct, step: 1 },
-              { key: "upfreq_speed", label: "control.upfreqSpeed", tip: "control.tip.upfreqSpeed", value: draft.upfreq_speed, step: 1 },
-              { key: "power_percent", label: "control.powerPercent", tip: "control.tip.powerPercent", value: draft.power_percent, step: 1 },
-            ] as row (row.key)}
-              <div class="control-stepper" class:field-changed={fieldChanged(row.key as keyof ControlDraft)}>
-                <span class="control-hint-label" title={controlHint(row.tip as MessageKey)}>{markApiWrite(msg(row.label as MessageKey))}</span>
+            {#each NUMERIC_FIELDS as row (row.key)}
+              <div class="control-stepper" class:field-changed={fieldChanged(row.key)}>
+                <span class="control-hint-label" title={controlHint(row.tip)}>{markApiWrite(msg(row.label))}</span>
                 <div class="control-stepper-actions">
                   <button
                     type="button"
                     class="btn btn-icon-only control-step-btn"
-                    disabled={controlDisabled(true)}
+                    disabled={controlDisabled(true) || draft[row.key] <= row.min}
                     aria-label="-"
-                    title={controlHint(row.tip as MessageKey)}
-                    onclick={() =>
-                      adjustDraftNumber(
-                        row.key as "power_limit_w" | "target_freq_pct" | "upfreq_speed" | "power_percent",
-                        -1,
-                        row.step,
-                      )}>−</button>
-                  <strong class="control-step-value">{row.value}</strong>
+                    title={controlHint(row.tip)}
+                    onclick={() => adjustDraftNumber(row.key, -1, row.step, row.min, row.max)}>−</button>
+                  <strong class="control-step-value">{draft[row.key]}</strong>
                   <button
                     type="button"
                     class="btn btn-icon-only control-step-btn"
-                    disabled={controlDisabled(true)}
+                    disabled={controlDisabled(true) || draft[row.key] >= row.max}
                     aria-label="+"
-                    title={controlHint(row.tip as MessageKey)}
-                    onclick={() =>
-                      adjustDraftNumber(
-                        row.key as "power_limit_w" | "target_freq_pct" | "upfreq_speed" | "power_percent",
-                        1,
-                        row.step,
-                      )}>+</button>
+                    title={controlHint(row.tip)}
+                    onclick={() => adjustDraftNumber(row.key, 1, row.step, row.min, row.max)}>+</button>
                 </div>
               </div>
             {/each}
+          </section>
+
+          <section class="control-section control-password-section">
+            <h4>{msg("control.password.title")}</h4>
+            <p class="control-hint">{msg("control.password.hint")}</p>
+            {#if passwordSuccess}
+              <p class="control-hint success">{passwordSuccess}</p>
+            {/if}
+            {#if passwordError}
+              <p class="control-hint error">{passwordError}</p>
+            {/if}
+            <div class="control-password-fields">
+              <label class="password-field">
+                <span>{msg("control.password.new")}</span>
+                <input
+                  type="password"
+                  bind:value={newPasswordInput}
+                  disabled={modalBusy}
+                  autocomplete="new-password"
+                  onkeydown={(e) => {
+                    if (e.key === "Enter") void submitPasswordChange();
+                  }}
+                />
+              </label>
+              <label class="password-field">
+                <span>{msg("control.password.confirm")}</span>
+                <input
+                  type="password"
+                  bind:value={confirmPasswordInput}
+                  disabled={modalBusy}
+                  autocomplete="new-password"
+                  onkeydown={(e) => {
+                    if (e.key === "Enter") void submitPasswordChange();
+                  }}
+                />
+              </label>
+            </div>
+            <div class="control-actions">
+              <button
+                type="button"
+                class="btn primary btn-with-spinner"
+                disabled={modalBusy || !newPasswordInput.trim() || !confirmPasswordInput.trim()}
+                onclick={() => void submitPasswordChange()}
+              >
+                {#if passwordChanging}
+                  <span class="btn-spinner" aria-hidden="true"></span>
+                {/if}
+                {passwordChanging ? msg("control.password.changing") : msg("control.password.submit")}
+              </button>
+              <button type="button" class="btn" disabled={modalBusy} onclick={() => void openWebUi()}>
+                {msg("control.password.openWeb")}
+              </button>
+            </div>
           </section>
 
           <section class="control-section">
@@ -928,7 +1054,6 @@
               <button
                 type="button"
                 class="btn danger control-hint-label"
-                class:v3-blocked={v3Blocked}
                 class:api-blocked={apiSwitchOff}
                 disabled={controlDisabled(true)}
                 title={controlHint("control.tip.restore")}
@@ -939,7 +1064,6 @@
               <button
                 type="button"
                 class="btn control-hint-label"
-                class:v3-blocked={v3Blocked}
                 class:api-blocked={apiSwitchOff}
                 disabled={controlDisabled(true)}
                 title={controlHint("control.tip.exportLog")}
@@ -1042,6 +1166,21 @@
     color: var(--danger);
   }
 
+  .control-hint.success {
+    color: var(--accent);
+  }
+
+  .control-password-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .control-password-section .password-field {
+    margin-bottom: 0;
+  }
+
   .control-hint-label[title] {
     cursor: help;
   }
@@ -1067,13 +1206,6 @@
 
   .control-auth-overlay {
     z-index: 7;
-  }
-
-  .control-auth-dismissed {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem 0.75rem;
   }
 
   .password-field {
@@ -1146,8 +1278,6 @@
     gap: 0.65rem;
   }
 
-  .control-section.v3-blocked .control-segment-group,
-  .control-section.v3-blocked .control-stepper,
   .control-section.api-blocked .control-segment-group,
   .control-section.api-blocked .control-stepper {
     opacity: 0.78;
@@ -1249,9 +1379,5 @@
 
   .control-apply-btn {
     margin-right: auto;
-  }
-
-  .v3-blocked {
-    opacity: 0.78;
   }
 </style>

@@ -62,7 +62,7 @@ fn cached_log(client: &Client, host: &str, base: &str) -> Option<String> {
         luci_sessions().lock().ok()?.remove(&key);
         return None;
     }
-    extract_chip_log(&response.text().ok()?)
+    extract_btminer_syslog(&response.text().ok()?)
 }
 
 pub fn fetch_btminer_chip_data(host: &str, options: &WhatsminerFetchOptions) -> (Vec<BoardChipMap>, String) {
@@ -70,20 +70,21 @@ pub fn fetch_btminer_chip_data(host: &str, options: &WhatsminerFetchOptions) -> 
         return (Vec::new(), String::new());
     }
 
-    let timeout = if options.fast_poll {
-        LUCI_FAST_TIMEOUT
-    } else {
+    let full_luci = options.fetch_chips || !options.fast_poll;
+    let timeout = if full_luci {
         HTTP_TIMEOUT
+    } else {
+        LUCI_FAST_TIMEOUT
     };
     let client = match build_luci_client_with_timeout(timeout) {
         Ok(client) => client,
         Err(_) => return (Vec::new(), String::new()),
     };
 
-    let schemes: &[&str] = if options.fast_poll {
-        &["https"]
-    } else {
+    let schemes: &[&str] = if full_luci {
         &["https", "http"]
+    } else {
+        &["https"]
     };
 
     let cred_count = options.luci_credential_pairs().len();
@@ -99,7 +100,7 @@ pub fn fetch_btminer_chip_data(host: &str, options: &WhatsminerFetchOptions) -> 
             trace("luci", "chips_cached_ok", &base);
             return (parse_btminer_log(&log), log);
         }
-        if !options.fast_poll {
+        if full_luci {
             if let Some(log) = fetch_log_anonymous(&client, &base) {
                 trace("luci", "chips_anon_ok", &base);
                 return (parse_btminer_log(&log), log);
@@ -195,7 +196,7 @@ pub fn test_luci_credentials(host: &str, username: &str, password: &str) -> bool
         if let Ok(response) = client.get(&url).header("Cookie", cookie).send() {
             if response.status().is_success() {
                 if let Ok(body) = response.text() {
-                    return extract_chip_log(&body).is_some();
+                    return extract_btminer_syslog(&body).is_some();
                 }
             }
         }
@@ -331,7 +332,7 @@ fn fetch_log_anonymous(client: &Client, base: &str) -> Option<String> {
     if !response.status().is_success() {
         return None;
     }
-    extract_chip_log(&response.text().ok()?)
+    extract_btminer_syslog(&response.text().ok()?)
 }
 
 fn fetch_log_authenticated(
@@ -361,13 +362,30 @@ fn fetch_log_authenticated(
         return None;
     }
     let body = response.text().ok()?;
-    let log = extract_chip_log(&body);
+    let log = extract_btminer_syslog(&body);
     trace(
         "luci",
         "chips_get_ok",
         &format!("{base} code={status} parsed={}", log.is_some()),
     );
     log
+}
+
+fn extract_luci_form_token(html: &str) -> Option<String> {
+    for pattern in [
+        r#"name="token" value=""#,
+        r#"name='token' value='"#,
+        r#"name="luci_token" value=""#,
+    ] {
+        let start = html.find(pattern)? + pattern.len();
+        let rest = &html[start..];
+        let end = rest.find('"').or_else(|| rest.find('\''))?;
+        let token = rest[..end].trim();
+        if !token.is_empty() {
+            return Some(token.to_string());
+        }
+    }
+    None
 }
 
 fn luci_login(_client: &Client, base: &str, username: &str, password: &str) -> Option<String> {
@@ -387,10 +405,25 @@ fn luci_login_with_client(
     password: &str,
 ) -> Option<String> {
     let login_url = format!("{base}/cgi-bin/luci");
+    let token = login_client
+        .get(&login_url)
+        .send()
+        .ok()
+        .and_then(|resp| resp.text().ok())
+        .and_then(|html| extract_luci_form_token(&html));
+
+    let mut form = vec![
+        ("luci_username", username),
+        ("luci_password", password),
+    ];
+    if let Some(ref t) = token {
+        form.push(("token", t.as_str()));
+    }
+
     let response = match login_client
         .post(&login_url)
-        .header("Referer", format!("{base}/cgi-bin/luci"))
-        .form(&[("luci_username", username), ("luci_password", password)])
+        .header("Referer", &login_url)
+        .form(&form)
         .send()
     {
         Ok(resp) => resp,
@@ -441,9 +474,26 @@ fn extract_sysauth_cookie(headers: &HeaderMap) -> Option<String> {
     None
 }
 
-fn extract_chip_log(html: &str) -> Option<String> {
+/// Syslog textarea from LuCI btminerapi (authenticated page, may lack per-chip lines).
+fn extract_btminer_syslog(html: &str) -> Option<String> {
     let log = parse_btminer_html(html)?;
-    if log.contains("slot:") && log.contains("temp:") {
+    if log.contains("slot:") || log.lines().any(|line| line.trim().starts_with("slot")) {
+        Some(log)
+    } else {
+        None
+    }
+}
+
+/// Strict: syslog must include per-chip `C0`/`C1`… lines for chip map parsing.
+fn extract_chip_log(html: &str) -> Option<String> {
+    let log = extract_btminer_syslog(html)?;
+    let has_chip_lines = log.lines().any(|line| {
+        let t = line.trim();
+        t.starts_with('C')
+            && t.chars().nth(1).is_some_and(|c| c.is_ascii_digit())
+            && t.contains("temp:")
+    });
+    if has_chip_lines {
         Some(log)
     } else {
         None
@@ -469,8 +519,49 @@ mod tests {
     }
 
     #[test]
+    fn accepts_slot_summary_for_luci_login() {
+        let summary_only = r#"
+slot: 0, freq: 0, temp: 21.2, step: 5
+slot: 1, freq: 0, temp: 21.2, step: 5
+"#;
+        let html = format!(r#"<textarea id="syslog">{summary_only}</textarea>"#);
+        assert!(extract_btminer_syslog(&html).is_some());
+        assert!(extract_chip_log(&html).is_none());
+    }
+
+    #[test]
+    fn rejects_slot_summary_without_per_chip_lines() {
+        let summary_only = r#"
+slot: 0, freq: 0, temp: 21.2, step: 5
+slot: 1, freq: 0, temp: 21.2, step: 5
+"#;
+        assert!(extract_chip_log(&format!(r#"<textarea id="syslog">{summary_only}</textarea>"#)).is_none());
+    }
+
+    #[test]
     fn rejects_html_without_chip_dump() {
         assert!(extract_chip_log("<html><body>login</body></html>").is_none());
+    }
+
+    #[test]
+    #[ignore = "requires WhatsMiner on local network"]
+    fn read_path_chip_fetch_uses_full_luci() {
+        use super::super::options::{WhatsminerFetchOptions, WhatsminerLuciAuth};
+
+        let host = "192.168.35.35";
+        let auth = WhatsminerFetchOptions::read_once(Some(WhatsminerLuciAuth {
+            username: "admin".into(),
+            password: "admin".into(),
+        }));
+        let (boards, log) = fetch_btminer_chip_data(host, &auth);
+        eprintln!("boards={} log_bytes={}", boards.len(), log.len());
+        if boards.is_empty() && !log.is_empty() {
+            eprintln!("log_preview:\n{}", &log[..log.len().min(1200)]);
+        }
+        assert!(!log.is_empty(), "expected btminer log on read path options");
+        if boards.is_empty() {
+            eprintln!("no chip boards parsed (miner may be in protect/idle)");
+        }
     }
 
     #[test]

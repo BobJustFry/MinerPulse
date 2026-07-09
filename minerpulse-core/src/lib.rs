@@ -20,12 +20,12 @@ pub use drivers::registry::{
     model_from_stats, DriverRegistry,
 };
 pub use drivers::whatsminer::control::{
-    action_requires_v3_write, action_may_need_reboot, apply_control_action, change_super_password, export_miner_log,
-    read_control_state, read_control_state_with_auth, WhatsminerControlAction,
-    WhatsminerControlApplyResult, WhatsminerControlState,
+    action_requires_v3_write, action_may_need_reboot, apply_control_action, change_super_password,
+    enable_api_switch_detailed, export_miner_log, read_control_state, read_control_state_with_auth,
+    ApiSwitchEnableResult, WhatsminerControlAction, WhatsminerControlApplyResult, WhatsminerControlState,
 };
 pub use drivers::whatsminer::access::{
-    compute_needs_setup, enable_api_switch, probe_whatsminer_access, WhatsminerAccessStatus,
+    compute_needs_setup, probe_whatsminer_access, WhatsminerAccessStatus,
 };
 pub use drivers::whatsminer::luci::{test_luci_credentials, verify_luci_login};
 pub use entitlements::{EntitlementGate, SubscriptionTier};
