@@ -1,12 +1,12 @@
 {
-  "version": "1.2.136",
-  "build": 136,
-  "notes": "Miner Pulse 1.2.0 (136) — fix WhatsMiner chip map for C100+ indices (111 chips / 37×3 layout), re-parse btminer log when opening snapshots/sessions, new firmware summary Msg format.",
-  "pub_date": "2026-07-09T07:47:11Z",
+  "version": "1.2.138",
+  "build": 138,
+  "notes": "Miner Pulse 1.2.0 (138) — import 412 WhatsMiner chip layout configs from HashSource firmware tables; correct chips_per_domain for M60 (172→43×4), M50 series, and other models.",
+  "pub_date": "2026-07-09T08:39:52Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRGZTaWNZUG5yMXlUMTl3Z01nY0E3MzBUcVppeXBEUEJUUlFZaE02RjJYYVpES1lZMFBPeUZjMU13NnhMNGp0YlM2VVQ0MjRsUlZmTmd2UmxxN2c2RGdZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzNTgzMjI0CWZpbGU6TWluZXJQdWxzZV8xLjIuMTM2X3g2NC1zZXR1cC5leGUKS0FaWkdOVGdYS3hWSmMwa21ObzMzeXZwSzFVNm5VWTJEZll1UEp3WVF2QjExblpHMVp2czdNRmZEMnhEUmFaZVNKN2I4dmllUnpRNDJ6a09lS3VhRGc9PQo=",
-      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.2.0-build136/MinerPulse_1.2.136_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRGJjUWdVNlE3anNONEJTK2hESWdOWC93Sm55azJ3RTlMRU5UWWpwa0Z0b2o4bTBGTmxqMHlRVmd3MzdQcTZGR2Y3OHpNQVFyb0dwNGNmTjRwK1UvWVFvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzNTg2Mzg4CWZpbGU6TWluZXJQdWxzZV8xLjIuMTM4X3g2NC1zZXR1cC5leGUKTExKamlva1QwUjFmVCs3aWlKdDVDZ29RTk5SN2tOUElEeG5zcW5tRU1RSWF1Y3ZReTRkeGY2ZGdDbkZpalpUQVQraldPcm8rUDRCaGRoUzNoL2hYQlE9PQo=",
+      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.2.0-build138/MinerPulse_1.2.138_x64-setup.exe"
     }
   }
 }
