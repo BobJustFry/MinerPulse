@@ -12,6 +12,8 @@
 <p align="center">
   <a href="https://github.com/BobJustFry/MinerPulse/releases/latest">Скачать для Windows</a>
   ·
+  <a href="docs/user-guide/README.md">Руководство пользователя</a>
+  ·
   <a href="https://t.me/miner_pulse">Telegram</a>
   ·
   <a href="#поддержать-проект">Донат</a>
@@ -76,14 +78,13 @@
 
 | Раздел | Что умеет |
 |--------|-----------|
-| **Данные** | Модель, прошивка, аптайм, хешрейт (5s / avg / RT), температуры, RPM, шары, HW-ошибки, платы |
+| **Данные** | Модель, прошивка, аптайм, хешрейт, температуры, RPM, шары, HW-ошибки, платы, **пулы** |
 | **Чипы** | Матрица чипов: температура, напряжение, решения |
 | **Консоль** | Сырой лог / ответ API |
-| **Пулы** | Активные и резервные пулы, статус |
-| **Графики** | Хешрейт, температуры плат, скорость вентиляторов; запись и воспроизведение сессий |
-| **Команды** | Отправка команд майнеру (Service) |
-| **Поиск** | Сканирование подсети, выбор майнера из списка |
-| **Импорт** | Открытие `.mpulse` логов и сессий, drag & drop |
+| **Графики** | Хешрейт, температуры плат, мощность, вентиляторы; запись `.mprs` и воспроизведение |
+| **Команды** | Отправка команд майнеру Avalon (Client/Service) |
+| **Поиск** | Сканирование подсети, избранные диапазоны IP |
+| **Импорт** | `.mprs` / `.mpsn` / `.mpulse`, логи `.txt`, drag & drop для текстовых логов |
 | **Обновления** | Подписанный авто-апдейтер из GitHub Releases |
 
 ### Поддерживаемые семейства
@@ -116,7 +117,7 @@ npm run dev:app
 | Версия `X.Y.Z` | `VERSION.json` | Меняется **только с одобрения владельца** |
 | Сборка `BBB` | `VERSION.json` | `node scripts/bump-build.mjs` после каждого изменения |
 
-Подробнее: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · [REPOSITORY.md](REPOSITORY.md) · [LICENSING.md](LICENSING.md) · [LICENSE](LICENSE)
+Подробнее: **[docs/user-guide/README.md](docs/user-guide/README.md)** (RU / EN / 中文) · [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · [REPOSITORY.md](REPOSITORY.md) · [LICENSING.md](LICENSING.md) · [LICENSE](LICENSE)
 
 ## Лицензия и использование
 
@@ -137,6 +138,7 @@ Miner Pulse — **проприетарный продукт** (© Bobrov Andrey 
 minerpulse-core/       Rust: драйверы, TCP, снимки, импорт
 minerpulse-desktop/    Tauri + Svelte UI
 platform/              Подписки: API, web, admin, deploy (Docker)
+docs/user-guide/         Руководство пользователя (RU / EN / 中文)
 docs/screenshots/      Скриншоты для README
 releases/              update.json — манифест авто-обновления
 scripts/               bump build / sync version
