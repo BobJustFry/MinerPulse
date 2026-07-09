@@ -1,12 +1,12 @@
 {
-  "version": "1.2.178",
-  "build": 178,
-  "notes": "Miner Pulse 1.2.0 (178) — WhatsMiner control: cancellable log export, corrected numeric ranges (freq −100…+100), API Switch enable diagnostics with WhatsMinerTool guidance when firmware lacks API 3.0 command, LuCI login token fix.",
-  "pub_date": "2026-07-09T13:24:16Z",
+  "version": "1.2.183",
+  "build": 183,
+  "notes": "Miner Pulse 1.2.0 (183) — WhatsMiner control: modal tabs (Main/Pools/Advanced), pools AES apply, advanced fan/network/time/service, continuous poll when offline, API 2.x→3.x fallback, timezone dropdown (423 zones), styled fields, static net validation with IP mask.",
+  "pub_date": "2026-07-09T14:40:41Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRGQwR3l1azVJL2RCcmd6eUcxYmhNWDN4QkJPWlZlR3hhMXFJLzBmUEpUUUU0WldJcXFsZGdoOXo5bDlIZDRnL0VWR2VMKzJXUWZ0cW1RTHppTGJodndzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzNjAzNDUxCWZpbGU6TWluZXJQdWxzZV8xLjIuMTc4X3g2NC1zZXR1cC5leGUKVEtrWlQ5WDRNalN4c2FKd2F0NGd0ekREM1BISWJQOFNFTWFWY2FJNmZuWlhNNFE4SkZtNXNBQmNpVTNsYXM0RlJsSXlpRnNTVkcwNEdSVUNCWDNmQ3c9PQo=",
-      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.2.0-build178/MinerPulse_1.2.178_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRFpsdTM3R3lNNXdPbjd5UzZjOGF4WVAzU3d0V0NwcWNJR3paSGJTY0R1OTNaMW12bG8zWVc4L055V0ppamhCNmNKRVVMa0d1dWgyS1lpcnNnU3F6QlFzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzNjA4MDM2CWZpbGU6TWluZXJQdWxzZV8xLjIuMTgzX3g2NC1zZXR1cC5leGUKdVIxRDNXUUhOTVBuN2tlc2hpOXdFQnRhd2NldmM3VlJjT2x2bVB4WXJKU0NwM002a1dFTkZreE0rd1RjdzhiWGlaNGsxWUdodkk5VHdJMVVielFZREE9PQo=",
+      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.2.0-build183/MinerPulse_1.2.183_x64-setup.exe"
     }
   }
 }
