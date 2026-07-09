@@ -1,12 +1,12 @@
 {
-  "version": "1.2.123",
-  "build": 123,
-  "notes": "Miner Pulse 1.2.0 (123) — extended miner parameters (PSU, mode, freq, rated, cooling), generic cgminer driver, WhatsMiner pools, adaptive Chips tab, premium web account.",
-  "pub_date": "2026-07-08T08:32:30Z",
+  "version": "1.2.133",
+  "build": 133,
+  "notes": "Miner Pulse 1.2.0 (133) — binary recordings (.mprs/.mpsn), fast session open, live charts, scan favorites, compact toolbar icons, WhatsMiner pools on poll.",
+  "pub_date": "2026-07-09T06:21:13Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRFJ2b3NvU2hXU01SVldNbGZoZjJpT0V2TUxHSVk4cFcySDFnZmVTbUdLck5TT0VzY0dwZVEvbVlZbzgrN2NjWkMxTnU0eHFFSmR5VXA4c0VWVE9sMEFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzNDk5NTQzCWZpbGU6TWluZXJQdWxzZV8xLjIuMTIzX3g2NC1zZXR1cC5leGUKUTBHMS9oZXNwbFBZTzFNaW5OUjR1bTl3RDI5aGp2Q1BTQlBiYUY0U2tBRzFHQkFjenpiajlISko3ZmhBK2YvNG5ObmEwTmlxbUhDQ3ltVU96bWdqQWc9PQo=",
-      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.2.0-build123/MinerPulse_1.2.123_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRGQwRnJydVQ3ZEY3eCtrSEFZcHB2aHI3d0RUMXROWnk4aiszRFVhdkJ6VTF4OG14d2VKK056bVpTU0xEeFQvbDRrMS9hbTBSajhMR2hraHYvTk5lTmc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzNTc4MDY4CWZpbGU6TWluZXJQdWxzZV8xLjIuMTMzX3g2NC1zZXR1cC5leGUKelkrWVhEUVJpSHRuaTBHVzJQUUdDQzFxbHV1MnFjSnhtb2NEY0R3UytNRnArb1cxUDhGV0xvYUlqRnZORkg5c25wQWhKREU1clREa2VPMTJzSkNlQ3c9PQo=",
+      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.2.0-build133/MinerPulse_1.2.133_x64-setup.exe"
     }
   }
 }
