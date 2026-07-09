@@ -190,6 +190,12 @@ export interface WhatsminerControlState {
   writesBlocked: boolean;
 }
 
+export interface WhatsminerPoolConfig {
+  url: string;
+  worker: string;
+  password: string;
+}
+
 export type WhatsminerControlAction =
   | { set_mining: { enabled: boolean } }
   | { set_api_switch: { enabled: boolean } }
@@ -201,5 +207,6 @@ export type WhatsminerControlAction =
   | { set_target_freq: { percent: number } }
   | { set_upfreq_speed: { speed: number } }
   | { set_power_percent: { percent: number } }
+  | { set_pools: { pools: WhatsminerPoolConfig[] } }
   | { reboot: null }
   | { restore_settings: null };

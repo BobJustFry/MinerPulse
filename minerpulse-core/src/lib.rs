@@ -19,6 +19,7 @@ pub use drivers::registry::{
     detect_driver, detect_vendor, driver_available, fetch_whatsminer, fetch_with_detect,
     model_from_stats, DriverRegistry,
 };
+pub use drivers::whatsminer::pools::{read_pool_configs, WhatsminerPoolConfig};
 pub use drivers::whatsminer::control::{
     action_requires_v3_write, action_may_need_reboot, apply_control_action, change_super_password,
     enable_api_switch_detailed, export_miner_log, read_control_state, read_control_state_with_auth,

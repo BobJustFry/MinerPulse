@@ -7,7 +7,9 @@
   import CupertinoSwitch from "$lib/components/CupertinoSwitch.svelte";
   import CraneApplyAnimation from "$lib/components/CraneApplyAnimation.svelte";
   import ManagedModalCard from "$lib/components/ManagedModalCard.svelte";
-  import type { ErrorResponse, WhatsminerControlAction, WhatsminerControlState } from "$lib/types";
+  import type { ErrorResponse, WhatsminerControlAction, WhatsminerControlState, WhatsminerPoolConfig } from "$lib/types";
+
+  type PoolDraft = WhatsminerPoolConfig;
 
   type ControlDraft = {
     mining: boolean;
@@ -90,6 +92,8 @@
   let exportFlow = $state(false);
   let exportRunId = 0;
   let activeTab = $state<"main" | "pools" | "advanced">("main");
+  let poolsBaseline = $state<PoolDraft[] | null>(null);
+  let poolsDraft = $state<PoolDraft[] | null>(null);
 
   const modalBusy = $derived(
     busy ||
@@ -128,6 +132,32 @@
   const hasPendingChanges = $derived(
     baseline != null && draft != null && draftDiffers(baseline, draft),
   );
+  const hasPoolsChanges = $derived(
+    poolsBaseline != null && poolsDraft != null && poolsDraftDiffers(poolsBaseline, poolsDraft),
+  );
+
+  function emptyPools(): PoolDraft[] {
+    return Array.from({ length: 3 }, () => ({ url: "", worker: "", password: "" }));
+  }
+
+  function poolsDraftDiffers(a: PoolDraft[], b: PoolDraft[]): boolean {
+    return a.some((pool, index) => {
+      const other = b[index];
+      if (!other) return true;
+      return (
+        pool.url.trim() !== other.url.trim() ||
+        pool.worker.trim() !== other.worker.trim() ||
+        pool.password !== other.password
+      );
+    });
+  }
+
+  function syncPoolsDraft(pools: PoolDraft[]) {
+    const normalized = [...pools];
+    while (normalized.length < 3) normalized.push({ url: "", worker: "", password: "" });
+    poolsBaseline = normalized.slice(0, 3).map((p) => ({ ...p }));
+    poolsDraft = normalized.slice(0, 3).map((p) => ({ ...p }));
+  }
 
   function formatErr(err: unknown): string {
     return formatAppError(locale, err);
@@ -460,6 +490,100 @@
     errorText = "";
   }
 
+  async function loadPools(silent = false) {
+    const authPassword = sessionPassword;
+    if (!ip.trim() || !authPassword) return false;
+    try {
+      const pools = await invoke<PoolDraft[]>("get_whatsminer_pools", {
+        request: { ip: ip.trim(), port, password: authPassword },
+      });
+      if (!silent) syncPoolsDraft(pools);
+      else if (poolsBaseline == null) syncPoolsDraft(pools);
+      return true;
+    } catch {
+      if (!silent && poolsDraft == null) syncPoolsDraft(emptyPools());
+      return false;
+    }
+  }
+
+  function discardPoolsDraft() {
+    if (!poolsBaseline) return;
+    poolsDraft = poolsBaseline.map((p) => ({ ...p }));
+    errorText = "";
+  }
+
+  function setPoolField(index: number, key: keyof PoolDraft, value: string) {
+    if (!poolsDraft) return;
+    poolsDraft = poolsDraft.map((pool, i) =>
+      i === index ? { ...pool, [key]: value } : pool,
+    );
+  }
+
+  async function commitPoolsDraft() {
+    if (!ip.trim() || !sessionPassword || !poolsDraft || applying) return;
+    if (controlDisabled(true)) {
+      errorText = msg("control.apiSwitchDisabledHint");
+      return;
+    }
+    applying = true;
+    applyPhase = "sending";
+    applyStatus = "loading";
+    errorText = "";
+    monitorCancelled = false;
+    try {
+      const pools = poolsDraft.map((p) => ({
+        url: p.url.trim(),
+        worker: p.worker.trim(),
+        password: p.password,
+      }));
+      const outcome = await applySingle({ set_pools: { pools } }, false);
+      if (!outcome.ok) {
+        applyPhase = "error";
+        applyStatus = "error";
+        scheduleApplyIdle();
+        return;
+      }
+      applyPhase = "verifying";
+      const verified = await waitUntilPoolsApplied(pools);
+      if (!verified) {
+        applyPhase = "error";
+        applyStatus = "error";
+        errorText = msg("control.verifyFailed");
+        scheduleApplyIdle();
+        return;
+      }
+      syncPoolsDraft(pools);
+      applyPhase = "success";
+      applyStatus = "success";
+      scheduleApplyIdle();
+      await onApplied?.();
+    } finally {
+      applying = false;
+    }
+  }
+
+  async function waitUntilPoolsApplied(expected: PoolDraft[], timeoutMs = VERIFY_TIMEOUT_MS): Promise<boolean> {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      if (monitorCancelled) return false;
+      try {
+        const pools = await invoke<PoolDraft[]>("get_whatsminer_pools", {
+          request: { ip: ip.trim(), port, password: sessionPassword },
+        });
+        const match = expected.every((pool, index) => {
+          const actual = pools[index];
+          if (!actual) return false;
+          return pool.url === actual.url.trim() && pool.worker === actual.worker.trim();
+        });
+        if (match) return true;
+      } catch {
+        /* retry */
+      }
+      await sleep(VERIFY_POLL_MS);
+    }
+    return false;
+  }
+
   async function refresh(
     overridePassword?: string,
     silent = false,
@@ -480,6 +604,7 @@
         authPromptOpen = false;
         authError = "";
       }
+      await loadPools(true);
       return true;
     } catch (err) {
       if (!silent) errorText = formatErr(err);
@@ -1094,8 +1219,48 @@
           </section>
 
           <p class="control-legend">{msg("control.legend.apiWrite")}</p>
+        {:else if activeTab === "pools" && poolsDraft}
+          {#if apiSwitchOff}
+            <p class="control-hint warn">{msg("control.apiSwitchDisabledHint")}</p>
+          {/if}
+          <p class="control-hint">{msg("control.pools.hint")}</p>
+          {#each poolsDraft as pool, index (index)}
+            <section class="control-section" class:api-blocked={apiSwitchOff}>
+              <h4>{msg("control.pools.slot", { n: index + 1 })}</h4>
+              <div class="control-pool-fields">
+                <label class="password-field">
+                  <span>{msg("control.pools.url")}</span>
+                  <input
+                    type="text"
+                    value={pool.url}
+                    disabled={controlDisabled(true)}
+                    oninput={(e) => setPoolField(index, "url", e.currentTarget.value)}
+                  />
+                </label>
+                <label class="password-field">
+                  <span>{msg("control.pools.worker")}</span>
+                  <input
+                    type="text"
+                    value={pool.worker}
+                    disabled={controlDisabled(true)}
+                    oninput={(e) => setPoolField(index, "worker", e.currentTarget.value)}
+                  />
+                </label>
+                <label class="password-field">
+                  <span>{msg("control.pools.password")}</span>
+                  <input
+                    type="password"
+                    value={pool.password}
+                    disabled={controlDisabled(true)}
+                    autocomplete="off"
+                    oninput={(e) => setPoolField(index, "password", e.currentTarget.value)}
+                  />
+                </label>
+              </div>
+            </section>
+          {/each}
         {:else if activeTab === "pools"}
-          <p class="control-hint">{msg("control.pools.placeholder")}</p>
+          <p class="control-hint">{msg("control.loading")}</p>
         {:else if activeTab === "advanced"}
           <p class="control-hint">{msg("control.advanced.placeholder")}</p>
         {:else if loading}
@@ -1120,6 +1285,21 @@
               {/if}
               {msg("control.apply")}
             </button>
+          {:else if hasPoolsChanges && activeTab === "pools"}
+            <button type="button" class="btn" disabled={modalBusy} onclick={discardPoolsDraft}>
+              {msg("control.discard")}
+            </button>
+            <button
+              type="button"
+              class="btn primary btn-with-spinner control-apply-btn"
+              disabled={modalBusy || controlDisabled(true)}
+              onclick={() => void commitPoolsDraft()}
+            >
+              {#if applying}
+                <span class="btn-spinner" aria-hidden="true"></span>
+              {/if}
+              {msg("control.apply")}
+            </button>
           {/if}
           <button type="button" class="btn" disabled={modalBusy} onclick={() => void refresh()}>
             {msg("control.refresh")}
@@ -1130,6 +1310,8 @@
         </footer>
         {#if hasPendingChanges && activeTab === "main"}
           <p class="control-pending-hint" role="status">{msg("control.pendingChanges")}</p>
+        {:else if hasPoolsChanges && activeTab === "pools"}
+          <p class="control-pending-hint" role="status">{msg("control.pools.pendingChanges")}</p>
         {/if}
       </div>
     </ManagedModalCard>
@@ -1226,6 +1408,11 @@
 
   .control-hint.success {
     color: var(--accent);
+  }
+
+  .control-pool-fields {
+    display: grid;
+    gap: 0.65rem;
   }
 
   .control-password-fields {

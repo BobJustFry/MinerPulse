@@ -3,7 +3,7 @@ use minerpulse_core::model::BoardChipMap;
 use minerpulse_core::{
     compute_needs_setup, enable_api_switch_detailed, import_file_content,
     list_scan_subnets as discover_subnets, load_mpulse, normalize_poll_rate_hz, poll_interval_ms,
-    poll_wait_after_tick, probe_whatsminer_access, save_session, save_snapshot, scan_network,
+    poll_wait_after_tick, probe_whatsminer_access, read_pool_configs, save_session, save_snapshot, scan_network,
     scan_network_streaming, test_luci_credentials, EntitlementGate, ErrorResponse, FetchOptions,
     MinerPulseError, MinerSnapshot, MpulseFile, RateLimiter, ScanRequest, ScanResult, ScanSubnet,
     SubscriptionTier, TcpCgminerClient, WhatsminerAccessInfo, WhatsminerLuciAuth,
@@ -1387,6 +1387,24 @@ async fn get_whatsminer_control_state(
 }
 
 #[tauri::command]
+async fn get_whatsminer_pools(
+    app: AppHandle,
+    request: WhatsminerControlGetRequest,
+) -> Result<Vec<minerpulse_core::WhatsminerPoolConfig>, ErrorResponse> {
+    let ip = request.ip.clone();
+    let gate = app.state::<MinerIoGate>().0.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _io = gate.lock().unwrap_or_else(|e| e.into_inner());
+        read_pool_configs(&ip).map_err(|e| ErrorResponse::from(&e))
+    })
+    .await
+    .map_err(|_| ErrorResponse {
+        code: minerpulse_core::ErrorCode::InvalidInput,
+        args: None,
+    })?
+}
+
+#[tauri::command]
 async fn change_whatsminer_super_password(
     app: AppHandle,
     request: WhatsminerPasswordChangeRequest,
@@ -1657,6 +1675,7 @@ pub fn run() {
             remember_snapshot,
             send_miner_command,
             get_whatsminer_control_state,
+            get_whatsminer_pools,
             change_whatsminer_super_password,
             apply_whatsminer_control,
             export_whatsminer_log,

@@ -1,8 +1,9 @@
 use super::access::{api_request, enable_api_switch, fetch_device_info, generate_api_token};
-use super::luci::test_luci_credentials;
 #[cfg(test)]
 use super::access::parse_device_info;
 use super::legacy4028::send_legacy_command;
+use super::luci::test_luci_credentials;
+use super::pools::{self, WhatsminerPoolConfig};
 use crate::error::{ErrorCode, MinerPulseError};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -48,6 +49,7 @@ pub enum WhatsminerControlAction {
     SetTargetFreq { percent: i32 },
     SetUpfreqSpeed { speed: u32 },
     SetPowerPercent { percent: u32 },
+    SetPools { pools: Vec<WhatsminerPoolConfig> },
     Reboot,
     RestoreSettings,
 }
@@ -228,6 +230,10 @@ pub fn apply_control_action(
         return apply_api_switch_enable(host, username, password, action);
     }
 
+    if let WhatsminerControlAction::SetPools { pools } = action {
+        return apply_set_pools(host, password, pools);
+    }
+
     let pre_state = read_control_state(host).ok();
     let enabling_api_switch = matches!(
         action,
@@ -324,6 +330,26 @@ pub fn enable_api_switch_detailed(
         ok: false,
         message,
     }
+}
+
+fn apply_set_pools(
+    host: &str,
+    password: &str,
+    pools: &[WhatsminerPoolConfig],
+) -> Result<WhatsminerControlApplyResult, MinerPulseError> {
+    let normalized = pools::normalize_pool_slots(pools.to_vec());
+    pools::set_pool_configs(host, password, &normalized)?;
+    thread::sleep(VERIFY_DELAY);
+    let verified = pools::pools_match_expected(host, &normalized);
+    Ok(WhatsminerControlApplyResult {
+        ok: verified,
+        message: if verified {
+            None
+        } else {
+            Some("verify_failed".into())
+        },
+        state: read_control_state_with_auth(host, Some(password)).ok(),
+    })
 }
 
 fn apply_api_switch_enable(
@@ -506,7 +532,9 @@ fn legacy_command_template(action: &WhatsminerControlAction) -> Option<String> {
         WhatsminerControlAction::RestoreSettings => {
             r#"{"token":"{sign}","cmd":"factory_reset"}"#.into()
         }
-        WhatsminerControlAction::SetLed { .. } | WhatsminerControlAction::SetApiSwitch { .. } => {
+        WhatsminerControlAction::SetLed { .. }
+        | WhatsminerControlAction::SetApiSwitch { .. }
+        | WhatsminerControlAction::SetPools { .. } => {
             return None;
         }
     })
@@ -552,6 +580,9 @@ fn action_to_cmd(action: &WhatsminerControlAction) -> Result<(&'static str, Valu
         WhatsminerControlAction::SetUpfreqSpeed { speed } => ("set.miner.upfreq_speed", json!(speed)),
         WhatsminerControlAction::SetPowerPercent { percent } => {
             ("set.miner.power_percent", json!(percent))
+        }
+        WhatsminerControlAction::SetPools { .. } => {
+            return Err(MinerPulseError::with_code(ErrorCode::NotSupported));
         }
         WhatsminerControlAction::Reboot => ("set.system.reboot", json!("")),
         WhatsminerControlAction::RestoreSettings => ("set.miner.restore_setting", json!("")),
@@ -675,6 +706,16 @@ fn verify_action_with_auth(
     password: Option<&str>,
     action: &WhatsminerControlAction,
 ) -> Result<bool, MinerPulseError> {
+    if let WhatsminerControlAction::SetPools { pools } = action {
+        thread::sleep(VERIFY_DELAY);
+        for _ in 0..VERIFY_ATTEMPTS {
+            if pools::pools_match_expected(host, pools) {
+                return Ok(true);
+            }
+            thread::sleep(VERIFY_INTERVAL);
+        }
+        return Ok(false);
+    }
     thread::sleep(VERIFY_DELAY);
     for _ in 0..VERIFY_ATTEMPTS {
         if let Ok(state) = read_control_state_with_auth(host, password) {
@@ -709,6 +750,7 @@ fn action_matches_state(action: &WhatsminerControlAction, state: &WhatsminerCont
         WhatsminerControlAction::SetPowerPercent { percent } => {
             state.power_percent == Some(*percent)
         }
+        WhatsminerControlAction::SetPools { .. } => true,
         WhatsminerControlAction::Reboot | WhatsminerControlAction::RestoreSettings => true,
     }
 }

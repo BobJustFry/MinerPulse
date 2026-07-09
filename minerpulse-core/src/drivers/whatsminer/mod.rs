@@ -8,6 +8,7 @@ pub mod legacy4028;
 pub mod luci;
 pub mod mac;
 pub mod options;
+pub mod pools;
 
 use super::json_util::{array_items, json_f64, json_str, json_u64};
 use super::MinerDriver;
