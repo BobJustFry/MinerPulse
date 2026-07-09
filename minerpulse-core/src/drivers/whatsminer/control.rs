@@ -2,6 +2,7 @@ use super::access::{api_request, enable_api_switch, fetch_device_info, generate_
 #[cfg(test)]
 use super::access::parse_device_info;
 use super::legacy4028::send_legacy_command;
+use super::advanced::{self, is_liquid_cooling};
 use super::luci::test_luci_credentials;
 use super::pools::{self, WhatsminerPoolConfig};
 use crate::error::{ErrorCode, MinerPulseError};
@@ -34,6 +35,20 @@ pub struct WhatsminerControlState {
     pub ntp_servers: Vec<String>,
     pub model: Option<String>,
     pub writes_blocked: bool,
+    pub fan_poweroff_cool: Option<bool>,
+    pub fan_zero_speed: Option<bool>,
+    pub fan_temp_offset: Option<i32>,
+    pub cointype: Option<String>,
+    pub hostname: Option<String>,
+    pub zonename: Option<String>,
+    pub time_random_start: Option<u32>,
+    pub time_random_stop: Option<u32>,
+    pub net_ip: Option<String>,
+    pub net_mask: Option<String>,
+    pub net_gate: Option<String>,
+    pub net_dns: Option<String>,
+    pub net_dhcp: Option<bool>,
+    pub liquid_cooling: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,6 +65,25 @@ pub enum WhatsminerControlAction {
     SetUpfreqSpeed { speed: u32 },
     SetPowerPercent { percent: u32 },
     SetPools { pools: Vec<WhatsminerPoolConfig> },
+    SetFanPoweroffCool { enabled: bool },
+    SetFanZeroSpeed { enabled: bool },
+    SetFanTempOffset { offset: i32 },
+    SetMinerService { operation: String },
+    SetCoinType { cointype: String },
+    SetHeatMode { mode: String },
+    SetMinerPowerTemp { watts: u32 },
+    SetHostname { hostname: String },
+    SetTimezone { timezone: String, zonename: String },
+    SetNtpServers { servers: String },
+    SetTimeRandomized { start: u32, stop: u32 },
+    SetNetConfigDhcp,
+    SetNetConfigStatic {
+        ip: String,
+        mask: String,
+        gate: String,
+        dns: String,
+    },
+    SystemFactoryReset,
     Reboot,
     RestoreSettings,
 }
@@ -102,9 +136,15 @@ pub fn read_control_state_with_auth(
 
     let miner_setting = fetch_json_cmd(host, "get.miner.setting")?;
     let system_setting = fetch_json_cmd(host, "get.system.setting").ok();
+    let fan_setting = advanced::read_fan_settings(host).ok();
     let led_mode = fetch_device_led_mode(host);
 
-    let mut state = build_control_state(&device, &miner_setting, system_setting.as_ref());
+    let mut state = build_control_state(
+        &device,
+        &miner_setting,
+        system_setting.as_ref(),
+        fan_setting.as_ref(),
+    );
     state.led_mode = led_mode;
     state.writes_blocked = false;
     Ok(state)
@@ -427,11 +467,30 @@ fn apply_control_action_v3(
         });
     }
 
-    if matches!(action, WhatsminerControlAction::Reboot) {
+    if matches!(
+        action,
+        WhatsminerControlAction::Reboot | WhatsminerControlAction::SystemFactoryReset
+    ) {
         return Ok(WhatsminerControlApplyResult {
             ok: true,
             message: Some("reboot".into()),
             state: None,
+        });
+    }
+
+    if matches!(action, WhatsminerControlAction::SetMinerService { .. }) {
+        return Ok(WhatsminerControlApplyResult {
+            ok: true,
+            message: None,
+            state: read_control_state_with_auth(host, Some(password)).ok(),
+        });
+    }
+
+    if matches!(action, WhatsminerControlAction::SetMinerPowerTemp { .. }) {
+        return Ok(WhatsminerControlApplyResult {
+            ok: true,
+            message: None,
+            state: read_control_state_with_auth(host, Some(password)).ok(),
         });
     }
 
@@ -534,7 +593,21 @@ fn legacy_command_template(action: &WhatsminerControlAction) -> Option<String> {
         }
         WhatsminerControlAction::SetLed { .. }
         | WhatsminerControlAction::SetApiSwitch { .. }
-        | WhatsminerControlAction::SetPools { .. } => {
+        | WhatsminerControlAction::SetPools { .. }
+        | WhatsminerControlAction::SetFanPoweroffCool { .. }
+        | WhatsminerControlAction::SetFanZeroSpeed { .. }
+        | WhatsminerControlAction::SetFanTempOffset { .. }
+        | WhatsminerControlAction::SetMinerService { .. }
+        | WhatsminerControlAction::SetCoinType { .. }
+        | WhatsminerControlAction::SetHeatMode { .. }
+        | WhatsminerControlAction::SetMinerPowerTemp { .. }
+        | WhatsminerControlAction::SetHostname { .. }
+        | WhatsminerControlAction::SetTimezone { .. }
+        | WhatsminerControlAction::SetNtpServers { .. }
+        | WhatsminerControlAction::SetTimeRandomized { .. }
+        | WhatsminerControlAction::SetNetConfigDhcp
+        | WhatsminerControlAction::SetNetConfigStatic { .. }
+        | WhatsminerControlAction::SystemFactoryReset => {
             return None;
         }
     })
@@ -584,6 +657,45 @@ fn action_to_cmd(action: &WhatsminerControlAction) -> Result<(&'static str, Valu
         WhatsminerControlAction::SetPools { .. } => {
             return Err(MinerPulseError::with_code(ErrorCode::NotSupported));
         }
+        WhatsminerControlAction::SetFanPoweroffCool { enabled } => (
+            "set.fan.poweroff_cool",
+            json!(if *enabled { 1 } else { 0 }),
+        ),
+        WhatsminerControlAction::SetFanZeroSpeed { enabled } => (
+            "set.fan.zero_speed",
+            json!(if *enabled { 1 } else { 0 }),
+        ),
+        WhatsminerControlAction::SetFanTempOffset { offset } => {
+            ("set.fan.temp_offset", json!(offset))
+        }
+        WhatsminerControlAction::SetMinerService { operation } => {
+            ("set.miner.service", json!(operation))
+        }
+        WhatsminerControlAction::SetCoinType { cointype } => {
+            ("set.miner.cointype", json!({ "cointype": cointype }))
+        }
+        WhatsminerControlAction::SetHeatMode { mode } => ("set.miner.heat_mode", json!(mode)),
+        WhatsminerControlAction::SetMinerPowerTemp { watts } => ("set.miner.power", json!(watts)),
+        WhatsminerControlAction::SetHostname { hostname } => {
+            ("set.system.hostname", json!({ "hostname": hostname }))
+        }
+        WhatsminerControlAction::SetTimezone { timezone, zonename } => (
+            "set.system.timezone",
+            json!({ "timezone": timezone, "zonename": zonename }),
+        ),
+        WhatsminerControlAction::SetNtpServers { servers } => {
+            ("set.system.ntp_server", json!(servers))
+        }
+        WhatsminerControlAction::SetTimeRandomized { start, stop } => (
+            "set.system.time_randomized",
+            json!({ "start": start, "stop": stop }),
+        ),
+        WhatsminerControlAction::SetNetConfigDhcp => ("set.system.net_config", json!("dhcp")),
+        WhatsminerControlAction::SetNetConfigStatic { ip, mask, gate, dns } => (
+            "set.system.net_config",
+            json!({ "ip": ip, "mask": mask, "gate": gate, "dns": dns }),
+        ),
+        WhatsminerControlAction::SystemFactoryReset => ("set.system.factory_reset", json!("")),
         WhatsminerControlAction::Reboot => ("set.system.reboot", json!("")),
         WhatsminerControlAction::RestoreSettings => ("set.miner.restore_setting", json!("")),
     })
@@ -654,8 +766,10 @@ fn build_control_state(
     device: &super::access::DeviceInfoProbe,
     miner_setting: &Value,
     system_setting: Option<&Value>,
+    fan_setting: Option<&advanced::FanSettings>,
 ) -> WhatsminerControlState {
     let heat_mode = json_str(miner_setting, "heat-mode");
+    let net = system_setting.and_then(|s| s.get("network"));
     WhatsminerControlState {
         api_switch: device.api_switch,
         api_reachable: device.code_ok,
@@ -672,7 +786,7 @@ fn build_control_state(
         power_percent: json_u32(miner_setting, "power-percent").or_else(|| json_u32(miner_setting, "power")),
         heat_mode: heat_mode.clone(),
         protection_mode: heat_mode.as_deref().map(|m| m != "normal"),
-        timezone: system_setting.and_then(|s| json_str(s, "zonename")),
+        timezone: system_setting.and_then(|s| json_str(s, "timezone")),
         ntp_servers: system_setting
             .and_then(|s| s.get("ntp-server"))
             .and_then(|v| v.as_array())
@@ -681,9 +795,30 @@ fn build_control_state(
                     .filter_map(|v| v.as_str().map(str::to_string))
                     .collect()
             })
+            .or_else(|| {
+                system_setting
+                    .and_then(|s| json_str(s, "ntp-server"))
+                    .map(|s| vec![s])
+            })
             .unwrap_or_default(),
         model: device.model.clone(),
         writes_blocked: false,
+        fan_poweroff_cool: fan_setting.and_then(|f| f.poweroff_cool),
+        fan_zero_speed: fan_setting.and_then(|f| f.zero_speed),
+        fan_temp_offset: fan_setting.and_then(|f| f.temp_offset),
+        cointype: json_str(miner_setting, "cointype"),
+        hostname: system_setting.and_then(|s| json_str(s, "hostname")),
+        zonename: system_setting.and_then(|s| json_str(s, "zonename")),
+        time_random_start: system_setting
+            .and_then(|s| json_u32(s, "time-randomized-start")),
+        time_random_stop: system_setting
+            .and_then(|s| json_u32(s, "time-randomized-stop")),
+        net_ip: net.and_then(|n| json_str(n, "ipaddr")),
+        net_mask: net.and_then(|n| json_str(n, "netmask")),
+        net_gate: net.and_then(|n| json_str(n, "gateway")),
+        net_dns: net.and_then(|n| json_str(n, "dns")),
+        net_dhcp: net.and_then(|n| json_str(n, "proto")).map(|p| p == "dhcp"),
+        liquid_cooling: is_liquid_cooling(miner_setting),
     }
 }
 
@@ -697,7 +832,12 @@ pub fn action_may_need_reboot(action: &WhatsminerControlAction) -> bool {
             | WhatsminerControlAction::SetTargetFreq { .. }
             | WhatsminerControlAction::SetUpfreqSpeed { .. }
             | WhatsminerControlAction::SetPowerPercent { .. }
+            | WhatsminerControlAction::SetHostname { .. }
+            | WhatsminerControlAction::SetTimezone { .. }
+            | WhatsminerControlAction::SetNetConfigDhcp
+            | WhatsminerControlAction::SetNetConfigStatic { .. }
             | WhatsminerControlAction::RestoreSettings
+            | WhatsminerControlAction::SystemFactoryReset
     )
 }
 
@@ -751,7 +891,47 @@ fn action_matches_state(action: &WhatsminerControlAction, state: &WhatsminerCont
             state.power_percent == Some(*percent)
         }
         WhatsminerControlAction::SetPools { .. } => true,
-        WhatsminerControlAction::Reboot | WhatsminerControlAction::RestoreSettings => true,
+        WhatsminerControlAction::SetFanPoweroffCool { enabled } => {
+            state.fan_poweroff_cool == Some(*enabled)
+        }
+        WhatsminerControlAction::SetFanZeroSpeed { enabled } => {
+            state.fan_zero_speed == Some(*enabled)
+        }
+        WhatsminerControlAction::SetFanTempOffset { offset } => {
+            state.fan_temp_offset == Some(*offset)
+        }
+        WhatsminerControlAction::SetCoinType { cointype } => {
+            state.cointype.as_deref() == Some(cointype.as_str())
+        }
+        WhatsminerControlAction::SetHeatMode { mode } => {
+            state.heat_mode.as_deref() == Some(mode.as_str())
+        }
+        WhatsminerControlAction::SetHostname { hostname } => {
+            state.hostname.as_deref() == Some(hostname.as_str())
+        }
+        WhatsminerControlAction::SetTimezone { timezone, zonename } => {
+            state.timezone.as_deref() == Some(timezone.as_str())
+                && state.zonename.as_deref() == Some(zonename.as_str())
+        }
+        WhatsminerControlAction::SetNtpServers { servers } => {
+            state.ntp_servers.join(",") == servers.trim()
+        }
+        WhatsminerControlAction::SetTimeRandomized { start, stop } => {
+            state.time_random_start == Some(*start) && state.time_random_stop == Some(*stop)
+        }
+        WhatsminerControlAction::SetNetConfigDhcp => state.net_dhcp == Some(true),
+        WhatsminerControlAction::SetNetConfigStatic { ip, mask, gate, dns } => {
+            state.net_dhcp == Some(false)
+                && state.net_ip.as_deref() == Some(ip.as_str())
+                && state.net_mask.as_deref() == Some(mask.as_str())
+                && state.net_gate.as_deref() == Some(gate.as_str())
+                && state.net_dns.as_deref() == Some(dns.as_str())
+        }
+        WhatsminerControlAction::SetMinerService { .. }
+        | WhatsminerControlAction::SetMinerPowerTemp { .. } => true,
+        WhatsminerControlAction::Reboot
+        | WhatsminerControlAction::RestoreSettings
+        | WhatsminerControlAction::SystemFactoryReset => true,
     }
 }
 
@@ -829,7 +1009,7 @@ mod tests {
         )
         .unwrap();
         let miner = serde_json::json!({ "power-mode": "normal" });
-        let state = build_control_state(&device, &miner, None);
+        let state = build_control_state(&device, &miner, None, None);
         assert_eq!(state.api_switch, Some(false));
         assert!(!state.writes_blocked);
     }
@@ -857,7 +1037,7 @@ mod tests {
             "target-freq": 0,
             "power": 0
         });
-        let state = build_control_state(&device, &miner, None);
+        let state = build_control_state(&device, &miner, None, None);
         assert_eq!(state.mining, Some(true));
         assert_eq!(state.fast_boot, Some(false));
         assert_eq!(state.power_mode.as_deref(), Some("normal"));
@@ -870,7 +1050,7 @@ mod tests {
         )
         .unwrap();
         let miner = serde_json::json!({ "target-freq": -25 });
-        let state = build_control_state(&device, &miner, None);
+        let state = build_control_state(&device, &miner, None, None);
         assert_eq!(state.target_freq_pct, Some(-25));
     }
 

@@ -188,6 +188,20 @@ export interface WhatsminerControlState {
   ntpServers: string[];
   model?: string | null;
   writesBlocked: boolean;
+  fanPoweroffCool?: boolean | null;
+  fanZeroSpeed?: boolean | null;
+  fanTempOffset?: number | null;
+  cointype?: string | null;
+  hostname?: string | null;
+  zonename?: string | null;
+  timeRandomStart?: number | null;
+  timeRandomStop?: number | null;
+  netIp?: string | null;
+  netMask?: string | null;
+  netGate?: string | null;
+  netDns?: string | null;
+  netDhcp?: boolean | null;
+  liquidCooling?: boolean;
 }
 
 export interface WhatsminerPoolConfig {
@@ -208,5 +222,21 @@ export type WhatsminerControlAction =
   | { set_upfreq_speed: { speed: number } }
   | { set_power_percent: { percent: number } }
   | { set_pools: { pools: WhatsminerPoolConfig[] } }
+  | { set_fan_poweroff_cool: { enabled: boolean } }
+  | { set_fan_zero_speed: { enabled: boolean } }
+  | { set_fan_temp_offset: { offset: number } }
+  | { set_miner_service: { operation: string } }
+  | { set_coin_type: { cointype: string } }
+  | { set_heat_mode: { mode: string } }
+  | { set_miner_power_temp: { watts: number } }
+  | { set_hostname: { hostname: string } }
+  | { set_timezone: { timezone: string; zonename: string } }
+  | { set_ntp_servers: { servers: string } }
+  | { set_time_randomized: { start: number; stop: number } }
+  | { set_net_config_dhcp: null }
+  | {
+      set_net_config_static: { ip: string; mask: string; gate: string; dns: string };
+    }
+  | { system_factory_reset: null }
   | { reboot: null }
   | { restore_settings: null };

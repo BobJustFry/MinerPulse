@@ -11,6 +11,25 @@
 
   type PoolDraft = WhatsminerPoolConfig;
 
+  type AdvancedDraft = {
+    fan_poweroff_cool: boolean;
+    fan_zero_speed: boolean;
+    fan_temp_offset: number;
+    cointype: string;
+    heat_mode: string;
+    hostname: string;
+    timezone: string;
+    zonename: string;
+    ntp_servers: string;
+    time_random_start: number;
+    time_random_stop: number;
+    net_dhcp: boolean;
+    net_ip: string;
+    net_mask: string;
+    net_gate: string;
+    net_dns: string;
+  };
+
   type ControlDraft = {
     mining: boolean;
     api_switch: boolean;
@@ -94,6 +113,9 @@
   let activeTab = $state<"main" | "pools" | "advanced">("main");
   let poolsBaseline = $state<PoolDraft[] | null>(null);
   let poolsDraft = $state<PoolDraft[] | null>(null);
+  let advancedBaseline = $state<AdvancedDraft | null>(null);
+  let advancedDraft = $state<AdvancedDraft | null>(null);
+  let tempPowerWatts = $state("");
 
   const modalBusy = $derived(
     busy ||
@@ -135,6 +157,10 @@
   const hasPoolsChanges = $derived(
     poolsBaseline != null && poolsDraft != null && poolsDraftDiffers(poolsBaseline, poolsDraft),
   );
+  const hasAdvancedChanges = $derived(
+    advancedBaseline != null && advancedDraft != null && advancedDiffers(advancedBaseline, advancedDraft),
+  );
+  const liquidCooling = $derived(controlState?.liquidCooling === true);
 
   function emptyPools(): PoolDraft[] {
     return Array.from({ length: 3 }, () => ({ url: "", worker: "", password: "" }));
@@ -229,6 +255,137 @@
     const next = draftFromState(state);
     baseline = next;
     draft = { ...next };
+    const adv = advancedFromState(state);
+    advancedBaseline = adv;
+    advancedDraft = { ...adv };
+  }
+
+  function advancedFromState(state: WhatsminerControlState): AdvancedDraft {
+    return {
+      fan_poweroff_cool: state.fanPoweroffCool ?? false,
+      fan_zero_speed: state.fanZeroSpeed ?? false,
+      fan_temp_offset: state.fanTempOffset ?? 0,
+      cointype: state.cointype ?? "BTC",
+      heat_mode: state.heatMode ?? "normal",
+      hostname: state.hostname ?? "",
+      timezone: state.timezone ?? "",
+      zonename: state.zonename ?? state.timezone ?? "",
+      ntp_servers: (state.ntpServers ?? []).join(","),
+      time_random_start: state.timeRandomStart ?? 0,
+      time_random_stop: state.timeRandomStop ?? 0,
+      net_dhcp: state.netDhcp ?? true,
+      net_ip: state.netIp ?? "",
+      net_mask: state.netMask ?? "",
+      net_gate: state.netGate ?? "",
+      net_dns: state.netDns ?? "",
+    };
+  }
+
+  function advancedDiffers(a: AdvancedDraft, b: AdvancedDraft): boolean {
+    return JSON.stringify(a) !== JSON.stringify(b);
+  }
+
+  function setAdvancedField<K extends keyof AdvancedDraft>(key: K, value: AdvancedDraft[K]) {
+    if (!advancedDraft) return;
+    advancedDraft = { ...advancedDraft, [key]: value };
+  }
+
+  function buildAdvancedActions(base: AdvancedDraft, next: AdvancedDraft): WhatsminerControlAction[] {
+    const actions: WhatsminerControlAction[] = [];
+    if (base.fan_poweroff_cool !== next.fan_poweroff_cool) {
+      actions.push({ set_fan_poweroff_cool: { enabled: next.fan_poweroff_cool } });
+    }
+    if (base.fan_zero_speed !== next.fan_zero_speed) {
+      actions.push({ set_fan_zero_speed: { enabled: next.fan_zero_speed } });
+    }
+    if (base.fan_temp_offset !== next.fan_temp_offset) {
+      actions.push({ set_fan_temp_offset: { offset: next.fan_temp_offset } });
+    }
+    if (base.cointype !== next.cointype) {
+      actions.push({ set_coin_type: { cointype: next.cointype } });
+    }
+    if (base.heat_mode !== next.heat_mode) {
+      actions.push({ set_heat_mode: { mode: next.heat_mode } });
+    }
+    if (base.hostname !== next.hostname) {
+      actions.push({ set_hostname: { hostname: next.hostname.trim() } });
+    }
+    if (base.timezone !== next.timezone || base.zonename !== next.zonename) {
+      actions.push({
+        set_timezone: { timezone: next.timezone.trim(), zonename: next.zonename.trim() },
+      });
+    }
+    if (base.ntp_servers !== next.ntp_servers) {
+      actions.push({ set_ntp_servers: { servers: next.ntp_servers.trim() } });
+    }
+    if (base.time_random_start !== next.time_random_start || base.time_random_stop !== next.time_random_stop) {
+      actions.push({
+        set_time_randomized: { start: next.time_random_start, stop: next.time_random_stop },
+      });
+    }
+    if (base.net_dhcp !== next.net_dhcp) {
+      if (next.net_dhcp) actions.push({ set_net_config_dhcp: null });
+    }
+    if (
+      !next.net_dhcp &&
+      (base.net_ip !== next.net_ip ||
+        base.net_mask !== next.net_mask ||
+        base.net_gate !== next.net_gate ||
+        base.net_dns !== next.net_dns)
+    ) {
+      actions.push({
+        set_net_config_static: {
+          ip: next.net_ip.trim(),
+          mask: next.net_mask.trim(),
+          gate: next.net_gate.trim(),
+          dns: next.net_dns.trim(),
+        },
+      });
+    }
+    return actions;
+  }
+
+  function discardAdvancedDraft() {
+    if (!advancedBaseline) return;
+    advancedDraft = { ...advancedBaseline };
+    errorText = "";
+  }
+
+  async function commitAdvancedDraft() {
+    if (!advancedBaseline || !advancedDraft || applying) return;
+    const actions = buildAdvancedActions(advancedBaseline, advancedDraft);
+    if (actions.length === 0) return;
+    await runActions(actions);
+  }
+
+  async function runInstantAction(action: WhatsminerControlAction) {
+    if (controlDisabled(true)) {
+      errorText = msg("control.apiSwitchDisabledHint");
+      return;
+    }
+    applying = true;
+    applyPhase = "sending";
+    applyStatus = "loading";
+    errorText = "";
+    try {
+      const outcome = await applySingle(action, true);
+      if (!outcome.ok && outcome.rebootRequired) {
+        offerRebootAfterApply(draft!, []);
+        return;
+      }
+      if (outcome.ok) {
+        applyPhase = "success";
+        applyStatus = "success";
+        scheduleApplyIdle();
+        await onApplied?.();
+      } else {
+        applyPhase = "error";
+        applyStatus = "error";
+        scheduleApplyIdle();
+      }
+    } finally {
+      applying = false;
+    }
   }
 
   function setDraftField<K extends keyof ControlDraft>(key: K, value: ControlDraft[K]) {
@@ -359,6 +516,11 @@
         "set_target_freq" in a ||
         "set_upfreq_speed" in a ||
         "set_power_percent" in a ||
+        "set_hostname" in a ||
+        "set_timezone" in a ||
+        "set_net_config_dhcp" in a ||
+        "set_net_config_static" in a ||
+        "system_factory_reset" in a ||
         "restore_settings" in a,
     );
   }
@@ -1261,8 +1423,216 @@
           {/each}
         {:else if activeTab === "pools"}
           <p class="control-hint">{msg("control.loading")}</p>
+        {:else if activeTab === "advanced" && advancedDraft}
+          {#if apiSwitchOff}
+            <p class="control-hint warn">{msg("control.apiSwitchDisabledHint")}</p>
+          {/if}
+
+          <section class="control-section" class:api-blocked={apiSwitchOff}>
+            <h4>{msg("control.advanced.service")}</h4>
+            <div class="control-actions">
+              <button
+                type="button"
+                class="btn"
+                disabled={controlDisabled(true)}
+                title={msg("control.tip.serviceRestart")}
+                onclick={() => void runInstantAction({ set_miner_service: { operation: "restart" } })}
+              >
+                {markApiWrite(msg("control.advanced.restartService"))}
+              </button>
+            </div>
+          </section>
+
+          <section class="control-section" class:api-blocked={apiSwitchOff}>
+            <h4>{msg("control.advanced.fan")}</h4>
+            <div class="control-rows">
+              <CupertinoSwitch
+                label={msg("control.advanced.fanPoweroffCool")}
+                hint={controlHint("control.tip.fanPoweroffCool")}
+                apiWrite
+                checked={advancedDraft.fan_poweroff_cool}
+                disabled={controlDisabled(true)}
+                onchange={(enabled) => setAdvancedField("fan_poweroff_cool", enabled)}
+              />
+              <CupertinoSwitch
+                label={msg("control.advanced.fanZeroSpeed")}
+                hint={controlHint("control.tip.fanZeroSpeed")}
+                apiWrite
+                checked={advancedDraft.fan_zero_speed}
+                disabled={controlDisabled(true)}
+                onchange={(enabled) => setAdvancedField("fan_zero_speed", enabled)}
+              />
+            </div>
+            <div class="control-stepper">
+              <span class="control-hint-label" title={controlHint("control.tip.fanTempOffset")}>
+                {markApiWrite(msg("control.advanced.fanTempOffset"))}
+              </span>
+              <div class="control-stepper-actions">
+                <button
+                  type="button"
+                  class="btn btn-icon-only control-step-btn"
+                  disabled={controlDisabled(true) || advancedDraft.fan_temp_offset <= -30}
+                  onclick={() => setAdvancedField("fan_temp_offset", advancedDraft.fan_temp_offset - 1)}>−</button>
+                <strong class="control-step-value">{advancedDraft.fan_temp_offset}</strong>
+                <button
+                  type="button"
+                  class="btn btn-icon-only control-step-btn"
+                  disabled={controlDisabled(true) || advancedDraft.fan_temp_offset >= 0}
+                  onclick={() => setAdvancedField("fan_temp_offset", advancedDraft.fan_temp_offset + 1)}>+</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="control-section" class:api-blocked={apiSwitchOff}>
+            <h4>{msg("control.advanced.coin")}</h4>
+            <label class="password-field">
+              <span>{markApiWrite(msg("control.advanced.cointype"))}</span>
+              <select
+                disabled={controlDisabled(true)}
+                value={advancedDraft.cointype}
+                onchange={(e) => setAdvancedField("cointype", e.currentTarget.value)}
+              >
+                {#each ["BTC", "BCH", "BSV", "DCR", "HC", "DGB", "SHA256"] as coin}
+                  <option value={coin}>{coin}</option>
+                {/each}
+              </select>
+            </label>
+          </section>
+
+          {#if liquidCooling}
+            <section class="control-section" class:api-blocked={apiSwitchOff}>
+              <h4>{msg("control.advanced.heatMode")}</h4>
+              <div class="control-segment-group">
+                {#each ["heating", "normal", "anti-icing"] as mode}
+                  <button
+                    type="button"
+                    class="control-segment"
+                    class:active={advancedDraft.heat_mode === mode}
+                    disabled={controlDisabled(true)}
+                    onclick={() => setAdvancedField("heat_mode", mode)}
+                  >
+                    {msg(`control.heatMode.${mode}` as MessageKey)}
+                  </button>
+                {/each}
+              </div>
+            </section>
+          {/if}
+
+          <section class="control-section" class:api-blocked={apiSwitchOff}>
+            <h4>{msg("control.advanced.network")}</h4>
+            <label class="password-field">
+              <span>{markApiWrite(msg("control.advanced.hostname"))}</span>
+              <input
+                type="text"
+                value={advancedDraft.hostname}
+                disabled={controlDisabled(true)}
+                oninput={(e) => setAdvancedField("hostname", e.currentTarget.value)}
+              />
+            </label>
+            <CupertinoSwitch
+              label={msg("control.advanced.netDhcp")}
+              hint={controlHint("control.tip.netDhcp")}
+              apiWrite
+              checked={advancedDraft.net_dhcp}
+              disabled={controlDisabled(true)}
+              onchange={(enabled) => setAdvancedField("net_dhcp", enabled)}
+            />
+            {#if !advancedDraft.net_dhcp}
+              <div class="control-pool-fields">
+                <label class="password-field">
+                  <span>{msg("control.advanced.netIp")}</span>
+                  <input type="text" value={advancedDraft.net_ip} disabled={controlDisabled(true)} oninput={(e) => setAdvancedField("net_ip", e.currentTarget.value)} />
+                </label>
+                <label class="password-field">
+                  <span>{msg("control.advanced.netMask")}</span>
+                  <input type="text" value={advancedDraft.net_mask} disabled={controlDisabled(true)} oninput={(e) => setAdvancedField("net_mask", e.currentTarget.value)} />
+                </label>
+                <label class="password-field">
+                  <span>{msg("control.advanced.netGate")}</span>
+                  <input type="text" value={advancedDraft.net_gate} disabled={controlDisabled(true)} oninput={(e) => setAdvancedField("net_gate", e.currentTarget.value)} />
+                </label>
+                <label class="password-field">
+                  <span>{msg("control.advanced.netDns")}</span>
+                  <input type="text" value={advancedDraft.net_dns} disabled={controlDisabled(true)} oninput={(e) => setAdvancedField("net_dns", e.currentTarget.value)} />
+                </label>
+              </div>
+            {/if}
+          </section>
+
+          <section class="control-section" class:api-blocked={apiSwitchOff}>
+            <h4>{msg("control.advanced.time")}</h4>
+            <div class="control-pool-fields">
+              <label class="password-field">
+                <span>{markApiWrite(msg("control.advanced.timezone"))}</span>
+                <input type="text" value={advancedDraft.timezone} disabled={controlDisabled(true)} oninput={(e) => setAdvancedField("timezone", e.currentTarget.value)} />
+              </label>
+              <label class="password-field">
+                <span>{markApiWrite(msg("control.advanced.zonename"))}</span>
+                <input type="text" value={advancedDraft.zonename} disabled={controlDisabled(true)} oninput={(e) => setAdvancedField("zonename", e.currentTarget.value)} />
+              </label>
+              <label class="password-field">
+                <span>{markApiWrite(msg("control.advanced.ntp"))}</span>
+                <input type="text" value={advancedDraft.ntp_servers} disabled={controlDisabled(true)} oninput={(e) => setAdvancedField("ntp_servers", e.currentTarget.value)} />
+              </label>
+            </div>
+            <div class="control-stepper">
+              <span>{markApiWrite(msg("control.advanced.timeRandom"))}</span>
+              <div class="control-stepper-actions">
+                <input type="number" min="0" max="120" value={advancedDraft.time_random_start} disabled={controlDisabled(true)} oninput={(e) => setAdvancedField("time_random_start", Number(e.currentTarget.value) || 0)} />
+                <span>–</span>
+                <input type="number" min="0" max="120" value={advancedDraft.time_random_stop} disabled={controlDisabled(true)} oninput={(e) => setAdvancedField("time_random_stop", Number(e.currentTarget.value) || 0)} />
+              </div>
+            </div>
+          </section>
+
+          <section class="control-section" class:api-blocked={apiSwitchOff}>
+            <h4>{msg("control.advanced.tempPower")}</h4>
+            <p class="control-hint">{msg("control.tip.tempPower")}</p>
+            <div class="control-actions">
+              <input
+                type="number"
+                class="control-inline-input"
+                min="0"
+                placeholder="W"
+                bind:value={tempPowerWatts}
+                disabled={controlDisabled(true)}
+              />
+              <button
+                type="button"
+                class="btn primary"
+                disabled={controlDisabled(true) || !tempPowerWatts.trim()}
+                onclick={() => {
+                  const watts = Number(tempPowerWatts);
+                  if (Number.isFinite(watts) && watts > 0) {
+                    void runInstantAction({ set_miner_power_temp: { watts } });
+                  }
+                }}
+              >
+                {markApiWrite(msg("control.advanced.applyTempPower"))}
+              </button>
+            </div>
+          </section>
+
+          <section class="control-section control-danger" class:api-blocked={apiSwitchOff}>
+            <h4>{msg("control.advanced.danger")}</h4>
+            <div class="control-actions">
+              <button
+                type="button"
+                class="btn danger"
+                disabled={controlDisabled(true)}
+                title={msg("control.tip.factoryReset")}
+                onclick={() => {
+                  if (confirm(msg("control.advanced.factoryResetConfirm"))) {
+                    void runInstantAction({ system_factory_reset: null });
+                  }
+                }}
+              >
+                {markApiWrite(msg("control.advanced.factoryReset"))}
+              </button>
+            </div>
+          </section>
         {:else if activeTab === "advanced"}
-          <p class="control-hint">{msg("control.advanced.placeholder")}</p>
+          <p class="control-hint">{msg("control.loading")}</p>
         {:else if loading}
           <p class="control-hint">{msg("control.loading")}</p>
         {/if}
@@ -1300,6 +1670,21 @@
               {/if}
               {msg("control.apply")}
             </button>
+          {:else if hasAdvancedChanges && activeTab === "advanced"}
+            <button type="button" class="btn" disabled={modalBusy} onclick={discardAdvancedDraft}>
+              {msg("control.discard")}
+            </button>
+            <button
+              type="button"
+              class="btn primary btn-with-spinner control-apply-btn"
+              disabled={modalBusy || controlDisabled(true)}
+              onclick={() => void commitAdvancedDraft()}
+            >
+              {#if applying}
+                <span class="btn-spinner" aria-hidden="true"></span>
+              {/if}
+              {msg("control.apply")}
+            </button>
           {/if}
           <button type="button" class="btn" disabled={modalBusy} onclick={() => void refresh()}>
             {msg("control.refresh")}
@@ -1312,6 +1697,8 @@
           <p class="control-pending-hint" role="status">{msg("control.pendingChanges")}</p>
         {:else if hasPoolsChanges && activeTab === "pools"}
           <p class="control-pending-hint" role="status">{msg("control.pools.pendingChanges")}</p>
+        {:else if hasAdvancedChanges && activeTab === "advanced"}
+          <p class="control-pending-hint" role="status">{msg("control.advanced.pendingChanges")}</p>
         {/if}
       </div>
     </ManagedModalCard>
@@ -1413,6 +1800,19 @@
   .control-pool-fields {
     display: grid;
     gap: 0.65rem;
+  }
+
+  .control-inline-input {
+    width: 6rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.4rem 0.55rem;
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+  }
+
+  .control-danger h4 {
+    color: var(--danger);
   }
 
   .control-password-fields {
