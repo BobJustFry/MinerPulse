@@ -8,6 +8,7 @@
   import UpdateAvailableNotice from "$lib/components/UpdateAvailableNotice.svelte";
   import UpdateProgressModal from "$lib/components/UpdateProgressModal.svelte";
   import WhatsminerSetupModal from "$lib/components/WhatsminerSetupModal.svelte";
+  import WhatsminerControlModal from "$lib/components/WhatsminerControlModal.svelte";
   import WindowCaption from "$lib/components/WindowCaption.svelte";
   import ToolbarBtn from "$lib/components/ToolbarBtn.svelte";
   import ToolbarIcon, { type ToolbarIconName } from "$lib/components/ToolbarIcon.svelte";
@@ -86,6 +87,7 @@
   let whatsminerSetupAccess = $state<WhatsminerAccessInfo | null>(null);
   let whatsminerAuthSession = $state(0);
   let whatsminerAuthDismissedIp = $state("");
+  let whatsminerControlOpen = $state(false);
   let readGeneration = 0;
   let connectionIp = $state("");
   let licenseInfo = $state<LicenseInfo>({ tier: "free", licensed: false, signed_in: false, hwid: "" });
@@ -176,6 +178,9 @@
   );
   const chartsLiveNow = $derived(chartsLive || polling || recording);
   const readActionDisabled = $derived(reading || polling || connectionLocked);
+  const controlActionDisabled = $derived(
+    busy || polling || recording || connectionLocked || reading,
+  );
   const readActionLabel = $derived(
     readActionMode === "read"
       ? msg("toolbar.read")
@@ -399,6 +404,16 @@
       chartPoints,
       pointFromSnapshot(nextSnapshot, t_ms),
     );
+  }
+
+  function openWhatsminerControl() {
+    if (controlActionDisabled || snapshot?.identity.vendor !== "whatsminer") return;
+    whatsminerControlOpen = true;
+  }
+
+  async function afterControlApplied() {
+    if (!ip.trim()) return;
+    await readMiner();
   }
 
   async function readMiner() {
@@ -1446,7 +1461,13 @@
   >
     {#if activeTab === "data"}
       {#if snapshot}
-        <MinerDataPanel {snapshot} {locale} {density} />
+        <MinerDataPanel
+          {snapshot}
+          {locale}
+          {density}
+          controlDisabled={controlActionDisabled}
+          onOpenControl={openWhatsminerControl}
+        />
       {:else}
         <div class="locked-panel">{msg("status.noData")}</div>
       {/if}
@@ -1560,4 +1581,14 @@
       onDismiss={dismissWhatsminerSetup}
     />
   {/key}
+
+  <WhatsminerControlModal
+    bind:open={whatsminerControlOpen}
+    {locale}
+    {ip}
+    port={Number(port) || 4028}
+    password={whatsminerPassword || "admin"}
+    busy={controlActionDisabled}
+    onApplied={afterControlApplied}
+  />
 </div>

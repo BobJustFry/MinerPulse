@@ -1,7 +1,9 @@
 pub mod access;
 mod btminer_log;
+pub mod control;
 mod errors;
 mod layout;
+pub mod legacy4028;
 pub mod luci;
 pub mod mac;
 pub mod options;

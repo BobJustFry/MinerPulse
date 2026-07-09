@@ -169,3 +169,37 @@ export interface ErrorResponse {
   code: string;
   args?: { sec?: number; message?: string; port?: number };
 }
+
+export interface WhatsminerControlState {
+  api_switch?: boolean | null;
+  api_reachable: boolean;
+  mining?: boolean | null;
+  fast_boot?: boolean | null;
+  web_pools?: boolean | null;
+  led_mode?: string | null;
+  power_mode?: string | null;
+  power_limit_w?: number | null;
+  target_freq_pct?: number | null;
+  upfreq_speed?: number | null;
+  power_percent?: number | null;
+  heat_mode?: string | null;
+  protection_mode?: boolean | null;
+  timezone?: string | null;
+  ntp_servers: string[];
+  model?: string | null;
+  writes_blocked: boolean;
+}
+
+export type WhatsminerControlAction =
+  | { set_mining: { enabled: boolean } }
+  | { set_api_switch: { enabled: boolean } }
+  | { set_fast_boot: { enabled: boolean } }
+  | { set_web_pools: { enabled: boolean } }
+  | { set_led: { mode: string } }
+  | { set_power_mode: { mode: string } }
+  | { set_power_limit: { watts: number } }
+  | { set_target_freq: { percent: number } }
+  | { set_upfreq_speed: { speed: number } }
+  | { set_power_percent: { percent: number } }
+  | { reboot: null }
+  | { restore_settings: null };

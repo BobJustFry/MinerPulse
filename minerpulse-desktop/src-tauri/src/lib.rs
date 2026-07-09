@@ -1278,6 +1278,92 @@ struct AppVersionInfo {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+struct WhatsminerControlGetRequest {
+    ip: String,
+    port: Option<u16>,
+    password: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct WhatsminerControlApplyRequest {
+    ip: String,
+    port: Option<u16>,
+    password: String,
+    action: minerpulse_core::WhatsminerControlAction,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct WhatsminerControlExportRequest {
+    ip: String,
+    password: String,
+    path: String,
+}
+
+#[tauri::command]
+async fn get_whatsminer_control_state(
+    app: AppHandle,
+    request: WhatsminerControlGetRequest,
+) -> Result<minerpulse_core::WhatsminerControlState, ErrorResponse> {
+    let ip = request.ip.clone();
+    let gate = app.state::<MinerIoGate>().0.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _io = gate.lock().unwrap_or_else(|e| e.into_inner());
+        minerpulse_core::read_control_state(&ip).map_err(ErrorResponse::from)
+    })
+    .await
+    .map_err(|_| ErrorResponse {
+        code: minerpulse_core::ErrorCode::InvalidInput,
+        args: None,
+    })?
+}
+
+#[tauri::command]
+async fn apply_whatsminer_control(
+    app: AppHandle,
+    request: WhatsminerControlApplyRequest,
+) -> Result<minerpulse_core::WhatsminerControlApplyResult, ErrorResponse> {
+    let ip = request.ip.clone();
+    let port = request.port.unwrap_or(4028);
+    let password = request.password.clone();
+    let action = request.action.clone();
+    let gate = app.state::<MinerIoGate>().0.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _io = gate.lock().unwrap_or_else(|e| e.into_inner());
+        minerpulse_core::apply_control_action(&ip, port, &password, &action)
+            .map_err(ErrorResponse::from)
+    })
+    .await
+    .map_err(|_| ErrorResponse {
+        code: minerpulse_core::ErrorCode::InvalidInput,
+        args: None,
+    })?
+}
+
+#[tauri::command]
+async fn export_whatsminer_log(
+    app: AppHandle,
+    request: WhatsminerControlExportRequest,
+) -> Result<(), ErrorResponse> {
+    let ip = request.ip.clone();
+    let password = request.password.clone();
+    let path = PathBuf::from(&request.path);
+    let gate = app.state::<MinerIoGate>().0.clone();
+    let bytes = tauri::async_runtime::spawn_blocking(move || {
+        let _io = gate.lock().unwrap_or_else(|e| e.into_inner());
+        minerpulse_core::export_miner_log(&ip, &password).map_err(ErrorResponse::from)
+    })
+    .await
+    .map_err(|_| ErrorResponse {
+        code: minerpulse_core::ErrorCode::InvalidInput,
+        args: None,
+    })??;
+    std::fs::write(&path, bytes).map_err(|_| ErrorResponse {
+        code: minerpulse_core::ErrorCode::IoError,
+        args: None,
+    })
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct SendMinerCommandRequest {
     ip: String,
     port: Option<u16>,
@@ -1458,6 +1544,9 @@ pub fn run() {
             import_file_path,
             remember_snapshot,
             send_miner_command,
+            get_whatsminer_control_state,
+            apply_whatsminer_control,
+            export_whatsminer_log,
             sync_window_frame,
         ])
         .setup(|app| {

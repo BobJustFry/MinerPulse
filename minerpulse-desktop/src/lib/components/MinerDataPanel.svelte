@@ -25,7 +25,15 @@
     snapshot,
     locale,
     density = "comfortable",
-  }: { snapshot: MinerSnapshot; locale: Locale; density?: "comfortable" | "compact" } = $props();
+    controlDisabled = false,
+    onOpenControl,
+  }: {
+    snapshot: MinerSnapshot;
+    locale: Locale;
+    density?: "comfortable" | "compact";
+    controlDisabled?: boolean;
+    onOpenControl?: () => void;
+  } = $props();
 
   let errorCatalog = $state<WhatsminerErrorCatalog | null>(null);
   let errorModalOpen = $state(false);
@@ -151,6 +159,16 @@
       </div>
     </div>
     <div class="data-hero-side">
+      {#if isWhatsminer()}
+        <button
+          type="button"
+          class="btn-secondary data-control-btn"
+          disabled={controlDisabled}
+          onclick={() => onOpenControl?.()}
+        >
+          {msg("control.open")}
+        </button>
+      {/if}
       <span class="data-status-pill tone-{statusTone(snapshot.status)}">
         {#if statusMessageKey(snapshot.status)}
           {msg(statusMessageKey(snapshot.status) as MessageKey)}
