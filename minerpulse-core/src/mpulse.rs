@@ -287,6 +287,7 @@ pub fn save_session(path: &Path, file: &MpulseFile) -> Result<(), MinerPulseErro
 mod tests {
     use super::*;
     use crate::model::{HashrateStats, MinerIdentity, MinerSnapshot, MinerVendor};
+    use std::path::PathBuf;
 
     fn sample_snapshot() -> MinerSnapshot {
         MinerSnapshot {
@@ -354,5 +355,22 @@ mod tests {
             poll_wait_after_tick(start, interval, now),
             std::time::Duration::from_millis(600)
         );
+    }
+
+    #[test]
+    fn refreshes_m60_snapshot_chip_layout_from_support_fixture() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../support/minerpulse-1783584041524.mpsn");
+        if !path.exists() {
+            return;
+        }
+        let loaded = open_mpulse_file(&path).expect("open m60 snapshot");
+        let snap = &loaded.frames[0].snapshot;
+        assert_eq!(snap.identity.model, "M60");
+        assert_eq!(snap.board_chips.len(), 3);
+        for board in &snap.board_chips {
+            assert_eq!(board.chips.len(), 172, "board {}", board.label);
+            assert_eq!(board.chips_per_domain, 4, "board {}", board.label);
+        }
     }
 }
