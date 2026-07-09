@@ -211,7 +211,7 @@
   <div class="data-sections">
     {#if paramItems().length > 0}
       {#if density === "compact"}
-        <details class="data-section span-2 data-params-details">
+        <details class="data-section span-full data-params-details">
           <summary class="data-section-head data-params-summary">{msg("data.group.params")}</summary>
           <div class="data-metrics">
             {#each paramItems() as item}
@@ -223,7 +223,7 @@
           </div>
         </details>
       {:else}
-        <section class="data-section span-2">
+        <section class="data-section span-full">
           <header class="data-section-head">{msg("data.group.params")}</header>
           <div class="data-metrics">
             {#each paramItems() as item}

@@ -89,6 +89,7 @@
   let passwordSuccess = $state("");
   let exportFlow = $state(false);
   let exportRunId = 0;
+  let activeTab = $state<"main" | "pools" | "advanced">("main");
 
   const modalBusy = $derived(
     busy ||
@@ -880,7 +881,25 @@
           <p class="control-hint error">{errorText}</p>
         {/if}
 
-        {#if draft}
+        <nav class="control-tabs" aria-label={msg("control.tabs.label")}>
+          {#each [
+            { id: "main" as const, label: msg("control.tab.main") },
+            { id: "pools" as const, label: msg("control.tab.pools") },
+            { id: "advanced" as const, label: msg("control.tab.advanced") },
+          ] as tab (tab.id)}
+            <button
+              type="button"
+              class="control-tab"
+              class:active={activeTab === tab.id}
+              disabled={modalBusy}
+              onclick={() => (activeTab = tab.id)}
+            >
+              {tab.label}
+            </button>
+          {/each}
+        </nav>
+
+        {#if draft && activeTab === "main"}
           <section class="control-section">
             <h4>{msg("control.section.toggles")}</h4>
             <div class="control-rows">
@@ -1075,6 +1094,10 @@
           </section>
 
           <p class="control-legend">{msg("control.legend.apiWrite")}</p>
+        {:else if activeTab === "pools"}
+          <p class="control-hint">{msg("control.pools.placeholder")}</p>
+        {:else if activeTab === "advanced"}
+          <p class="control-hint">{msg("control.advanced.placeholder")}</p>
         {:else if loading}
           <p class="control-hint">{msg("control.loading")}</p>
         {/if}
@@ -1082,7 +1105,7 @@
 
       <div class="control-footer-wrap">
         <footer class="modal-footer control-footer">
-          {#if hasPendingChanges}
+          {#if hasPendingChanges && activeTab === "main"}
             <button type="button" class="btn" disabled={modalBusy} onclick={discardDraft}>
               {msg("control.discard")}
             </button>
@@ -1105,7 +1128,7 @@
             {msg("control.close")}
           </button>
         </footer>
-        {#if hasPendingChanges}
+        {#if hasPendingChanges && activeTab === "main"}
           <p class="control-pending-hint" role="status">{msg("control.pendingChanges")}</p>
         {/if}
       </div>
@@ -1135,6 +1158,41 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
+  }
+
+  .control-tabs {
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+    padding-bottom: 0.15rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .control-tab {
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    padding: 0.4rem 0.75rem;
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .control-tab:hover:not(:disabled) {
+    color: var(--text-primary);
+    background: var(--bg-elevated);
+  }
+
+  .control-tab.active {
+    color: var(--accent);
+    border-color: var(--border);
+    background: var(--bg-elevated);
+  }
+
+  .control-tab:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
   }
 
   .control-hint {
