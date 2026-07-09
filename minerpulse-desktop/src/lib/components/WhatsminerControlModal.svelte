@@ -71,6 +71,7 @@
     username = "admin",
     password = "",
     busy = false,
+    continueOnUnavailable = false,
     onApplied,
     onPasswordChanged,
   }: {
@@ -81,6 +82,7 @@
     username?: string;
     password?: string;
     busy?: boolean;
+    continueOnUnavailable?: boolean;
     onApplied?: () => void | Promise<void>;
     onPasswordChanged?: (newPassword: string) => void | Promise<void>;
   } = $props();
@@ -726,7 +728,7 @@
 
   async function waitUntilPoolsApplied(expected: PoolDraft[], timeoutMs = VERIFY_TIMEOUT_MS): Promise<boolean> {
     const started = Date.now();
-    while (Date.now() - started < timeoutMs) {
+    while (!monitorTimedOut(started, timeoutMs)) {
       if (monitorCancelled) return false;
       try {
         const pools = await invoke<PoolDraft[]>("get_whatsminer_pools", {
@@ -776,13 +778,18 @@
     }
   }
 
+  function monitorTimedOut(started: number, timeoutMs: number): boolean {
+    if (continueOnUnavailable) return false;
+    return Date.now() - started >= timeoutMs;
+  }
+
   async function waitUntilApplied(
     expected: ControlDraft,
     keys: (keyof ControlDraft)[],
     timeoutMs = VERIFY_TIMEOUT_MS,
   ): Promise<boolean> {
     const started = Date.now();
-    while (Date.now() - started < timeoutMs) {
+    while (!monitorTimedOut(started, timeoutMs)) {
       if (monitorCancelled) return false;
       const ok = await refresh(undefined, true);
       if (ok && controlState) {
@@ -799,7 +806,7 @@
 
   async function waitForMinerOnline(timeoutMs = ONLINE_WAIT_MS): Promise<boolean> {
     const started = Date.now();
-    while (Date.now() - started < timeoutMs) {
+    while (!monitorTimedOut(started, timeoutMs)) {
       if (monitorCancelled) return false;
       const ok = await refresh(undefined, true);
       if (ok) return true;
@@ -913,11 +920,27 @@
     errorText = "";
     try {
       for (const action of actions) {
-        const outcome = await applySingle(action, false);
+        let outcome: { ok: boolean; rebootRequired?: boolean } | null = null;
+        while (!monitorCancelled) {
+          try {
+            outcome = await applySingle(action, false);
+            break;
+          } catch (err) {
+            if (!continueOnUnavailable) {
+              throw err;
+            }
+            await sleep(VERIFY_POLL_MS);
+          }
+        }
+        if (!outcome || monitorCancelled) return;
         if (!outcome.ok) {
           if (outcome.rebootRequired || actionsMayNeedReboot(actions)) {
             offerRebootAfterApply(expected, keys);
             return;
+          }
+          if (continueOnUnavailable) {
+            await sleep(VERIFY_POLL_MS);
+            continue;
           }
           applyPhase = "error";
           applyStatus = "error";

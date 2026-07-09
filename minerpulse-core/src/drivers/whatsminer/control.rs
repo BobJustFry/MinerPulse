@@ -284,7 +284,28 @@ pub fn apply_control_action(
 
     // WhatsMinerTool path: TCP 4028 + get_token (API 2.x manual).
     if action_has_legacy_path(action) {
-        return apply_control_action_legacy(host, port, password, action);
+        match apply_control_action_legacy(host, port, password, action) {
+            Ok(result) if result.ok => return Ok(result),
+            Ok(result)
+                if result.message.as_deref() == Some("reboot_required")
+                    || result.message.as_deref() == Some("reboot") =>
+            {
+                return Ok(result);
+            }
+            legacy_result => {
+                return match apply_control_action_v3(host, password, action) {
+                    Ok(v3) if v3.ok => Ok(v3),
+                    Ok(v3) => match legacy_result {
+                        Ok(legacy) => Ok(legacy),
+                        Err(_) => Ok(v3),
+                    },
+                    Err(v3_err) => match legacy_result {
+                        Ok(legacy) => Ok(legacy),
+                        Err(_) => Err(v3_err),
+                    },
+                };
+            }
+        }
     }
 
     // API 3.0 path: TCP 4433 set.* (whatsminer-api-3.0.0 doc).
@@ -569,6 +590,12 @@ fn legacy_command_template(action: &WhatsminerControlAction) -> Option<String> {
         }
         WhatsminerControlAction::SetLed { mode } if mode == "auto" => {
             r#"{"token":"{sign}","cmd":"set_led","param":"auto"}"#.into()
+        }
+        WhatsminerControlAction::SetLed { mode } if mode == "on" => {
+            r#"{"token":"{sign}","cmd":"set_led","param":"on"}"#.into()
+        }
+        WhatsminerControlAction::SetLed { mode } if mode == "off" => {
+            r#"{"token":"{sign}","cmd":"set_led","param":"off"}"#.into()
         }
         WhatsminerControlAction::SetPowerMode { mode } => match mode.as_str() {
             "low" => r#"{"token":"{sign}","cmd":"set_low_power"}"#.into(),

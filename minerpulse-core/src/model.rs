@@ -257,3 +257,36 @@ impl Default for MinerSnapshot {
         }
     }
 }
+
+/// Placeholder frame while the miner is unreachable (reboot, network gap).
+/// Preserves identity from the last good snapshot when available.
+pub fn unavailable_snapshot(base: Option<&MinerSnapshot>) -> MinerSnapshot {
+    let mut snap = MinerSnapshot::default();
+    snap.status = "unavailable".to_string();
+    if let Some(base) = base {
+        snap.identity = base.identity.clone();
+        if let Some(access) = &base.whatsminer_access {
+            snap.whatsminer_access = Some(access.clone());
+        }
+    }
+    snap
+}
+
+#[cfg(test)]
+mod unavailable_snapshot_tests {
+    use super::*;
+
+    #[test]
+    fn unavailable_zeros_metrics() {
+        let mut base = MinerSnapshot::default();
+        base.identity.model = "M50".into();
+        base.identity.driver_id = "whatsminer".into();
+        base.hashrate.current_ghs = 100.0;
+        base.status = "mining".into();
+        let snap = unavailable_snapshot(Some(&base));
+        assert_eq!(snap.status, "unavailable");
+        assert_eq!(snap.identity.model, "M50");
+        assert_eq!(snap.hashrate.current_ghs, 0.0);
+        assert!(snap.board_chips.is_empty());
+    }
+}

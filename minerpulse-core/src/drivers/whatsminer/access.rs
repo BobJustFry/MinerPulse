@@ -136,7 +136,17 @@ pub struct DeviceInfoProbe {
     pub salt: Option<String>,
     pub model: Option<String>,
     pub working: Option<bool>,
+    /// `get.device.info` → `msg.system.api` (e.g. `"3.0.0"`).
+    pub api_version: Option<String>,
+    /// `get.device.info` → `msg.system.fwversion` (e.g. `"20240722.07.51.REL"`).
+    pub fwversion: Option<String>,
     pub params: crate::model::MinerParams,
+}
+
+/// True when firmware date prefix is on/after API 3.0 threshold (20240501 per MicroBT docs).
+pub fn firmware_supports_api_v3(fwversion: &str) -> bool {
+    let prefix: String = fwversion.chars().take(8).filter(|c| c.is_ascii_digit()).collect();
+    prefix.len() >= 8 && prefix.as_str() >= "20240501"
 }
 
 fn value_f64(obj: &Value, key: &str) -> Option<f64> {
@@ -391,6 +401,16 @@ pub fn parse_device_info(json: &str) -> Option<DeviceInfoProbe> {
         .and_then(|m| m.get("working"))
         .and_then(parse_switch_flag);
 
+    let system = msg.get("system");
+    let api_version = system
+        .and_then(|s| s.get("api"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let fwversion = system
+        .and_then(|s| s.get("fwversion"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+
     let params = parse_device_params(msg);
 
     Some(DeviceInfoProbe {
@@ -400,6 +420,8 @@ pub fn parse_device_info(json: &str) -> Option<DeviceInfoProbe> {
         salt,
         model,
         working,
+        api_version,
+        fwversion,
         params,
     })
 }
@@ -442,6 +464,12 @@ fn parse_switch_flag(value: &Value) -> Option<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn firmware_api_v3_threshold() {
+        assert!(firmware_supports_api_v3("20240722.07.51.REL"));
+        assert!(!firmware_supports_api_v3("20240430.12.00.REL"));
+    }
 
     #[test]
     fn parses_device_info_sample() {

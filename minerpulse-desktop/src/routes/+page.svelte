@@ -128,6 +128,7 @@
   let chartsLive = $state(false);
   let chartsLayout = $state<ChartsLayout>("tile");
   let pollRateHz = $state<PollRateHz>(DEFAULT_POLL_RATE_HZ);
+  let continueOnUnavailable = $state(false);
   type ReadActionMode = "read" | "poll" | "record";
   let readActionMode = $state<ReadActionMode>("read");
   let actionMenuOpen = $state(false);
@@ -156,6 +157,10 @@
     if (!data || data.identity.vendor === "unknown") {
       chipsAvailable = false;
       chipsMinerKey = "";
+      return;
+    }
+    if (data.status === "unavailable") {
+      chipsAvailable = false;
       return;
     }
     const key = data.identity.mac || data.identity.model || data.identity.vendor;
@@ -227,6 +232,7 @@
         chartsLayout,
         pollRateHz,
         readActionMode,
+        continueOnUnavailable,
       }),
     );
   }
@@ -799,6 +805,7 @@
         port: Number(port) || 4028,
         recordPath,
         pollRateHz,
+        continueOnUnavailable,
         whatsminerAuth: whatsminerAuthPayload() ?? undefined,
       });
       polling = true;
@@ -1034,6 +1041,9 @@
           chartsLayout = parsed.chartsLayout === "list" ? "list" : "tile";
           if (isPollRateHz(parsed.pollRateHz)) {
             pollRateHz = parsed.pollRateHz;
+          }
+          if (typeof parsed.continueOnUnavailable === "boolean") {
+            continueOnUnavailable = parsed.continueOnUnavailable;
           }
           if (
             parsed.readActionMode === "read" ||
@@ -1327,6 +1337,15 @@
               {/each}
             </select>
           </div>
+          <label class="field poll-continue-field" title={msg("toolbar.tip.continueOnUnavailable")}>
+            <input
+              type="checkbox"
+              bind:checked={continueOnUnavailable}
+              disabled={connectionLocked}
+              onchange={applyUiPrefs}
+            />
+            <span>{msg("toolbar.continueOnUnavailable")}</span>
+          </label>
         {/if}
         <div class="action-control" class:open={actionMenuOpen}>
           <div class="split-action">
@@ -1641,6 +1660,7 @@
     password={whatsminerPassword || "admin"}
     username={whatsminerUser.trim() || "admin"}
     busy={controlActionDisabled}
+    continueOnUnavailable={continueOnUnavailable}
     onApplied={afterControlApplied}
     onPasswordChanged={onWhatsminerControlPasswordChanged}
   />

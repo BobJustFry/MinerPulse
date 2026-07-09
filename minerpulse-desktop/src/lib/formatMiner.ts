@@ -127,6 +127,7 @@ export function statusTone(status: string): "ok" | "warn" | "muted" {
   }
   if (
     value === "offline" ||
+    value === "unavailable" ||
     value.includes("dead") ||
     value.includes("fail") ||
     value.includes("error")
@@ -145,6 +146,8 @@ export function statusMessageKey(status: string): string | null {
       return "minerStatus.idle";
     case "offline":
       return "minerStatus.offline";
+    case "unavailable":
+      return "minerStatus.unavailable";
     case "unknown":
     case "":
       return "minerStatus.unknown";

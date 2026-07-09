@@ -716,6 +716,9 @@ struct StartPollRequest {
     record_path: Option<String>,
     #[serde(default)]
     whatsminer_auth: Option<WhatsminerAuthRequest>,
+    /// Keep polling/recording when fetch fails; emit zeroed unavailable frames.
+    #[serde(default)]
+    continue_on_unavailable: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -782,6 +785,7 @@ async fn start_poll(
         None
     };
     let fetch_options = fetch_options_from_request(request.whatsminer_auth, cloud_auth);
+    let continue_on_unavailable = request.continue_on_unavailable;
     let cancel = Arc::clone(&state.poll.cancel);
     let app_for_poll = app.clone();
     let poll_ip = request.ip.clone();
@@ -798,6 +802,7 @@ async fn start_poll(
                 record_path,
                 cancel,
                 fetch_options,
+                continue_on_unavailable,
             )
         })
         .await;
@@ -834,6 +839,7 @@ fn run_poll_loop(
     record_path: Option<PathBuf>,
     cancel: Arc<AtomicBool>,
     fetch_options: FetchOptions,
+    continue_on_unavailable: bool,
 ) {
     let client = TcpCgminerClient::for_polling();
     let started = Instant::now();
@@ -851,6 +857,7 @@ fn run_poll_loop(
     let mut finish_reason = "stopped".to_string();
     let mut finish_error: Option<String> = None;
     let mut saved_path: Option<String> = None;
+    let mut last_ok: Option<MinerSnapshot> = None;
 
     while !cancel.load(Ordering::Relaxed) {
         if recording && started.elapsed() >= max_duration {
@@ -872,6 +879,7 @@ fn run_poll_loop(
 
         match fetch_result {
             Ok(mut snapshot) => {
+                last_ok = Some(snapshot.clone());
                 if cached_driver.is_empty() {
                     cached_driver = snapshot.identity.driver_id.clone();
                 }
@@ -909,6 +917,31 @@ fn run_poll_loop(
                     *state.last_snapshot.lock().unwrap() = Some(snapshot.clone());
                 }
 
+                let _ = app.emit(
+                    "poll://snapshot",
+                    PollSnapshotPayload {
+                        snapshot,
+                        t_ms,
+                        frame_index,
+                        recording,
+                    },
+                );
+                frame_index += 1;
+            }
+            Err(_err) if continue_on_unavailable => {
+                let snapshot = minerpulse_core::unavailable_snapshot(last_ok.as_ref());
+                let t_ms = started.elapsed().as_millis() as u64;
+                if let Some(session) = session.as_mut() {
+                    if session.driver_id == "unknown" {
+                        if let Some(ref base) = last_ok {
+                            session.driver_id = base.identity.driver_id.clone();
+                        }
+                    }
+                    session.push_recorded_frame(t_ms, snapshot.clone());
+                }
+                if let Some(state) = app.try_state::<AppState>() {
+                    *state.last_snapshot.lock().unwrap() = Some(snapshot.clone());
+                }
                 let _ = app.emit(
                     "poll://snapshot",
                     PollSnapshotPayload {

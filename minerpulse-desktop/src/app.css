@@ -624,6 +624,21 @@ button {
   min-width: 88px;
 }
 
+.poll-continue-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.poll-continue-field input {
+  accent-color: var(--accent);
+}
+
 .poll-rate-select {
   min-width: 72px;
   padding-right: 8px;

@@ -32,7 +32,7 @@ pub use drivers::whatsminer::luci::{test_luci_credentials, verify_luci_login};
 pub use entitlements::{EntitlementGate, SubscriptionTier};
 pub use error::{ErrorCode, ErrorResponse, MinerPulseError};
 pub use fetch_options::{FetchOptions, WhatsminerLuciAuth};
-pub use model::{MinerSnapshot, WhatsminerAccessInfo};
+pub use model::{unavailable_snapshot, MinerSnapshot, WhatsminerAccessInfo};
 pub use import::{import_file_content, ImportResult, MAX_IMPORT_BYTES};
 pub use mpulse::{
     decode_mpulse_bytes, load_mpulse, open_mpulse_file, save_session, save_snapshot, MpulseFile,

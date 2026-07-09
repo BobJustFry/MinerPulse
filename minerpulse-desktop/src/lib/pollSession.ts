@@ -34,6 +34,8 @@ export async function startPoll(options: {
   recordPath?: string | null;
   pollRateHz?: PollRateHz;
   whatsminerAuth?: { username: string; password: string };
+  continueOnUnavailable?: boolean;
+  continue_on_unavailable?: boolean;
 }): Promise<void> {
   await invoke("start_poll", {
     request: {
@@ -42,6 +44,7 @@ export async function startPoll(options: {
       poll_rate_hz: options.pollRateHz ?? DEFAULT_POLL_RATE_HZ,
       record_path: options.recordPath ?? null,
       whatsminer_auth: options.whatsminerAuth ?? null,
+      continue_on_unavailable: options.continueOnUnavailable ?? false,
     },
   });
 }
