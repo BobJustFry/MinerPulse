@@ -1,0 +1,69 @@
+﻿# --- Local reference / archives (huge, not source) ---
+Documents/
+OldProject/
+amazingFarm/
+
+# --- Build artifacts ---
+target/
+**/target/
+**/node_modules/
+**/.svelte-kit/
+**/build/
+**/dist/
+**/package/
+minerpulse-desktop/src-tauri/2/
+
+# --- Secrets & credentials (never index) ---
+.tauri/*.key
+.env
+.env.*
+!.env.example
+!**/.env.tpl
+!**/env.tpl
+*.pem
+*.p12
+*.pfx
+*.cer
+*.crt
+credentials.json
+secrets.json
+**/secrets/
+**/*-secrets.json
+platform/.env
+platform/secrets/
+platform/deploy/deploy.config
+platform/deploy/generated/
+platform/Caddyfile
+
+# --- Temp / scratch dumps ---
+tmp_*
+*.tmp
+*.temp
+*.log
+*.bak
+*.swp
+*~
+
+# --- IDE / OS noise ---
+**/.vs/
+**/.idea/
+**/.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- Large / binary blobs that rarely help coding ---
+**/*.pdf
+**/*.zip
+**/*.7z
+**/*.rar
+**/*.exe
+**/*.msi
+**/*.dll
+**/*.so
+**/*.dylib
+**/*.bin
+**/*.Bin
+**/*.aup
+**/*.sig
+**/releases/*.exe
+**/releases/*.msi

@@ -1302,12 +1302,23 @@ fn parse_import_file(
 fn import_file_path(path: String) -> Result<ParseImportResponse, ErrorResponse> {
     let path = PathBuf::from(&path);
     let meta = std::fs::metadata(&path).map_err(|_| io_error())?;
-
-    if path
+    let extension = path
         .extension()
         .and_then(|ext| ext.to_str())
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("mpulse"))
-    {
+        .map(|ext| ext.to_ascii_lowercase());
+
+    let is_mpulse_ext = matches!(
+        extension.as_deref(),
+        Some("mpsn" | "mprs" | "mpulse" | "mpulse-snap" | "mpulse-session")
+    );
+
+    if is_mpulse_ext || {
+        // Detect binary header even when extension is wrong/missing.
+        std::fs::read(&path)
+            .ok()
+            .as_deref()
+            .is_some_and(minerpulse_core::is_binary_mpulse)
+    } {
         let file = load_mpulse(&path).map_err(|e| ErrorResponse::from(&e))?;
         let frame = file
             .frames
@@ -1323,7 +1334,7 @@ fn import_file_path(path: String) -> Result<ParseImportResponse, ErrorResponse> 
             source_label: path
                 .file_name()
                 .and_then(|name| name.to_str())
-                .unwrap_or("import.mpulse")
+                .unwrap_or("import.mpsn")
                 .to_string(),
             miner_ip: Some(file.miner_ip),
         });

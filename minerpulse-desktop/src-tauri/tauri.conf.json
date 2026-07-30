@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "MinerPulse",
-  "version": "1.2.184",
+  "version": "1.2.185",
   "identifier": "com.minerpulse.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Miner Pulse 1.2.0 (184)",
+        "title": "Miner Pulse 1.2.0 (185)",
         "width": 1180,
         "height": 760,
         "minWidth": 960,
@@ -21,7 +21,7 @@
         "decorations": false,
         "shadow": true,
         "backgroundColor": "#0f1117",
-        "dragDropEnabled": false
+        "dragDropEnabled": true
       }
     ],
     "security": {

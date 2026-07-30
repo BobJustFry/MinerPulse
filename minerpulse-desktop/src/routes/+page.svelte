@@ -25,9 +25,6 @@
     type ChartPoint,
   } from "$lib/chartHistory";
   import {
-    type ParseImportResponse,
-  } from "$lib/importFile";
-  import {
     chartPointsFromStored,
     closeOpenedSession,
     defaultSessionSaveName,
@@ -886,20 +883,8 @@
     statusText = msg("status.sessionLoaded", { count: payload.frame_count });
   }
 
-  async function openMinerFileAction() {
+  async function openMinerFileFromPath(path: string) {
     if (busy || polling) return;
-
-    const path = await open({
-      title: msg("toolbar.open"),
-      multiple: false,
-      filters: [
-        {
-          name: "MinerPulse",
-          extensions: [...MINER_FILE_EXTENSIONS],
-        },
-      ],
-    });
-    if (!path || Array.isArray(path)) return;
 
     busy = true;
     statusText = msg("status.loadingSession");
@@ -919,15 +904,29 @@
       clearCharts();
       await applyOpenedSnapshot(result);
       pushChartPoint(result.snapshot, 0);
-      statusText =
-        result.kind === "log"
-          ? msg("import.opened", { name: result.source_label })
-          : msg("status.ready");
+      statusText = msg("import.opened", { name: result.source_label });
     } catch (err) {
       statusText = formatError(err);
     } finally {
       busy = false;
     }
+  }
+
+  async function openMinerFileAction() {
+    if (busy || polling) return;
+
+    const path = await open({
+      title: msg("toolbar.open"),
+      multiple: false,
+      filters: [
+        {
+          name: "MinerPulse",
+          extensions: [...MINER_FILE_EXTENSIONS],
+        },
+      ],
+    });
+    if (!path || Array.isArray(path)) return;
+    await openMinerFileFromPath(path);
   }
 
   async function saveSnapshot() {
@@ -1009,14 +1008,6 @@
     const next = order[(idx + 1) % order.length];
     await invoke("set_tier", { tier: next });
     await refreshEntitlements();
-  }
-
-  async function applyImportedSnapshot(result: ParseImportResponse) {
-    stopPlayback();
-    clearCharts();
-    await applyOpenedSnapshot(result);
-    pushChartPoint(result.snapshot, 0);
-    statusText = msg("import.opened", { name: result.source_label });
   }
 
   onMount(() => {
@@ -1120,21 +1111,17 @@
         onLeave: () => {
           dropActive = false;
         },
-        onDrop: async (result) => {
+        onDropPath: async (path) => {
           dropActive = false;
-          try {
-            await applyImportedSnapshot(result);
-          } catch (err) {
-            statusText = formatError(err);
-          }
+          await openMinerFileFromPath(path);
         },
         onError: (err) => {
           dropActive = false;
           statusText = formatError(err);
         },
-        onTooLarge: () => {
+        onUnsupported: () => {
           dropActive = false;
-          statusText = msg("import.tooLarge");
+          statusText = msg("error.PARSE_FAILED");
         },
       });
 

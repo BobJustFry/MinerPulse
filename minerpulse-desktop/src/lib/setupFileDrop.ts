@@ -1,99 +1,81 @@
-import { invoke } from "@tauri-apps/api/core";
-import {
-  isImportCandidate,
-  type ParseImportResponse,
-} from "$lib/importFile";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 
-function hasFiles(dataTransfer: DataTransfer | null): boolean {
-  if (!dataTransfer) return false;
-  return Array.from(dataTransfer.types).includes("Files");
+function isMinerDropPath(path: string): boolean {
+  const name = path.replace(/\\/g, "/").split("/").pop()?.toLowerCase() ?? "";
+  return (
+    name.endsWith(".mpsn") ||
+    name.endsWith(".mprs") ||
+    name.endsWith(".mpulse") ||
+    name.endsWith(".mpulse-snap") ||
+    name.endsWith(".mpulse-session") ||
+    name.endsWith(".txt") ||
+    name.endsWith(".log") ||
+    name.endsWith(".json")
+  );
 }
 
+/**
+ * Desktop file drop via Tauri paths (supports binary .mpsn/.mprs).
+ * Do not read dropped files as UTF-8 text — binary snapshots are MPSN/MPRS.
+ */
 export function setupFileDrop(handlers: {
   onHover: () => void;
   onLeave: () => void;
-  onDrop: (result: ParseImportResponse) => void | Promise<void>;
+  onDropPath: (path: string) => void | Promise<void>;
   onError: (err: unknown) => void;
-  onTooLarge: () => void;
+  onUnsupported: () => void;
 }): () => void {
-  let dragDepth = 0;
+  let disposed = false;
+  let unlisten: (() => void) | undefined;
+  let hoverDepth = 0;
 
-  const resetDrag = () => {
-    dragDepth = 0;
-    handlers.onLeave();
-  };
-
-  const onDragEnter = (event: DragEvent) => {
-    event.preventDefault();
-    if (!hasFiles(event.dataTransfer)) return;
-    dragDepth += 1;
-    if (dragDepth === 1) {
-      handlers.onHover();
-    }
-  };
-
-  const onDragOver = (event: DragEvent) => {
-    event.preventDefault();
-    if (hasFiles(event.dataTransfer)) {
-      event.dataTransfer!.dropEffect = "copy";
-    }
-  };
-
-  const onDragLeave = (event: DragEvent) => {
-    event.preventDefault();
-    const related = event.relatedTarget as Node | null;
-    if (related && document.documentElement.contains(related)) {
-      return;
-    }
-    dragDepth = Math.max(0, dragDepth - 1);
-    if (dragDepth === 0) {
-      handlers.onLeave();
-    }
-  };
-
-  const onDrop = async (event: DragEvent) => {
-    event.preventDefault();
-    dragDepth = 0;
-    handlers.onLeave();
-
-    const file = event.dataTransfer?.files.item(0);
-    if (!isImportCandidate(file)) {
-      handlers.onTooLarge();
-      return;
-    }
-
-    try {
-      const content = await file.text();
-      const result = await invoke<ParseImportResponse>("parse_import_file", {
-        content,
-        filename: file.name,
-      });
-      await handlers.onDrop(result);
-    } catch (err) {
-      handlers.onError(err);
-    }
-  };
-
-  window.addEventListener("dragenter", onDragEnter, true);
-  window.addEventListener("dragover", onDragOver, true);
-  window.addEventListener("dragleave", onDragLeave, true);
-  window.addEventListener("drop", onDrop, true);
-  window.addEventListener("dragend", resetDrag, true);
-  const onVisibilityChange = () => {
-    if (document.visibilityState !== "visible") {
-      resetDrag();
-    }
-  };
-  window.addEventListener("blur", resetDrag);
-  document.addEventListener("visibilitychange", onVisibilityChange);
+  void getCurrentWebview()
+    .onDragDropEvent((event) => {
+      const payload = event.payload;
+      if (payload.type === "enter") {
+        hoverDepth += 1;
+        if (hoverDepth === 1) handlers.onHover();
+        return;
+      }
+      if (payload.type === "over") {
+        if (hoverDepth === 0) {
+          hoverDepth = 1;
+          handlers.onHover();
+        }
+        return;
+      }
+      if (payload.type === "leave") {
+        hoverDepth = 0;
+        handlers.onLeave();
+        return;
+      }
+      if (payload.type === "drop") {
+        hoverDepth = 0;
+        handlers.onLeave();
+        const path = payload.paths[0];
+        if (!path) {
+          handlers.onUnsupported();
+          return;
+        }
+        if (!isMinerDropPath(path)) {
+          handlers.onUnsupported();
+          return;
+        }
+        void Promise.resolve(handlers.onDropPath(path)).catch((err) => handlers.onError(err));
+      }
+    })
+    .then((fn) => {
+      if (disposed) {
+        fn();
+        return;
+      }
+      unlisten = fn;
+    })
+    .catch((err) => handlers.onError(err));
 
   return () => {
-    window.removeEventListener("dragenter", onDragEnter, true);
-    window.removeEventListener("dragover", onDragOver, true);
-    window.removeEventListener("dragleave", onDragLeave, true);
-    window.removeEventListener("drop", onDrop, true);
-    window.removeEventListener("dragend", resetDrag, true);
-    window.removeEventListener("blur", resetDrag);
-    document.removeEventListener("visibilitychange", onVisibilityChange);
+    disposed = true;
+    unlisten?.();
+    unlisten = undefined;
   };
 }
