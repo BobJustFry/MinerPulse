@@ -1,12 +1,12 @@
 {
-  "version": "1.2.185",
-  "build": 185,
-  "notes": "Miner Pulse 1.2.0 (185) — fix opening binary .mpsn/.mprs via drag-and-drop (Tauri path drop); enable dragDropEnabled; .cursorignore for junk.",
-  "pub_date": "2026-07-30T14:19:19Z",
+  "version": "1.2.186",
+  "build": 186,
+  "notes": "Miner Pulse 1.2.0 (186) — sticky «На чипе» metric buttons on Chips tab while scrolling boards.",
+  "pub_date": "2026-08-17T04:07:11Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRFl3ZVVCblRHYWY5dk1vcXBOTDRrN0VQVGh1TFA1UHlnNUkwTEQ1RFlQbEZWd043Rmh0QXBITnFoVnJ6QmM3cng0QWJXSkQ0NTgxcWc1WnY3NVJuSndNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1NDIxMTU0CWZpbGU6TWluZXJQdWxzZV8xLjIuMTg1X3g2NC1zZXR1cC5leGUKMExRRjEwaVFFWG55eGlDOTlseElxNzNYbEZCYyttQnVreXJIazY4bjhjajVCbmZUSlBUb0FMR1Biai9NR0Z6WGZobklSSWZDT0NYQzhXMFZpV0o4Q1E9PQo=",
-      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.2.0-build185/MinerPulse_1.2.185_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUeGtqVjVBd0hQRGE0YzJ4QmlGQUp3dU5jdTNhVUFXNHRPWjl2MmtsZzJvSUxCZzhNMTRkMjF2clNBMEx2c3N3cHhJaVJPdmdWL1ZMdFAwWkRPR29yNnpxUCtMeE9sdGdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg2OTM5NjI2CWZpbGU6TWluZXJQdWxzZV8xLjIuMTg2X3g2NC1zZXR1cC5leGUKZ2h3c1lzWWUvQk5BRDdldHN3cjJwWHFxM0p3NWpOdnNkQ1BVdVFOc3hlM1FnMGRhbGNpRC9SMWhNZEEzcUVlQmRYOE1hT1JQZ0Q2NE1KZHV5Q1hwQWc9PQo=",
+      "url": "https://github.com/BobJustFry/MinerPulse/releases/download/v1.2.0-build186/MinerPulse_1.2.186_x64-setup.exe"
     }
   }
 }
