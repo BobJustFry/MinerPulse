@@ -1382,11 +1382,17 @@ button {
 }
 
 .chip-metric-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
-  padding: 0 2px;
+  padding: 6px 2px 8px;
+  margin: -2px 0 0;
+  background: var(--bg-base);
+  box-shadow: 0 1px 0 var(--border);
 }
 
 .chip-metric-label {
