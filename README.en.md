@@ -165,8 +165,10 @@ More about deploying the subscription platform: **[platform/README.md](platform/
 
 Development is done in spare time. If Miner Pulse helps you in your work, you can say thanks:
 
+**USDT (Solana):**
+
 ```
-USDT Solana: EzWsXMzciLAWb34Jnz1SbtazhAAQKuAhnYa2b5dEzHBk
+EzWsXMzciLAWb34Jnz1SbtazhAAQKuAhnYa2b5dEzHBk
 ```
 
 The same address is shown in the app: **About → Support the project**.

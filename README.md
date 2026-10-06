@@ -165,8 +165,10 @@ scripts/               bump build / sync version
 
 Разработка ведётся в свободное время. Если Miner Pulse помогает вам в работе — можно поблагодарить:
 
+**USDT (Solana):**
+
 ```
-USDT Solana: EzWsXMzciLAWb34Jnz1SbtazhAAQKuAhnYa2b5dEzHBk
+EzWsXMzciLAWb34Jnz1SbtazhAAQKuAhnYa2b5dEzHBk
 ```
 
 Тот же адрес указан в приложении: **О программе → Поддержать проект**.
