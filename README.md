@@ -1,4 +1,10 @@
 <p align="center">
+  <a href="README.md"><strong>🇷🇺 Русский</strong></a>
+  &nbsp;·&nbsp;
+  <a href="README.en.md"><strong>🇺🇸 English</strong></a>
+</p>
+
+<p align="center">
   <img src="minerpulse-desktop/static/logo.png" width="96" alt="Miner Pulse logo" />
 </p>
 
