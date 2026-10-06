@@ -8,8 +8,8 @@
   const GITHUB_URL = "https://github.com/BobJustFry/MinerPulse";
   const TELEGRAM_URL = "https://t.me/miner_pulse";
   const PORTAL_URL = "https://mpulse.bob4.fun/";
-  const DONATE_NETWORK = "USDT TRC20";
-  const DONATE_WALLET = "TAQLsXQA7WzNfoCTHvXxj8yFBXTJRKz99w";
+  const DONATE_NETWORK = "USDT Solana";
+  const DONATE_WALLET = "EzWsXMzciLAWb34Jnz1SbtazhAAQKuAhnYa2b5dEzHBk";
 
   let {
     open = $bindable(false),

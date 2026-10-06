@@ -15,6 +15,6 @@ Download **MinerPulse_1.0.59_x64-setup.exe** below (Windows x64, NSIS). Users on
 
 ### Support
 
-**USDT TRC20:** `TAQLsXQA7WzNfoCTHvXxj8yFBXTJRKz99w`
+**USDT Solana:** `EzWsXMzciLAWb34Jnz1SbtazhAAQKuAhnYa2b5dEzHBk`
 
 Telegram: https://t.me/miner_pulse

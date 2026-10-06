@@ -10,6 +10,8 @@
 </p>
 
 <p align="center">
+  <a href="https://mpulse.bob4.fun">Сайт</a>
+  ·
   <a href="https://github.com/BobJustFry/MinerPulse/releases/latest">Скачать для Windows</a>
   ·
   <a href="docs/user-guide/README.md">Руководство пользователя</a>
@@ -149,6 +151,7 @@ scripts/               bump build / sync version
 ## Контакты
 
 - **GitHub:** [BobJustFry/MinerPulse](https://github.com/BobJustFry/MinerPulse)
+- **Сайт:** [mpulse.bob4.fun](https://mpulse.bob4.fun)
 - **Telegram:** [@miner_pulse](https://t.me/miner_pulse)
 - **Разработчик:** Bobrov Andrey
 
@@ -157,7 +160,7 @@ scripts/               bump build / sync version
 Разработка ведётся в свободное время. Если Miner Pulse помогает вам в работе — можно поблагодарить:
 
 ```
-USDT TRC20: TAQLsXQA7WzNfoCTHvXxj8yFBXTJRKz99w
+USDT Solana: EzWsXMzciLAWb34Jnz1SbtazhAAQKuAhnYa2b5dEzHBk
 ```
 
 Тот же адрес указан в приложении: **О программе → Поддержать проект**.
